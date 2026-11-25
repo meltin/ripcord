@@ -111,6 +111,20 @@ final class LauncherController: NSObject, NSWindowDelegate {
       NSStringFromPoint(NSPoint(x: frame.minX, y: frame.maxY)), forKey: Self.positionKey)
   }
 
+  private func resetPosition() {
+    UserDefaults.standard.removeObject(forKey: Self.positionKey)
+    let topLeft = defaultTopLeft()
+    isPlacing = true
+    // Animated setFrame returns once the move finishes, so windowDidMove stays ignored meanwhile.
+    panel.setFrame(
+      NSRect(
+        x: topLeft.x, y: topLeft.y - Self.size.height, width: Self.size.width,
+        height: Self.size.height),
+      display: true, animate: true)
+    isPlacing = false
+    update("")
+  }
+
   private func defaultTopLeft() -> NSPoint {
     let mouse = NSEvent.mouseLocation
     let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
@@ -235,6 +249,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   }
 
   private func perform(_ action: SearchResult.Action) {
+    // Like Raycast, the panel stays open and glides home, so the reset is visible at once.
+    if action == .run(.resetWindowPosition) { return resetPosition() }
     // Open Settings while the panel still holds the key press, so macOS treats it as the
     // user's request to bring Ripcord forward.
     if action == .run(.settings) { onOpenSettings() }
@@ -250,7 +266,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .run(.settings):
       break  // Opened before hide(), above.
     case .run(.resetWindowPosition):
-      UserDefaults.standard.removeObject(forKey: Self.positionKey)
+      break  // Handled above, without hiding the panel.
     case .run(.quit):
       NSApp.terminate(nil)
     }
