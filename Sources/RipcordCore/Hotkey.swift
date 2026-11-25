@@ -5,22 +5,23 @@ public struct Hotkey: Equatable, Sendable {
   public let keyCode: UInt32
   public let modifiers: UInt32
 
-  /// Nil unless `spec` is one or more modifiers followed by "space", a letter or a digit.
+  /// Nil unless `spec` is modifiers including ⌘, ⌥ or ⌃, then "space", a letter or a digit.
   public init?(_ spec: String) {
     let parts = spec.lowercased().split(separator: "+").map {
       $0.trimmingCharacters(in: .whitespaces)
     }
     guard let key = parts.last, let code = Self.keyCodes[key] else { return nil }
     let flags = parts.dropLast().map { Self.modifierFlags[$0] }
-    guard !flags.isEmpty, flags.allSatisfy({ $0 != nil }) else { return nil }
-    keyCode = code
-    modifiers = flags.compactMap { $0 }.reduce(0, |)
+    guard flags.allSatisfy({ $0 != nil }) else { return nil }
+    self.init(keyCode: code, modifiers: flags.compactMap { $0 }.reduce(0, |))
   }
 
-  /// A recorded key press; nil for keys a spec can't name or a press without a modifier.
+  /// A recorded key press; nil for keys a spec can't name or a press without ⌘, ⌥ or ⌃.
   public init?(keyCode: UInt32, modifiers: UInt32) {
     let known = Self.ordered.map(\.flag).reduce(0, |)
-    guard Self.keyCodes.values.contains(keyCode), modifiers & known != 0 else { return nil }
+    // Shift alone would take a capital letter away from every app on the Mac.
+    let required = UInt32(cmdKey | optionKey | controlKey)
+    guard Self.keyCodes.values.contains(keyCode), modifiers & required != 0 else { return nil }
     self.keyCode = keyCode
     self.modifiers = modifiers & known
   }

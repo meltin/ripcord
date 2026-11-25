@@ -61,7 +61,8 @@ import Testing
     #expect(Hotkey("option+space")?.keyCode == UInt32(kVK_Space))
   }
 
-  @Test(arguments: ["space", "cmd+", "cmd+f1", "hyper+space", ""])
+  // Shift alone would steal a capital letter from every app.
+  @Test(arguments: ["space", "cmd+", "cmd+f1", "hyper+space", "", "shift+k", "shift+space"])
   func rejects(spec: String) {
     #expect(Hotkey(spec) == nil)
   }

@@ -5,11 +5,17 @@ public struct AppEntry: Equatable, Sendable {
   /// The localized name Finder shows (e.g. "システム設定") and the bundle's file name
   /// ("System Settings"), so either one finds the app.
   public let names: [String]
+  public let bundleID: String?
 
-  public init(url: URL, names: [String]) {
+  public init(url: URL, names: [String], bundleID: String? = nil) {
     self.url = url
     self.names = names
+    self.bundleID = bundleID
   }
+
+  /// The key its settings are stored under. The bundle ID, because one app can show up at two
+  /// paths: Safari is scanned at /Applications/Safari.app but runs from a Cryptex volume.
+  public var settingsKey: String { bundleID ?? url.path }
 }
 
 public enum AppIndex {
@@ -43,7 +49,15 @@ public enum AppIndex {
     return unique.values.map { url in
       let localized = FileManager.default.displayName(atPath: url.path)
       let fileName = url.deletingPathExtension().lastPathComponent
-      return AppEntry(url: url, names: localized == fileName ? [fileName] : [localized, fileName])
+      return AppEntry(
+        url: url, names: localized == fileName ? [fileName] : [localized, fileName],
+        bundleID: bundleID(of: url))
     }
+  }
+
+  /// Read from Info.plist directly: `Bundle(url:)` caches every bundle it opens for good.
+  static func bundleID(of app: URL) -> String? {
+    let plist = NSDictionary(contentsOf: app.appending(path: "Contents/Info.plist"))
+    return plist?["CFBundleIdentifier"] as? String
   }
 }
