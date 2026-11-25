@@ -21,7 +21,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let launcher = LauncherController()
   private lazy var settings = SettingsWindowController(model: SettingsModel(configURL: configURL))
   private var statusItem: NSStatusItem?
-  private var registeredHotkey: String?
+  /// What's registered now, so re-reading an unchanged config skips the work and the alerts.
+  private var registeredHotkeys: [String]?
+  /// The config last read; hotkeys look things up here when pressed, so an edited Quicklink URL
+  /// takes effect without re-registering.
+  private var config = Config.default
+  /// The last launcher hotkey that worked, kept while the config holds one that doesn't parse.
+  private var workingLauncherHotkey: Hotkey?
+  private var isRecording = false
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.mainMenu = makeMainMenu()
@@ -29,10 +36,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     launcher.onOpenSettings = { [weak self] in self?.openSettings() }
     settings.model.onSave = { [weak self] in self?.applyConfig() }
     settings.model.onRecordingChange = { [weak self] isRecording in
+      self?.isRecording = isRecording
       // A registered hotkey would swallow the very keys being recorded.
       if isRecording {
-        GlobalHotKey.unregister()
-        self?.registeredHotkey = nil
+        GlobalHotKey.unregisterAll()
+        self?.registeredHotkeys = nil
       } else {
         self?.applyConfig()
       }
@@ -61,16 +69,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func applyConfig() {
     do {
       let config = try Config.load(from: configURL)
+      self.config = config
       launcher.quicklinks = config.quicklinks
+      launcher.items = config.items
       applyLaunchAtLogin(config.launchAtLogin)
-      guard config.hotkey != registeredHotkey else { return }
-      guard let hotkey = Hotkey(config.hotkey) else {
-        return showError("\"\(config.hotkey)\" is not a hotkey. Use a form like \"option+space\".")
-      }
-      try GlobalHotKey.register(hotkey) { [weak self] in self?.toggleLauncher() }
-      registeredHotkey = config.hotkey
+      // Saving mid-recording must not bring back the hotkeys the recorder turned off.
+      if !isRecording { applyHotkeys(config) }
     } catch {
       showError("\(configURL.path):\n\(error)")
+    }
+  }
+
+  private func applyHotkeys(_ config: Config) {
+    var assignments = config.hotkeyAssignments
+    let launcherHotkey = Hotkey(config.hotkey)
+    // A typo in config.json mustn't leave Ripcord with no way to open.
+    if launcherHotkey == nil, let workingLauncherHotkey {
+      assignments.insert((target: .launcher, hotkey: workingLauncherHotkey), at: 0)
+    }
+    let signature = [config.hotkey] + assignments.map { "\($0.target)=\($0.hotkey.spec)" }
+    guard signature != registeredHotkeys else { return }
+    let failures = GlobalHotKey.set(
+      assignments.map { assignment in
+        let target = assignment.target
+        return (assignment.hotkey, { [weak self] in self?.run(target) })
+      })
+    // Rows on the Shortcuts page show their own failure; only the launcher's needs an alert.
+    settings.model.failedHotkeys = Set(failures.keys.map { assignments[$0].target })
+    let launcherFailure = assignments.firstIndex { $0.target == .launcher }.flatMap { failures[$0] }
+    if launcherHotkey == nil {
+      registeredHotkeys = signature
+      showError("\"\(config.hotkey)\" is not a hotkey. Use a form like \"option+space\".")
+    } else if let launcherFailure {
+      // Left unrecorded, so the next panel open tries again.
+      registeredHotkeys = nil
+      showError("Couldn't register the Ripcord hotkey (OSStatus \(launcherFailure)).")
+    } else {
+      registeredHotkeys = signature
+      workingLauncherHotkey = launcherHotkey
+    }
+  }
+
+  /// What an app, command or Quicklink hotkey does. Apps open by bundle ID, so the hotkey
+  /// works before the panel has ever scanned /Applications.
+  private func run(_ target: HotkeyTarget) {
+    switch target {
+    case .launcher:
+      toggleLauncher()
+    case .item(let key):
+      if let command = BuiltinCommand.allCases.first(where: { $0.settingsKey == key }) {
+        launcher.perform(.run(command))
+      } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: key)
+        ?? (key.hasPrefix("/") ? URL(fileURLWithPath: key) : nil)
+      {
+        launcher.perform(.open(url))
+      } else {
+        NSSound.beep()
+      }
+    case .quicklink(let index):
+      guard config.quicklinks.indices.contains(index),
+        let url = config.quicklinks[index].url(for: "")
+      else { return NSSound.beep() }
+      launcher.perform(.open(url))
     }
   }
 

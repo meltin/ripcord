@@ -51,7 +51,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private static let positionKey = "panelTopLeft"
 
   var quicklinks: [Quicklink] = [] {
-    didSet { update(model.query) }
+    didSet { if quicklinks != oldValue { update(model.query) } }
+  }
+  var items: [String: ItemSettings] = [:] {
+    didSet { if items != oldValue { update(model.query) } }
   }
   var onOpenSettings: () -> Void = {}
   var isVisible: Bool { panel.isVisible }
@@ -113,6 +116,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   private func resetPosition() {
     UserDefaults.standard.removeObject(forKey: Self.positionKey)
+    // From a hotkey with the panel hidden: open it at home so the reset can be seen.
+    guard panel.isVisible else { return show() }
     let topLeft = defaultTopLeft()
     isPlacing = true
     // Animated setFrame returns once the move finishes, so windowDidMove stays ignored meanwhile.
@@ -166,9 +171,14 @@ final class LauncherController: NSObject, NSWindowDelegate {
     let running = NSWorkspace.shared.runningApplications
       .filter { $0.activationPolicy == .regular }
       .compactMap { app in
-        app.bundleURL.map { AppEntry(url: $0, names: [app.localizedName ?? $0.lastPathComponent]) }
+        app.bundleURL.map {
+          AppEntry(
+            url: $0, names: [app.localizedName ?? $0.lastPathComponent],
+            bundleID: app.bundleIdentifier)
+        }
       }
-    return Search.sections(for: query, apps: apps, running: running, quicklinks: quicklinks)
+    return Search.sections(
+      for: query, apps: apps, running: running, quicklinks: quicklinks, items: items)
   }
 
   private func handle(_ command: SearchCommand) {
@@ -248,7 +258,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     return true
   }
 
-  private func perform(_ action: SearchResult.Action) {
+  /// Runs a result's action; also what app, command and Quicklink hotkeys call.
+  func perform(_ action: SearchResult.Action) {
     // Like Raycast, the panel stays open and glides home, so the reset is visible at once.
     if action == .run(.resetWindowPosition) { return resetPosition() }
     // Open Settings while the panel still holds the key press, so macOS treats it as the
