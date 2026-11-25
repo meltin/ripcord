@@ -235,6 +235,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
   }
 
   private func perform(_ action: SearchResult.Action) {
+    // Open Settings while the panel still holds the key press, so macOS treats it as the
+    // user's request to bring Ripcord forward.
+    if action == .run(.settings) { onOpenSettings() }
     hide()
     switch action {
     case .open(let url):
@@ -245,7 +248,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .reveal(let url):
       NSWorkspace.shared.activateFileViewerSelecting([url])
     case .run(.settings):
-      onOpenSettings()
+      break  // Opened before hide(), above.
     case .run(.resetWindowPosition):
       UserDefaults.standard.removeObject(forKey: Self.positionKey)
     case .run(.quit):

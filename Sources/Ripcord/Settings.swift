@@ -62,8 +62,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
   /// accessory app ask to come forward, and the request loses to the app the user was in.
   func show() {
     NSApp.setActivationPolicy(.regular)
-    window.makeKeyAndOrderFront(nil)
-    NSApp.activate()
+    // On top of other apps' windows even if macOS turns the activation request down.
+    window.orderFrontRegardless()
+    window.makeKey()
+    // The policy change lands on the next run loop pass; asking before it is asking as an
+    // accessory app.
+    DispatchQueue.main.async { NSApp.activate() }
   }
 
   func windowWillClose(_ notification: Notification) {
