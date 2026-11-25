@@ -343,7 +343,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       guard action == .paste else { return }
       // After the panel has given the key back to the app being pasted into.
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [clipboard] in
-        _ = clipboard.pasteIntoFrontmostApp()
+        // Without the permission the item is only copied; say so, as other failures do.
+        if !clipboard.pasteIntoFrontmostApp() { NSSound.beep() }
       }
     case .togglePin, .delete:
       let selected = model.selected?.id
