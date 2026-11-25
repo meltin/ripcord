@@ -1,21 +1,35 @@
-# Ripcord
+<div align="center">
+    <img src="./Resources/AppIcon.svg" alt="Ripcord logo" width="128" height="128">
+    <h1>Ripcord</h1>
+</div>
 
-A small, resident launcher for Apple silicon Macs, written in Swift and AppKit.
+> A small, resident launcher for Apple silicon Macs, written in Swift and AppKit.
 
 - Fuzzy-search apps by their localized or file name (`システム設定` and `System Settings` both work)
+- ⌘Space shows the panel at once, on Liquid Glass; with nothing typed it lists running apps and
+  Quicklinks
 - Calculator: `1+2*3`, `(1.5+2)^2`, full-width input too; Return copies the result
-- Quicklinks: `g swift testing` opens a search, set up in Settings
-- ⌘Space shows the panel on Liquid Glass (configurable); opening Ripcord.app again shows it too
-- With nothing typed, the panel lists running apps and Quicklinks; with no match, it offers the
-  query to each Quicklink
-- ⌘K lists the selected row's actions (Open Command ↵, Show in Finder ⇧⌘F, Copy Path or URL
-  ⇧⌘C); the button at the bottom left has Settings (⌘,) and Quit Ripcord (⌘Q)
-- Settings: Launch at Login, the hotkey (click and press the new keys) and Quicklinks, kept in sync
-  with the config file
+- Quicklinks: `g swift testing` opens a search; with no match, the query goes to each Quicklink
+- ⌘K lists the selected row's actions (Open Command ↵, Show in Finder ⇧⌘F, Copy Path or URL ⇧⌘C)
+- Settings (⌘,): Launch at Login, the hotkey and Quicklinks, kept in sync with the config file
+- Drag the panel anywhere; it remembers the spot, and Reset Ripcord Window Position brings it back
 
-## Build and run
+## Quick start
 
-Requires macOS 26 or later and Xcode 26 or later.
+Free ⌘Space first: turn off Spotlight's shortcut and unassign it in any other launcher, or pick
+another hotkey in Settings later.
+
+1. Download `Ripcord-<version>.zip` from [Releases](https://github.com/meltin/ripcord/releases),
+   unzip it and move `Ripcord.app` to `/Applications`.
+2. Ripcord is ad-hoc signed and not notarized, so macOS blocks the first launch. Run
+   `xattr -dr com.apple.quarantine /Applications/Ripcord.app`, or Control-click the app and choose
+   Open.
+
+Requires macOS 26 or later on Apple silicon.
+
+## Build from source
+
+Requires Xcode 26 or later.
 
 ```sh
 scripts/build-app.sh
@@ -39,17 +53,13 @@ the settings window opens. The settings window writes every change back to it.
 ```
 
 `hotkey` is one or more of `cmd`, `option`, `ctrl` and `shift`, then `space`, a letter or a digit.
-For the default `cmd+space`, first unassign it in Spotlight or any other launcher that has it.
 
 ## Roadmap
 
-1. Panel on Liquid Glass, hotkey, start screen, app search, calculator, Quicklinks, settings window
-   (this release)
-2. Clipboard history, snippets, window management
-3. Local Git repositories, Markdown bookmarks, CleanShot X commands, keep-awake, color picker,
-   HTTP status codes, keyboard cleaning mode, sleep timer, Raycast Script Commands
-4. Shaders, CLI, MCP
+Planned work lives in [Issues](https://github.com/meltin/ripcord/issues): clipboard history,
+snippets, window management, an emoji picker, notes, local Git repositories, Markdown bookmarks,
+CleanShot X commands and more small tools that replace Raycast extensions.
 
 ## License
 
-[MIT](./LICENSE)
+Ripcord is licensed under [MIT](./LICENSE).
