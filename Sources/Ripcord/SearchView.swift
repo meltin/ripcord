@@ -127,8 +127,10 @@ private struct ResultIcon: View {
   var body: some View {
     switch result.action {
     case .open(let url) where url.isFileURL:
+      // App icons carry a transparent margin, so draw them larger than the 24pt slot to match.
       Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable()
-        .frame(width: 24, height: 24)
+        .frame(width: 30, height: 30)
+        .padding(-3)
     case .copy:
       tile("plus.forwardslash.minus", .orange)
     case .open:
@@ -161,7 +163,7 @@ private struct Footer: View {
         onCommand(.toggleMenu(root: true))
       } label: {
         Image(systemName: "equal")
-          .font(.system(size: 12, weight: .semibold))
+          .font(.system(size: 15, weight: .medium))
           .frame(width: 32, height: 32)
       }
       .glassEffect(.regular.interactive(), in: Circle())
