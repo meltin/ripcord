@@ -79,7 +79,7 @@ private struct EmptyState: View {
         .font(.system(size: 34, weight: .light))
         .foregroundStyle(.tertiary)
       Text("No Results").font(.system(size: 15, weight: .semibold))
-      Text("Nothing matches “\(query)”. Add a Quicklink in Edit Config to search the web with it.")
+      Text("Nothing matches “\(query)”. Add a Quicklink in Settings to search the web with it.")
         .font(.system(size: 13))
         .foregroundStyle(.secondary)
         .multilineTextAlignment(.center)
@@ -135,7 +135,7 @@ private struct ResultIcon: View {
       tile("plus.forwardslash.minus", .orange)
     case .open:
       tile("link", .blue)
-    case .run(.editConfig):
+    case .run(.settings):
       tile("gearshape.fill", .gray)
     case .run(.quit):
       tile("power", .red)
@@ -269,7 +269,7 @@ private struct MenuCard: View {
   }
 }
 
-private struct Keycap: View {
+struct Keycap: View {
   let label: String
 
   init(_ label: String) { self.label = label }

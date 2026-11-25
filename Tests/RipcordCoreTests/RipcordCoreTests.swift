@@ -65,6 +65,20 @@ import Testing
   func rejects(spec: String) {
     #expect(Hotkey(spec) == nil)
   }
+
+  @Test func recordsAKeyPressAsASpec() throws {
+    let hotkey = try #require(
+      Hotkey(keyCode: UInt32(kVK_ANSI_K), modifiers: UInt32(cmdKey | shiftKey | alphaLock)))
+    #expect(hotkey.spec == "shift+cmd+k")
+    #expect(Hotkey(hotkey.spec) == hotkey)
+    #expect(hotkey.keycaps == ["⇧", "⌘", "K"])
+    #expect(Hotkey("cmd+space")?.keycaps == ["⌘", "Space"])
+  }
+
+  @Test func rejectsKeyPressesASpecCantName() {
+    #expect(Hotkey(keyCode: UInt32(kVK_ANSI_K), modifiers: 0) == nil)
+    #expect(Hotkey(keyCode: UInt32(kVK_F1), modifiers: UInt32(cmdKey)) == nil)
+  }
 }
 
 @Suite struct SearchTests {
@@ -141,6 +155,27 @@ import Testing
     defer { try? FileManager.default.removeItem(at: url) }
     try Data("{".utf8).write(to: url)
     #expect(throws: (any Error).self) { try Config.load(from: url) }
+  }
+
+  @Test func readsFilesWrittenBeforeLaunchAtLoginExisted() throws {
+    let url = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).json")
+    defer { try? FileManager.default.removeItem(at: url) }
+    try Data(#"{"hotkey": "ctrl+space", "quicklinks": []}"#.utf8).write(to: url)
+    let config = try Config.load(from: url)
+    #expect(config.hotkey == "ctrl+space")
+    #expect(config.launchAtLogin == false)
+  }
+
+  @Test func savesEditsAndReadsThemBack() throws {
+    let url = FileManager.default.temporaryDirectory
+      .appending(path: UUID().uuidString).appending(path: "config.json")
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    var config = Config.default
+    config.launchAtLogin = true
+    config.quicklinks.append(
+      Quicklink(name: "MDN", url: "https://developer.mozilla.org/search?q={query}"))
+    try config.save(to: url)
+    #expect(try Config.load(from: url) == config)
   }
 }
 

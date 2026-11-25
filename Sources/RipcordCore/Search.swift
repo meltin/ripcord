@@ -2,11 +2,11 @@ import Foundation
 
 /// Commands Ripcord runs itself, listed alongside apps.
 public enum BuiltinCommand: CaseIterable, Sendable {
-  case editConfig, quit
+  case settings, quit
 
   public var title: String {
     switch self {
-    case .editConfig: "Edit Config"
+    case .settings: "Ripcord Settings"
     case .quit: "Quit Ripcord"
     }
   }
@@ -14,7 +14,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   /// The menu behind the footer's left button, in Raycast's place for app-level commands.
   public static let rootMenu = [
     MenuAction(
-      title: "Edit Config", symbol: "gearshape", shortcut: "⌘,", action: .run(.editConfig)),
+      title: "Settings", symbol: "gearshape", shortcut: "⌘,", action: .run(.settings)),
     MenuAction(title: "Quit Ripcord", symbol: "power", shortcut: "⌘Q", action: .run(.quit)),
   ]
 }

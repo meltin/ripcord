@@ -17,6 +17,34 @@ public struct Hotkey: Equatable, Sendable {
     modifiers = flags.compactMap { $0 }.reduce(0, |)
   }
 
+  /// A recorded key press; nil for keys a spec can't name or a press without a modifier.
+  public init?(keyCode: UInt32, modifiers: UInt32) {
+    let known = Self.ordered.map(\.flag).reduce(0, |)
+    guard Self.keyCodes.values.contains(keyCode), modifiers & known != 0 else { return nil }
+    self.keyCode = keyCode
+    self.modifiers = modifiers & known
+  }
+
+  /// The form the config file stores, e.g. "cmd+shift+k".
+  public var spec: String {
+    let key = Self.keyCodes.first { $0.value == keyCode }?.key ?? ""
+    return (Self.ordered.filter { modifiers & $0.flag != 0 }.map(\.name) + [key])
+      .joined(separator: "+")
+  }
+
+  /// Keycaps as macOS menus show them, e.g. ["⇧", "⌘", "K"] or ["⌘", "Space"].
+  public var keycaps: [String] {
+    let key = Self.keyCodes.first { $0.value == keyCode }?.key ?? ""
+    return Self.ordered.filter { modifiers & $0.flag != 0 }.map(\.symbol)
+      + [key == "space" ? "Space" : key.uppercased()]
+  }
+
+  // ⌃⌥⇧⌘ is the order macOS menus print modifiers in.
+  private static let ordered: [(flag: UInt32, name: String, symbol: String)] = [
+    (UInt32(controlKey), "ctrl", "⌃"), (UInt32(optionKey), "option", "⌥"),
+    (UInt32(shiftKey), "shift", "⇧"), (UInt32(cmdKey), "cmd", "⌘"),
+  ]
+
   private static let modifierFlags: [String: UInt32] = [
     "cmd": UInt32(cmdKey), "command": UInt32(cmdKey),
     "option": UInt32(optionKey), "opt": UInt32(optionKey), "alt": UInt32(optionKey),

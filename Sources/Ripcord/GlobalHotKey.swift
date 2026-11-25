@@ -30,6 +30,11 @@ enum GlobalHotKey {
     self.action = action
   }
 
+  static func unregister() {
+    if let registered { UnregisterEventHotKey(registered) }
+    registered = nil
+  }
+
   private static func installHandler() {
     guard !handlerInstalled else { return }
     var eventType = EventTypeSpec(

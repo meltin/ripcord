@@ -2,9 +2,9 @@ import Foundation
 
 /// A named URL; `{query}` in `url` is replaced by what follows `keyword` in the search field.
 public struct Quicklink: Codable, Equatable, Sendable {
-  public let name: String
-  public let url: String
-  public let keyword: String?
+  public var name: String
+  public var url: String
+  public var keyword: String?
 
   public init(name: String, url: String, keyword: String? = nil) {
     self.name = name

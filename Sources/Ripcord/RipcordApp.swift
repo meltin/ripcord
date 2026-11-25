@@ -1,5 +1,6 @@
 import AppKit
 import RipcordCore
+import ServiceManagement
 
 @main
 @MainActor
@@ -18,12 +19,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let configURL = FileManager.default.homeDirectoryForCurrentUser
     .appending(path: ".config/ripcord/config.json")
   private let launcher = LauncherController()
+  private lazy var settings = SettingsWindowController(model: SettingsModel(configURL: configURL))
   private var statusItem: NSStatusItem?
   private var registeredHotkey: String?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    NSApp.mainMenu = makeMainMenu()
     statusItem = makeStatusItem()
-    launcher.onEditConfig = { [weak self] in self?.editConfig() }
+    launcher.onOpenSettings = { [weak self] in self?.openSettings() }
+    settings.model.onSave = { [weak self] in self?.applyConfig() }
+    settings.model.onRecordingChange = { [weak self] isRecording in
+      // A registered hotkey would swallow the very keys being recorded.
+      if isRecording {
+        GlobalHotKey.unregister()
+        self?.registeredHotkey = nil
+      } else {
+        self?.applyConfig()
+      }
+    }
     applyConfig()
   }
 
@@ -40,8 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     launcher.toggle()
   }
 
-  @objc private func editConfig() {
-    NSWorkspace.shared.open(configURL)
+  @objc private func openSettings() {
+    settings.show()
   }
 
   /// Re-read on every show so edits to the file apply without a restart.
@@ -49,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     do {
       let config = try Config.load(from: configURL)
       launcher.quicklinks = config.quicklinks
+      applyLaunchAtLogin(config.launchAtLogin)
       guard config.hotkey != registeredHotkey else { return }
       guard let hotkey = Hotkey(config.hotkey) else {
         return showError("\"\(config.hotkey)\" is not a hotkey. Use a form like \"option+space\".")
@@ -58,6 +72,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     } catch {
       showError("\(configURL.path):\n\(error)")
     }
+  }
+
+  private func applyLaunchAtLogin(_ enabled: Bool) {
+    let service = SMAppService.mainApp
+    // requiresApproval means it is registered and waiting for the user in System Settings.
+    let registered = service.status == .enabled || service.status == .requiresApproval
+    guard enabled != registered else { return }
+    do {
+      try enabled ? service.register() : service.unregister()
+    } catch {
+      showError("Couldn't change Launch at Login: \(error.localizedDescription)")
+    }
+  }
+
+  /// An accessory app shows no menu bar, but its main menu still carries the key equivalents
+  /// that text fields in the settings window need.
+  private func makeMainMenu() -> NSMenu {
+    let edit = NSMenu(title: "Edit")
+    edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+    edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+    edit.addItem(.separator())
+    edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+    edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+    edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+    edit.addItem(
+      withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+    edit.addItem(.separator())
+    edit.addItem(
+      withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+    let app = NSMenu(title: "Ripcord")
+    app.addItem(
+      withTitle: "Quit Ripcord", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+    let main = NSMenu()
+    for submenu in [app, edit] {
+      let item = NSMenuItem()
+      item.submenu = submenu
+      main.addItem(item)
+    }
+    return main
   }
 
   private func makeStatusItem() -> NSStatusItem {
@@ -71,7 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     item.button?.image = icon
     let menu = NSMenu()
     menu.addItem(withTitle: "Open Ripcord", action: #selector(toggleLauncher), keyEquivalent: "")
-    menu.addItem(withTitle: "Edit Config…", action: #selector(editConfig), keyEquivalent: "")
+    menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
     menu.addItem(.separator())
     menu.addItem(
       withTitle: "Quit Ripcord", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")

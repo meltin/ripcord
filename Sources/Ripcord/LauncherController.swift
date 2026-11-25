@@ -52,7 +52,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   var quicklinks: [Quicklink] = [] {
     didSet { update(model.query) }
   }
-  var onEditConfig: () -> Void = {}
+  var onOpenSettings: () -> Void = {}
   var isVisible: Bool { panel.isVisible }
 
   private let model = LauncherModel()
@@ -220,8 +220,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       NSPasteboard.general.setString(text, forType: .string)
     case .reveal(let url):
       NSWorkspace.shared.activateFileViewerSelecting([url])
-    case .run(.editConfig):
-      onEditConfig()
+    case .run(.settings):
+      onOpenSettings()
     case .run(.quit):
       NSApp.terminate(nil)
     }
