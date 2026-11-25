@@ -27,6 +27,18 @@ another hotkey in Settings later.
 
 Requires macOS 26 or later on Apple silicon.
 
+### With Nix
+
+```sh
+nix profile add github:meltin/ripcord
+# or try it without installing
+nix build github:meltin/ripcord && open result/Applications/Ripcord.app
+```
+
+The flake builds with the host's Xcode 26 or later, because SwiftUI's `@State` is a macro whose
+plugin ships only with Xcode and nixpkgs' Swift can't expand it. The build therefore runs outside
+the Nix sandbox, which macOS's default `sandbox = false` or `relaxed` allows.
+
 ## Build from source
 
 Requires Xcode 26 or later.
