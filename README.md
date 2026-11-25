@@ -14,6 +14,9 @@
 - Settings (⌘,): Launch at Login, the hotkey and Quicklinks, kept in sync with the config file
 - Shortcuts: give any app, Quicklink or command an alias, a hotkey that runs it from anywhere, or
   turn it off so it never shows up in search
+- Clipboard History: copied text and images, searchable; Return pastes into the app you were in,
+  ⇧⌘P pins an item to the top, ⌃X deletes it. Password managers' copies are never recorded, and
+  switching the command off on the Shortcuts page stops recording
 - Drag the panel anywhere; it remembers the spot, and Reset Ripcord Window Position brings it back
 
 ## Quick start
@@ -51,6 +54,14 @@ open build/Ripcord.app
 swift test
 ```
 
+## Permissions
+
+Pasting from Clipboard History presses ⌘V for you, which needs Ripcord to be allowed under
+System Settings › Privacy & Security › Accessibility; Ripcord asks once per launch, on the first
+paste. Until then, Return only copies the item. Ripcord is ad-hoc signed, so macOS forgets the
+permission whenever a new build replaces the app: switch Ripcord off and on again there after an
+update.
+
 ## Configuration
 
 `~/.config/ripcord/config.json` is created on first launch and re-read every time the panel or
@@ -73,6 +84,10 @@ the settings window opens. The settings window writes every change back to it.
 
 `hotkey` is `cmd`, `option` or `ctrl` (plus `shift` if you like), then `space`, a letter or a
 digit.
+Clipboard History keeps its last 300 unpinned items (plus every pinned one) in
+`~/Library/Application Support/Ripcord/Clipboard`, as plain text and image files; an image over
+32 MB or a text over 1 MB isn't kept. Delete the folder to clear it.
+
 `items` holds the Shortcuts page's settings for apps (by bundle ID) and Ripcord's commands; a
 Quicklink keeps its own `hotkey` and `disabled`, and its `keyword` is its alias.
 
