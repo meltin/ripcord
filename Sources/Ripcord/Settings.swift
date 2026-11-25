@@ -574,7 +574,7 @@ private struct HotkeyRecorder: View {
         } label: {
           HStack(spacing: 4) {
             if isRecording {
-              Text("Press keys…").foregroundStyle(.secondary)
+              Text("Press keys…").foregroundStyle(Color.accentColor)
             } else if let keycaps = spec.flatMap(Hotkey.init)?.keycaps {
               ForEach(keycaps, id: \.self) { Keycap($0) }
             } else {
@@ -582,6 +582,16 @@ private struct HotkeyRecorder: View {
             }
           }
           .frame(minWidth: 80, minHeight: 22)
+        }
+        // Tinted and ringed like a focused field, so waiting for keys can't pass for idle.
+        .background(
+          isRecording ? Color.accentColor.opacity(0.15) : .clear,
+          in: RoundedRectangle(cornerRadius: 6)
+        )
+        .overlay {
+          if isRecording {
+            RoundedRectangle(cornerRadius: 6).strokeBorder(Color.accentColor, lineWidth: 2)
+          }
         }
         .accessibilityLabel(
           isRecording ? "Recording hotkey" : "Record hotkey, currently \(spec ?? "none")")
