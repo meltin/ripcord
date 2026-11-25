@@ -202,6 +202,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     return window
   }()
 
+  /// Closes the window on Esc while it's open, as Raycast's settings do.
+  private var escMonitor: Any?
+
   init(model: SettingsModel) { self.model = model }
 
   /// Becomes a regular app while the window is open, as Raycast does: macOS 14 only lets an
@@ -211,12 +214,25 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     // On top of other apps' windows even if macOS turns the activation request down.
     window.orderFrontRegardless()
     window.makeKey()
+    if escMonitor == nil {
+      escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        guard let self, event.keyCode == UInt16(kVK_Escape), event.window === window,
+          // Esc stops a recording, and cancels Japanese input that's still being composed.
+          model.recordingTarget == nil,
+          (window.firstResponder as? NSTextView)?.hasMarkedText() != true
+        else { return event }
+        window.performClose(nil)
+        return nil
+      }
+    }
     // The policy change lands on the next run loop pass; asking before it is asking as an
     // accessory app.
     DispatchQueue.main.async { NSApp.activate() }
   }
 
   func windowWillClose(_ notification: Notification) {
+    if let escMonitor { NSEvent.removeMonitor(escMonitor) }
+    escMonitor = nil
     NSApp.setActivationPolicy(.accessory)
   }
 
