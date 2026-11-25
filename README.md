@@ -15,7 +15,7 @@
 - Shortcuts: give any app, Quicklink or command an alias, a hotkey that runs it from anywhere, or
   turn it off so it never shows up in search
 - Clipboard History: copied text and images, searchable; Return pastes into the app you were in,
-  ⇧⌘P pins an item to the top, ⌃X deletes it. Password managers' copies are never recorded, and
+  ⇧⌘P pins an item to the top, ⌃X deletes it. Copies a password manager marks as concealed are never recorded, and
   switching the command off on the Shortcuts page stops recording
 - Drag the panel anywhere; it remembers the spot, and Reset Ripcord Window Position brings it back
 
@@ -58,9 +58,9 @@ swift test
 
 Pasting from Clipboard History presses ⌘V for you, which needs Ripcord to be allowed under
 System Settings › Privacy & Security › Accessibility; Ripcord asks once per launch, on the first
-paste. Until then, Return only copies the item. Ripcord is ad-hoc signed, so macOS forgets the
-permission whenever a new build replaces the app: switch Ripcord off and on again there after an
-update.
+paste. Until then, Return only copies the item and beeps. Ripcord is ad-hoc signed, so macOS forgets the
+permission whenever a new build replaces the app: after an update, remove Ripcord from that list
+and add it again, or run `tccutil reset Accessibility io.github.meltin.ripcord`.
 
 ## Configuration
 
