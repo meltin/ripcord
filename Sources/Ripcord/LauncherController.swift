@@ -48,6 +48,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   static let fieldHeight: CGFloat = 56
   static let rowHeight: CGFloat = 40
   static let footerHeight: CGFloat = 48
+  private static let positionKey = "panelTopLeft"
 
   var quicklinks: [Quicklink] = [] {
     didSet { update(model.query) }
@@ -60,6 +61,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     contentRect: NSRect(origin: .zero, size: size),
     styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
   private var apps: [AppEntry] = []
+  private var isPlacing = false
 
   override init() {
     super.init()
@@ -70,6 +72,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     panel.isOpaque = false
     panel.hasShadow = true
     panel.hidesOnDeactivate = false
+    panel.isMovableByWindowBackground = true
     panel.delegate = self
     panel.keyEquivalentHandler = { [weak self] in self?.handleKeyEquivalent($0) ?? false }
 
@@ -94,13 +97,34 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private func show() {
     refreshApps()
     update("")
+    isPlacing = true
+    panel.setFrameTopLeftPoint(savedTopLeft() ?? defaultTopLeft())
+    isPlacing = false
+    panel.makeKeyAndOrderFront(nil)
+  }
+
+  /// Saves where the user dragged the panel; moves made by `show()` itself don't count.
+  func windowDidMove(_ notification: Notification) {
+    guard !isPlacing else { return }
+    let frame = panel.frame
+    UserDefaults.standard.set(
+      NSStringFromPoint(NSPoint(x: frame.minX, y: frame.maxY)), forKey: Self.positionKey)
+  }
+
+  private func defaultTopLeft() -> NSPoint {
     let mouse = NSEvent.mouseLocation
     let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
-    if let visible = screen?.visibleFrame {
-      let top = visible.maxY - visible.height * 0.15
-      panel.setFrameTopLeftPoint(NSPoint(x: visible.midX - Self.size.width / 2, y: top))
-    }
-    panel.makeKeyAndOrderFront(nil)
+    guard let visible = screen?.visibleFrame else { return .zero }
+    return NSPoint(x: visible.midX - Self.size.width / 2, y: visible.maxY - visible.height * 0.15)
+  }
+
+  /// Nil when nothing is saved or the saved spot is off every screen (a display was unplugged).
+  private func savedTopLeft() -> NSPoint? {
+    guard let saved = UserDefaults.standard.string(forKey: Self.positionKey) else { return nil }
+    let point = NSPointFromString(saved)
+    let frame = NSRect(
+      x: point.x, y: point.y - Self.size.height, width: Self.size.width, height: Self.size.height)
+    return NSScreen.screens.contains { $0.visibleFrame.intersects(frame) } ? point : nil
   }
 
   private func hide() {
@@ -222,6 +246,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       NSWorkspace.shared.activateFileViewerSelecting([url])
     case .run(.settings):
       onOpenSettings()
+    case .run(.resetWindowPosition):
+      UserDefaults.standard.removeObject(forKey: Self.positionKey)
     case .run(.quit):
       NSApp.terminate(nil)
     }

@@ -2,11 +2,12 @@ import Foundation
 
 /// Commands Ripcord runs itself, listed alongside apps.
 public enum BuiltinCommand: CaseIterable, Sendable {
-  case settings, quit
+  case settings, resetWindowPosition, quit
 
   public var title: String {
     switch self {
     case .settings: "Ripcord Settings"
+    case .resetWindowPosition: "Reset Ripcord Window Position"
     case .quit: "Quit Ripcord"
     }
   }

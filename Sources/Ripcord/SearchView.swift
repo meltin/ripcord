@@ -19,6 +19,7 @@ struct SearchView: View {
       }
       .padding(.horizontal, 20)
       .frame(height: LauncherController.fieldHeight)
+      .background(DragArea())
       Divider().opacity(0.5)
       if model.sections.isEmpty {
         EmptyState(query: model.query)
@@ -137,6 +138,8 @@ private struct ResultIcon: View {
       tile("link", .blue)
     case .run(.settings):
       tile("gearshape.fill", .gray)
+    case .run(.resetWindowPosition):
+      tile("macwindow", .gray)
     case .run(.quit):
       tile("power", .red)
     case .reveal:
@@ -203,6 +206,14 @@ private struct Footer: View {
     .font(.system(size: 12))
     .padding(.horizontal, 8)
     .frame(height: LauncherController.footerHeight)
+    .background(DragArea())
+  }
+}
+
+/// Empty space that moves the panel when dragged, like Raycast's window background.
+private struct DragArea: View {
+  var body: some View {
+    Color.clear.contentShape(Rectangle()).gesture(WindowDragGesture())
   }
 }
 

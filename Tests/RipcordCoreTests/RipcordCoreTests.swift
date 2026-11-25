@@ -109,6 +109,8 @@ import Testing
     let sections = Search.sections(for: "quit", apps: apps, running: [], quicklinks: links)
     #expect(sections.map(\.title) == ["Results"])
     #expect(sections[0].results.first?.action == .run(.quit))
+    let reset = Search.results(for: "reset window", apps: apps, quicklinks: links)
+    #expect(reset.first?.action == .run(.resetWindowPosition))
   }
 
   @Test func noMatchFallsBackToQuicklinks() {
