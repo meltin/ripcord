@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="312" viewBox="56 124 400 312">
+  <!-- Template image: the bar with the cursor cut out, and the pull ring, thickened for 18pt. -->
+  <path fill-rule="evenodd" fill="#000" d="M120 132 H392 A56 56 0 0 1 392 244 H120 A56 56 0 0 1 120 132 Z M125 152 A13 13 0 0 0 112 165 V211 A13 13 0 0 0 138 211 V165 A13 13 0 0 0 125 152 Z"/>
+  <path d="M370 244 L370 326" fill="none" stroke="#000" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="370" cy="372" r="38" fill="none" stroke="#000" stroke-width="32"/>
+</svg>

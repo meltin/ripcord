@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- ripcord-E3-cursor, inset to macOS's 824px icon grid. -->
+  <g transform="translate(100 100) scale(1.609375)">
+    <rect x="0" y="0" width="512" height="512" rx="114" fill="#15171C"/>
+    <rect x="64" y="132" width="384" height="112" rx="56" fill="#F4F1EA"/>
+    <rect x="116" y="156" width="14" height="64" rx="7" fill="#FF5A1F"/>
+    <path d="M370 244 L370 330" fill="none" stroke="#F4F1EA" stroke-width="16" stroke-linecap="round"/>
+    <circle cx="370" cy="372" r="40" fill="none" stroke="#FF5A1F" stroke-width="28"/>
+  </g>
+</svg>
