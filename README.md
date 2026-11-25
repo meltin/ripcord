@@ -12,6 +12,8 @@
 - Quicklinks: `g swift testing` opens a search; with no match, the query goes to each Quicklink
 - ⌘K lists the selected row's actions (Open Command ↵, Show in Finder ⇧⌘F, Copy Path or URL ⇧⌘C)
 - Settings (⌘,): Launch at Login, the hotkey and Quicklinks, kept in sync with the config file
+- Shortcuts: give any app, Quicklink or command an alias, a hotkey that runs it from anywhere, or
+  turn it off so it never shows up in search
 - Drag the panel anywhere; it remembers the spot, and Reset Ripcord Window Position brings it back
 
 ## Quick start
@@ -60,11 +62,19 @@ the settings window opens. The settings window writes every change back to it.
   "launchAtLogin": false,
   "quicklinks": [
     { "name": "Google Search", "keyword": "g", "url": "https://www.google.com/search?q={query}" }
-  ]
+  ],
+  "items": {
+    "com.1password.1password": { "alias": "pass" },
+    "com.apple.Safari": { "hotkey": "ctrl+option+s" },
+    "command:quit": { "disabled": true }
+  }
 }
 ```
 
-`hotkey` is one or more of `cmd`, `option`, `ctrl` and `shift`, then `space`, a letter or a digit.
+`hotkey` is `cmd`, `option` or `ctrl` (plus `shift` if you like), then `space`, a letter or a
+digit.
+`items` holds the Shortcuts page's settings for apps (by bundle ID) and Ripcord's commands; a
+Quicklink keeps its own `hotkey` and `disabled`, and its `keyword` is its alias.
 
 ## Roadmap
 
