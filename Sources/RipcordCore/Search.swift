@@ -12,6 +12,15 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     }
   }
 
+  /// The key its settings are stored under. Spelled out so renaming a case never strands them.
+  public var settingsKey: String {
+    switch self {
+    case .settings: "command:settings"
+    case .resetWindowPosition: "command:reset-window-position"
+    case .quit: "command:quit"
+    }
+  }
+
   /// The menu behind the footer's left button, in Raycast's place for app-level commands.
   public static let rootMenu = [
     MenuAction(
@@ -77,7 +86,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   public let id: String
   public let title: String
   public let subtitle: String
-  /// Shown as a chip after the title, like a Raycast alias.
+  /// Shown as a chip after the title: an alias, or a Quicklink's keyword.
   public let keyword: String?
   public let kind: Kind
   public let action: Action
@@ -92,14 +101,16 @@ public struct SearchSection: Identifiable, Equatable, Sendable {
 public enum Search {
   /// The start screen for an empty query; otherwise one "Results" section.
   public static func sections(
-    for query: String, apps: [AppEntry], running: [AppEntry], quicklinks: [Quicklink]
+    for query: String, apps: [AppEntry], running: [AppEntry], quicklinks: [Quicklink],
+    items: [String: ItemSettings] = [:]
   ) -> [SearchSection] {
+    let links = quicklinks.filter(\.isEnabled)
     let trimmed = query.trimmingCharacters(in: .whitespaces)
     guard trimmed.isEmpty else {
-      let found = results(for: trimmed, apps: apps, quicklinks: quicklinks)
+      let found = results(for: trimmed, apps: apps, quicklinks: links, items: items)
       guard found.isEmpty else { return [SearchSection(title: "Results", results: found)] }
       // Like Raycast's fallback commands: hand the whole query to each Quicklink.
-      let fallbacks = quicklinks.compactMap { link in
+      let fallbacks = links.compactMap { link in
         link.url(for: trimmed).map { url in
           SearchResult(
             id: "fallback:\(link.name)", title: link.name, subtitle: url.host() ?? "",
@@ -109,20 +120,27 @@ public enum Search {
       return fallbacks.isEmpty
         ? [] : [SearchSection(title: "Use “\(trimmed)” with…", results: fallbacks)]
     }
+    let shownRunning = running.filter { items[$0.settingsKey]?.isEnabled ?? true }
     // Ripcord's own commands live in the footer's root menu; typing still finds them.
     return [
       // Capped so Quicklinks stay in view.
-      SearchSection(title: "Running", results: running.prefix(5).map(result(for:))),
-      SearchSection(title: "Quicklinks", results: quicklinks.compactMap(result(for:))),
+      SearchSection(
+        title: "Running",
+        results: shownRunning.prefix(5).map { result(for: $0, alias: items[$0.settingsKey]?.alias) }
+      ),
+      SearchSection(title: "Quicklinks", results: links.compactMap(result(for:))),
     ].filter { !$0.results.isEmpty }
   }
 
   /// Calculator first, then a Quicklink whose keyword starts the query, then fuzzy matches.
+  /// An exactly typed alias or keyword puts its item at the top of the matches.
   public static func results(
-    for query: String, apps: [AppEntry], quicklinks: [Quicklink]
+    for query: String, apps: [AppEntry], quicklinks: [Quicklink],
+    items: [String: ItemSettings] = [:]
   ) -> [SearchResult] {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return [] }
+    let links = quicklinks.filter(\.isEnabled)
 
     let calculation = Calculator.evaluate(trimmed).map { value in
       let text = Calculator.format(value)
@@ -131,8 +149,11 @@ public enum Search {
         action: .copy(text))
     }
 
-    let expanded = quicklinks.compactMap { link -> SearchResult? in
-      guard let keyword = link.keyword, trimmed.hasPrefix(keyword + " ") else { return nil }
+    let expanded = links.compactMap { link -> SearchResult? in
+      // Keywords and aliases are stored as typed; a stray trailing space must not break them.
+      guard let keyword = link.keyword?.trimmingCharacters(in: .whitespaces), !keyword.isEmpty,
+        trimmed.hasPrefix(keyword + " ")
+      else { return nil }
       let argument = trimmed.dropFirst(keyword.count + 1).trimmingCharacters(in: .whitespaces)
       guard !argument.isEmpty, let url = link.url(for: argument) else { return nil }
       return SearchResult(
@@ -140,20 +161,30 @@ public enum Search {
         keyword: keyword, kind: .quicklink, action: .open(url))
     }
 
-    let candidates =
-      apps.map { (names: $0.names, result: result(for: $0)) }
-      + quicklinks.compactMap { link in
-        result(for: link).map {
-          (names: [link.name] + [link.keyword].compactMap { $0 }, result: $0)
+    typealias Candidate = (names: [String], alias: String?, result: SearchResult)
+    let appCandidates: [Candidate] = apps.compactMap { app in
+      let settings = items[app.settingsKey] ?? ItemSettings()
+      guard settings.isEnabled else { return nil }
+      return (app.names, settings.alias, result(for: app, alias: settings.alias))
+    }
+    let linkCandidates: [Candidate] = links.compactMap { link in
+      result(for: link).map { ([link.name], link.keyword, $0) }
+    }
+    let commandCandidates: [Candidate] = BuiltinCommand.allCases.compactMap { command in
+      let settings = items[command.settingsKey] ?? ItemSettings()
+      guard settings.isEnabled else { return nil }
+      return ([command.title], settings.alias, result(for: command, alias: settings.alias))
+    }
+    let ranked = (appCandidates + linkCandidates + commandCandidates)
+      .compactMap { candidate -> (score: Int, result: SearchResult)? in
+        let names = candidate.names + [candidate.alias].compactMap { $0 }
+        guard let score = names.compactMap({ Fuzzy.score(trimmed, in: $0) }).max() else {
+          return nil
         }
-      }
-      + BuiltinCommand.allCases.map { (names: [$0.title], result: result(for: $0)) }
-    let ranked =
-      candidates
-      .compactMap { candidate in
-        candidate.names.compactMap { Fuzzy.score(trimmed, in: $0) }.max().map {
-          (score: $0, result: candidate.result)
-        }
+        let exactAlias =
+          candidate.alias?.trimmingCharacters(in: .whitespaces)
+          .caseInsensitiveCompare(trimmed) == .orderedSame
+        return (exactAlias ? score + 10_000 : score, candidate.result)
       }
       .sorted {
         ($0.score, -$0.result.title.count, $1.result.title)
@@ -165,9 +196,35 @@ public enum Search {
     return [calculation].compactMap { $0 } + expanded + ranked
   }
 
-  private static func result(for app: AppEntry) -> SearchResult {
+  /// Every app, Quicklink and command the Shortcuts page lists, in its three sections. Disabled
+  /// items are included so they can be turned back on; an app found twice is listed once.
+  public static func catalog(apps: [AppEntry], quicklinks: [Quicklink]) -> [CatalogSection] {
+    let uniqueApps = Dictionary(apps.map { ($0.settingsKey, $0) }) { first, _ in first }.values
+      .sorted { $0.names[0].localizedStandardCompare($1.names[0]) == .orderedAscending }
+    return [
+      CatalogSection(
+        title: "Applications",
+        entries: uniqueApps.map {
+          CatalogEntry(
+            target: .item($0.settingsKey), title: $0.names[0], kind: .application, appURL: $0.url)
+        }),
+      CatalogSection(
+        title: "Quicklinks",
+        entries: quicklinks.indices.map {
+          CatalogEntry(
+            target: .quicklink($0), title: quicklinks[$0].name, kind: .quicklink, appURL: nil)
+        }),
+      CatalogSection(
+        title: "Ripcord",
+        entries: BuiltinCommand.allCases.map {
+          CatalogEntry(target: .item($0.settingsKey), title: $0.title, kind: .command, appURL: nil)
+        }),
+    ]
+  }
+
+  private static func result(for app: AppEntry, alias: String?) -> SearchResult {
     SearchResult(
-      id: app.url.path, title: app.names[0], subtitle: "", keyword: nil, kind: .application,
+      id: app.url.path, title: app.names[0], subtitle: "", keyword: alias, kind: .application,
       action: .open(app.url))
   }
 
@@ -179,9 +236,9 @@ public enum Search {
     }
   }
 
-  private static func result(for command: BuiltinCommand) -> SearchResult {
+  private static func result(for command: BuiltinCommand, alias: String?) -> SearchResult {
     SearchResult(
-      id: "command:\(command)", title: command.title, subtitle: "Ripcord", keyword: nil,
+      id: "command:\(command)", title: command.title, subtitle: "Ripcord", keyword: alias,
       kind: .command, action: .run(command))
   }
 }

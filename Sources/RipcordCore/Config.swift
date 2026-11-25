@@ -5,11 +5,17 @@ public struct Config: Codable, Equatable, Sendable {
   public var hotkey: String
   public var launchAtLogin: Bool
   public var quicklinks: [Quicklink]
+  /// Per-app and per-command settings from the Shortcuts page, by settings key.
+  public var items: [String: ItemSettings]
 
-  public init(hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink]) {
+  public init(
+    hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
+    items: [String: ItemSettings] = [:]
+  ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
     self.quicklinks = quicklinks
+    self.items = items
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -18,6 +24,7 @@ public struct Config: Codable, Equatable, Sendable {
     hotkey = try container.decodeIfPresent(String.self, forKey: .hotkey) ?? Config.default.hotkey
     launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
     quicklinks = try container.decodeIfPresent([Quicklink].self, forKey: .quicklinks) ?? []
+    items = try container.decodeIfPresent([String: ItemSettings].self, forKey: .items) ?? [:]
   }
 
   public static let `default` = Config(
