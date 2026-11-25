@@ -3,8 +3,11 @@
 set -eu
 cd "$(dirname "$0")/.."
 
-swift build -c release --arch arm64 --product Ripcord
-bin="$(swift build -c release --arch arm64 --show-bin-path)"
+# SWIFT_BUILD_FLAGS lets the Nix build pass --disable-sandbox; sandbox-exec is refused there.
+# shellcheck disable=SC2086
+swift build -c release --arch arm64 --product Ripcord ${SWIFT_BUILD_FLAGS:-}
+# shellcheck disable=SC2086
+bin="$(swift build -c release --arch arm64 --show-bin-path ${SWIFT_BUILD_FLAGS:-})"
 
 app=build/Ripcord.app
 rm -rf "$app"
