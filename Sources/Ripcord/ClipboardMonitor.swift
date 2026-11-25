@@ -1,0 +1,94 @@
+import AppKit
+import Carbon.HIToolbox
+import RipcordCore
+
+/// Records what's copied anywhere into the clipboard history, and puts history items back.
+@MainActor
+final class ClipboardMonitor {
+  private(set) var history: ClipboardHistory
+  var onChange: () -> Void = {}
+  /// Off while Clipboard History is switched off on the Shortcuts page; what's copied meanwhile
+  /// is never recorded.
+  var isEnabled = true {
+    didSet { if isEnabled != oldValue { changeCount = pasteboard.changeCount } }
+  }
+  private let pasteboard: NSPasteboard
+  private var changeCount: Int
+  private var timer: Timer?
+
+  init(directory: URL, pasteboard: NSPasteboard = .general) {
+    history = ClipboardHistory(directory: directory)
+    self.pasteboard = pasteboard
+    // What was copied before launch isn't recorded, as it wasn't seen being copied.
+    changeCount = pasteboard.changeCount
+  }
+
+  /// macOS posts nothing when the pasteboard changes, so poll its counter, as every clipboard
+  /// manager does; one integer read every half second.
+  func start() {
+    let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+      MainActor.assumeIsolated { self?.poll() }
+    }
+    timer.tolerance = 0.2
+    RunLoop.main.add(timer, forMode: .common)
+    self.timer = timer
+  }
+
+  private func poll() {
+    guard isEnabled, pasteboard.changeCount != changeCount else { return }
+    changeCount = pasteboard.changeCount
+    guard let capture = ClipCapture.read(pasteboard) else { return }
+    update { try $0.add(capture) }
+  }
+
+  func togglePin(_ id: UUID) { update { try $0.togglePin(id) } }
+  func delete(_ id: UUID) { update { try $0.delete(id) } }
+
+  private func update(_ change: (inout ClipboardHistory) throws -> Void) {
+    do {
+      try change(&history)
+    } catch {
+      // Not worth an alert on every copy; the item is still in memory for this session.
+      NSLog("Ripcord: couldn't save the clipboard history: \(error)")
+    }
+    onChange()
+  }
+
+  /// Puts `id` on the pasteboard; the next poll moves it to the top of the history.
+  func copy(_ id: UUID) -> Bool {
+    guard let item = history.item(id) else { return false }
+    switch item.content {
+    case .text(let text):
+      pasteboard.clearContents()
+      return pasteboard.setString(text, forType: .string)
+    case .image:
+      // Read before clearing, so a missing file leaves what the user has copied alone.
+      guard let url = history.imageURL(of: item), let data = try? Data(contentsOf: url) else {
+        return false
+      }
+      pasteboard.clearContents()
+      return pasteboard.setData(data, forType: url.pathExtension == "png" ? .png : .tiff)
+    }
+  }
+
+  /// Asked for once per launch, so a dismissed request doesn't come back on every Return.
+  private var hasAskedForAccessibility = false
+
+  /// Presses ⌘V in the frontmost app. Without the Accessibility permission, asks for it and
+  /// returns false, leaving the item copied.
+  func pasteIntoFrontmostApp() -> Bool {
+    // The key's name, spelled out: kAXTrustedCheckOptionPrompt is a global var Swift 6 rejects.
+    let options = ["AXTrustedCheckOptionPrompt": !hasAskedForAccessibility] as CFDictionary
+    hasAskedForAccessibility = true
+    guard AXIsProcessTrustedWithOptions(options) else { return false }
+    let source = CGEventSource(stateID: .combinedSessionState)
+    // shortcut: ⌘ plus the key at V's position on a US layout; a Dvorak user needs a layout lookup.
+    for isDown in [true, false] {
+      let event = CGEvent(
+        keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: isDown)
+      event?.flags = .maskCommand
+      event?.post(tap: .cghidEventTap)
+    }
+    return true
+  }
+}

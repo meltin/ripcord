@@ -2,10 +2,11 @@ import Foundation
 
 /// Commands Ripcord runs itself, listed alongside apps.
 public enum BuiltinCommand: CaseIterable, Sendable {
-  case settings, resetWindowPosition, quit
+  case clipboardHistory, settings, resetWindowPosition, quit
 
   public var title: String {
     switch self {
+    case .clipboardHistory: "Clipboard History"
     case .settings: "Ripcord Settings"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .quit: "Quit Ripcord"
@@ -15,6 +16,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   /// The key its settings are stored under. Spelled out so renaming a case never strands them.
   public var settingsKey: String {
     switch self {
+    case .clipboardHistory: "command:clipboard-history"
     case .settings: "command:settings"
     case .resetWindowPosition: "command:reset-window-position"
     case .quit: "command:quit"
@@ -45,14 +47,20 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case copy(String)
     case reveal(URL)
     case run(BuiltinCommand)
+    case clip(UUID, ClipAction)
+  }
+
+  public enum ClipAction: Equatable, Sendable {
+    case paste, copy, togglePin, delete
   }
 
   public enum Kind: Equatable, Sendable {
-    case application, calculator, quicklink, command
+    case application, calculator, quicklink, command, text, image
 
     public var primaryAction: String {
       switch self {
       case .calculator: "Copy Answer"
+      case .text, .image: "Paste to App"
       case .application, .quicklink, .command: "Open Command"
       }
     }
@@ -78,6 +86,17 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
           title: "Copy URL", symbol: "doc.on.doc", shortcut: "⇧⌘C",
           action: .copy(url.absoluteString)),
       ]
+    case .clip(let id, _):
+      return [
+        primary,
+        MenuAction(
+          title: "Copy to Clipboard", symbol: "doc.on.doc", shortcut: "⇧⌘C",
+          action: .clip(id, .copy)),
+        MenuAction(
+          title: isPinned ? "Unpin" : "Pin", symbol: isPinned ? "pin.slash" : "pin",
+          shortcut: "⇧⌘P", action: .clip(id, .togglePin)),
+        MenuAction(title: "Delete", symbol: "trash", shortcut: "⌃X", action: .clip(id, .delete)),
+      ]
     default:
       return [primary]
     }
@@ -90,6 +109,9 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   public let keyword: String?
   public let kind: Kind
   public let action: Action
+  /// A clipboard image's file, drawn as the row's icon.
+  public var thumbnail: URL? = nil
+  public var isPinned = false
 }
 
 public struct SearchSection: Identifiable, Equatable, Sendable {
@@ -194,6 +216,38 @@ public enum Search {
       .map(\.result)
 
     return [calculation].compactMap { $0 } + expanded + ranked
+  }
+
+  /// Clipboard History's list: pinned items, then the rest, newest first, each kept to items
+  /// whose text contains the query. Images match "image".
+  public static func clipboardSections(for query: String, history: ClipboardHistory)
+    -> [SearchSection]
+  {
+    let trimmed = query.trimmingCharacters(in: .whitespaces)
+    let results = history.items.compactMap { item -> SearchResult? in
+      let id = "clip:\(item.id)"
+      let action = SearchResult.Action.clip(item.id, .paste)
+      switch item.content {
+      case .text(let text):
+        guard trimmed.isEmpty || text.localizedStandardContains(trimmed) else { return nil }
+        let line =
+          text.split(whereSeparator: \.isNewline)
+          .map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? ""
+        return SearchResult(
+          id: id, title: String(line.prefix(200)), subtitle: "", keyword: nil, kind: .text,
+          action: action, isPinned: item.isPinned)
+      case .image(_, let width, let height):
+        guard trimmed.isEmpty || "image".localizedStandardContains(trimmed) else { return nil }
+        return SearchResult(
+          id: id, title: "Image", subtitle: "\(width)×\(height)", keyword: nil, kind: .image,
+          action: action, thumbnail: history.imageURL(of: item), isPinned: item.isPinned)
+      }
+    }
+    return [
+      SearchSection(title: "Pinned", results: results.filter(\.isPinned)),
+      SearchSection(
+        title: trimmed.isEmpty ? "Recent" : "Results", results: results.filter { !$0.isPinned }),
+    ].filter { !$0.results.isEmpty }
   }
 
   /// Every app, Quicklink and command the Shortcuts page lists, in its three sections. Disabled

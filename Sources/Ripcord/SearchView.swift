@@ -12,17 +12,23 @@ struct SearchView: View {
   var body: some View {
     VStack(spacing: 0) {
       HStack(spacing: 12) {
-        if let logo = Bundle.main.image(forResource: "MenuBarIcon") {
+        if model.mode == .clipboard {
+          Image(systemName: "list.clipboard").font(.system(size: 16)).foregroundStyle(.secondary)
+        } else if let logo = Bundle.main.image(forResource: "MenuBarIcon") {
           Image(nsImage: logo).renderingMode(.template).foregroundStyle(.secondary)
         }
-        SearchField(text: model.query, onChange: onQueryChange, onCommand: onCommand)
+        SearchField(
+          text: model.query,
+          placeholder: model.mode == .clipboard
+            ? "Search Clipboard History…" : "Search apps, calculate, open Quicklinks…",
+          onChange: onQueryChange, onCommand: onCommand)
       }
       .padding(.horizontal, 20)
       .frame(height: LauncherController.fieldHeight)
       .background(DragArea())
       Divider().opacity(0.5)
       if model.sections.isEmpty {
-        EmptyState(query: model.query)
+        EmptyState(query: model.query, mode: model.mode)
       } else {
         resultList
       }
@@ -73,6 +79,18 @@ struct SearchView: View {
 
 private struct EmptyState: View {
   let query: String
+  let mode: LauncherMode
+
+  private var message: String {
+    switch mode {
+    case .root:
+      "Nothing matches “\(query)”. Add a Quicklink in Settings to search the web with it."
+    case .clipboard where query.trimmingCharacters(in: .whitespaces).isEmpty:
+      "Text and images you copy show up here."
+    case .clipboard:
+      "Nothing copied contains “\(query)”."
+    }
+  }
 
   var body: some View {
     VStack(spacing: 10) {
@@ -80,7 +98,7 @@ private struct EmptyState: View {
         .font(.system(size: 34, weight: .light))
         .foregroundStyle(.tertiary)
       Text("No Results").font(.system(size: 15, weight: .semibold))
-      Text("Nothing matches “\(query)”. Add a Quicklink in Settings to search the web with it.")
+      Text(message)
         .font(.system(size: 13))
         .foregroundStyle(.secondary)
         .multilineTextAlignment(.center)
@@ -144,6 +162,14 @@ private struct ResultIcon: View {
       tile("power", .red)
     case .reveal:
       tile("folder", .gray)
+    case .run(.clipboardHistory):
+      tile("list.clipboard.fill", .red)
+    case .clip:
+      if let thumbnail = result.thumbnail {
+        Thumbnail(url: thumbnail)
+      } else {
+        tile("text.alignleft", .gray)
+      }
     }
   }
 
@@ -153,6 +179,45 @@ private struct ResultIcon: View {
       .foregroundStyle(.white)
       .frame(width: 24, height: 24)
       .background(color.gradient, in: RoundedRectangle(cornerRadius: 6))
+  }
+}
+
+/// A clipboard image drawn small. Decoded off the main thread at icon size and cached, so a
+/// screenshot in the history never sits in memory at full size.
+private struct Thumbnail: View {
+  let url: URL
+  @State private var image: NSImage?
+
+  private static let cache = NSCache<NSURL, NSImage>()
+
+  var body: some View {
+    Group {
+      if let image {
+        Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
+      } else {
+        Color.clear
+      }
+    }
+    .frame(width: 24, height: 24)
+    .task(id: url) {
+      if let cached = Self.cache.object(forKey: url as NSURL) {
+        image = cached
+        return
+      }
+      let made = await Task.detached(priority: .userInitiated) { [url] () -> CGImage? in
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+          kCGImageSourceCreateThumbnailFromImageAlways: true,
+          kCGImageSourceThumbnailMaxPixelSize: 64,
+          kCGImageSourceCreateThumbnailWithTransform: true,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+      }.value
+      guard let made else { return }
+      let thumbnail = NSImage(cgImage: made, size: .zero)
+      Self.cache.setObject(thumbnail, forKey: url as NSURL)
+      image = thumbnail
+    }
   }
 }
 
@@ -302,6 +367,8 @@ extension SearchResult.Kind {
     case .calculator: "Calculator"
     case .quicklink: "Quicklink"
     case .command: "Command"
+    case .text: "Text"
+    case .image: "Image"
     }
   }
 }
@@ -310,6 +377,7 @@ extension SearchResult.Kind {
 /// method has had them, so Japanese IME composition keeps working.
 private struct SearchField: NSViewRepresentable {
   let text: String
+  let placeholder: String
   let onChange: (String) -> Void
   let onCommand: (SearchCommand) -> Void
 
@@ -319,7 +387,6 @@ private struct SearchField: NSViewRepresentable {
     field.drawsBackground = false
     field.focusRingType = .none
     field.font = .systemFont(ofSize: 18)
-    field.placeholderString = "Search apps, calculate, open Quicklinks…"
     field.cell?.isScrollable = true
     field.delegate = context.coordinator
     return field
@@ -327,6 +394,7 @@ private struct SearchField: NSViewRepresentable {
 
   func updateNSView(_ field: FocusingTextField, context: Context) {
     context.coordinator.parent = self
+    if field.placeholderString != placeholder { field.placeholderString = placeholder }
     let isComposing = (field.currentEditor() as? NSTextView)?.hasMarkedText() ?? false
     if !isComposing, field.stringValue != text { field.stringValue = text }
   }
