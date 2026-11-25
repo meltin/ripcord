@@ -28,11 +28,15 @@ struct SearchView: View {
     }
     // Floats over the list like Raycast's footer, so rows scroll on underneath it.
     .overlay(alignment: .bottom) { Footer(selected: model.selected, onCommand: onCommand) }
-    .overlay(alignment: model.menu?.isRoot == true ? .bottomLeading : .bottomTrailing) {
+    .overlay {
       if let menu = model.menu {
-        MenuCard(menu: menu, onCommand: onCommand)
-          // Covers the footer, as Raycast's action panel does.
-          .padding(8)
+        ZStack(alignment: menu.isRoot ? .bottomLeading : .bottomTrailing) {
+          // A click anywhere outside the card closes it, like a dialog's backdrop.
+          Color.clear.contentShape(Rectangle()).onTapGesture { onCommand(.cancel) }
+          MenuCard(menu: menu, onCommand: onCommand)
+            // Covers the footer, as Raycast's action panel does.
+            .padding(8)
+        }
       }
     }
   }
@@ -153,26 +157,30 @@ private struct Footer: View {
 
   var body: some View {
     HStack {
-      Button {
+      HoverButton {
         onCommand(.toggleMenu(root: true))
       } label: {
         Image(systemName: "equal")
           .font(.system(size: 12, weight: .semibold))
           .frame(width: 32, height: 32)
-          .contentShape(Circle())
       }
-      .buttonStyle(.plain)
       .glassEffect(.regular.interactive(), in: Circle())
       .accessibilityLabel("Ripcord menu")
       Spacer()
-      HStack(spacing: 18) {
+      HStack(spacing: 2) {
         if let selected {
-          HStack(spacing: 6) {
-            Text(selected.kind.primaryAction)
-            Keycap("↵")
+          HoverButton {
+            onCommand(.submit)
+          } label: {
+            HStack(spacing: 6) {
+              Text(selected.kind.primaryAction)
+              Keycap("↵")
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 26)
           }
         }
-        Button {
+        HoverButton {
           onCommand(.toggleMenu(root: false))
         } label: {
           HStack(spacing: 6) {
@@ -182,16 +190,34 @@ private struct Footer: View {
               Keycap("K")
             }
           }
+          .padding(.horizontal, 10)
+          .frame(height: 26)
         }
-        .buttonStyle(.plain)
       }
-      .padding(.horizontal, 12)
+      .padding(.horizontal, 3)
       .frame(height: 32)
       .glassEffect(.regular, in: Capsule())
     }
     .font(.system(size: 12))
     .padding(.horizontal, 8)
     .frame(height: LauncherController.footerHeight)
+  }
+}
+
+/// A footer button that lights up a capsule under the pointer, as Raycast's footer does.
+private struct HoverButton<Label: View>: View {
+  let action: () -> Void
+  @ViewBuilder let label: Label
+  @State private var isHovered = false
+
+  var body: some View {
+    Button(action: action) {
+      label
+        .background(Capsule().fill(Color.primary.opacity(isHovered ? 0.08 : 0)))
+        .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .onHover { isHovered = $0 }
   }
 }
 
@@ -231,6 +257,8 @@ private struct MenuCard: View {
           .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // The pointer moves the selection, so Return and the click agree.
+        .onHover { if $0 { onCommand(.selectMenuItem(index)) } }
       }
     }
     .padding(6)

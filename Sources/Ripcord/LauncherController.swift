@@ -28,6 +28,7 @@ enum SearchCommand {
   case activate(String)
   case toggleMenu(root: Bool)
   case runMenuItem(Int)
+  case selectMenuItem(Int)
 }
 
 /// A panel that takes keys without activating Ripcord, so the previous app stays frontmost.
@@ -162,6 +163,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       if let items = model.menu?.items, items.indices.contains(index) {
         perform(items[index].action)
       }
+    case .selectMenuItem(let index): model.menu?.selection = index
     }
   }
 
