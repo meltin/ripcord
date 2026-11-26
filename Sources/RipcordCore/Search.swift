@@ -7,6 +7,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case caffeinate, decaffeinate
   case sleepTimer, stopSleepTimer
   case pickColor, colorHistory
+  case cleanKeyboard
   case resetWindowPosition, quit
 
   public var title: String {
@@ -25,6 +26,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .stopSleepTimer: "Stop Sleep Timer"
     case .pickColor: "Pick Color"
     case .colorHistory: "Color History"
+    case .cleanKeyboard: "Clean Keyboard"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .quit: "Quit Ripcord"
     }
@@ -36,6 +38,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .caffeinate, .decaffeinate: "Coffee"
     case .sleepTimer, .stopSleepTimer: "Sleep Timer"
     case .pickColor, .colorHistory: "Color Picker"
+    case .cleanKeyboard: "Clean Keyboard"
     default: "Ripcord"
     }
   }
@@ -57,6 +60,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .stopSleepTimer: "command:stop-sleep-timer"
     case .pickColor: "command:pick-color"
     case .colorHistory: "command:color-history"
+    case .cleanKeyboard: "command:clean-keyboard"
     case .resetWindowPosition: "command:reset-window-position"
     case .quit: "command:quit"
     }
@@ -161,6 +165,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case sleepTimer(TimeInterval, displayOnly: Bool)
     /// Removes the picked color with this hex from Color History.
     case deleteColor(String)
+    /// Blocks the keyboard for this many seconds, to wipe it.
+    case cleanKeyboard(TimeInterval)
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -434,21 +440,50 @@ public enum Search {
       .prefix(30)
       .map(\.result)
 
-    return [calculation].compactMap { $0 } + expanded + [caffeinateFor].compactMap { $0 } + sleepIn
+    // "clean keyboard 30s", or the usual times while none is typed yet.
+    let cleanTimes: [TimeInterval] =
+      typedArgument(after: .cleanKeyboard, in: trimmed, items: items).map { text in
+        text.isEmpty ? [15, 30, 60, 120] : [Coffee.duration(from: text)].compactMap { $0 }
+      } ?? []
+    let cleanFor: [SearchResult] = cleanTimes.filter { $0 <= longestClean }.map { seconds in
+      SearchResult(
+        id: "clean-keyboard-\(Int(seconds))",
+        title: "Clean Keyboard for \(Coffee.format(seconds))", subtitle: "Clean Keyboard",
+        keyword: nil, kind: .command, action: .cleanKeyboard(seconds))
+    }
+    let timed: [SearchResult] = [caffeinateFor].compactMap { $0 } + sleepIn + cleanFor
+    return [calculation].compactMap { $0 } + expanded + timed
       + ranked
   }
+
+  /// The longest Clean Keyboard: no keyboard for more than five minutes, typed or not.
+  public static let longestClean: TimeInterval = 300
 
   /// The time typed after `command`'s title or alias, as in "caffeinate 1h 30m"; nil when it's
   /// switched off or what follows isn't a time.
   private static func typedDuration(
     after command: BuiltinCommand, in query: String, items: [String: ItemSettings]
   ) -> TimeInterval? {
+    typedArgument(after: command, in: query, items: items).flatMap(Coffee.duration(from:))
+  }
+
+  /// What's typed after `command`'s title or alias and a space, trimmed, empty when nothing yet;
+  /// nil when the query doesn't start with either or the command is switched off.
+  private static func typedArgument(
+    after command: BuiltinCommand, in query: String, items: [String: ItemSettings]
+  ) -> String? {
     let settings = items[command.settingsKey] ?? ItemSettings()
     guard settings.isEnabled else { return nil }
+    // The query comes trimmed, so "Clean Keyboard " arrives as the title alone.
     return [command.title, settings.alias]
       .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
-      .filter { !$0.isEmpty && query.lowercased().hasPrefix($0.lowercased() + " ") }
-      .lazy.compactMap { Coffee.duration(from: String(query.dropFirst($0.count + 1))) }
+      .filter { !$0.isEmpty }
+      .lazy.compactMap { name -> String? in
+        let lowered = query.lowercased()
+        if lowered == name.lowercased() { return "" }
+        guard lowered.hasPrefix(name.lowercased() + " ") else { return nil }
+        return String(query.dropFirst(name.count + 1)).trimmingCharacters(in: .whitespaces)
+      }
       .first
   }
 

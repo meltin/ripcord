@@ -50,6 +50,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
     }
     launcher.onSleepTimer = { [weak self] in self?.sleepTimer.start(after: $0, displayOnly: $1) }
+    launcher.onCleanKeyboard = { [weak self] seconds in
+      if self?.keyboardCleaner.start(for: seconds) == false {
+        self?.showError(
+          "Clean Keyboard needs Accessibility: allow Ripcord under System Settings › Privacy & Security › Accessibility."
+        )
+      }
+    }
     launcher.onStopSleepTimer = { [weak self] in
       guard self?.sleepTimer.isActive == true else { return NSSound.beep() }
       self?.sleepTimer.stop()
@@ -305,6 +312,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private let caffeinator = Caffeinator()
   private let sleepTimer = SleepTimer()
+  private let keyboardCleaner = KeyboardCleaner()
   private let stopSleepTimerItem = NSMenuItem(
     title: "Stop Sleep Timer", action: #selector(stopSleepTimer), keyEquivalent: "")
 

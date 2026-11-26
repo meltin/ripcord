@@ -328,6 +328,8 @@ private struct ResultIcon: View {
       }
     case .deleteColor:
       tile("trash", .gray)
+    case .cleanKeyboard:
+      tile(BuiltinCommand.cleanKeyboard.symbol, BuiltinCommand.cleanKeyboard.color)
     case .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey, .deleteAlias:
       tile("gearshape", .gray)
     case .snippet:
@@ -429,6 +431,7 @@ extension BuiltinCommand {
     case .stopSleepTimer: "moon.zzz"
     case .pickColor: "eyedropper"
     case .colorHistory: "swatchpalette.fill"
+    case .cleanKeyboard: "keyboard"
     case .resetWindowPosition: "macwindow"
     case .quit: "power"
     }
@@ -442,6 +445,7 @@ extension BuiltinCommand {
     case .caffeinate, .decaffeinate: .brown
     case .sleepTimer, .stopSleepTimer: .indigo
     case .pickColor, .colorHistory: .pink
+    case .cleanKeyboard: .cyan
     case .httpStatusCodes: .teal
     case .settings, .resetWindowPosition: .gray
     }

@@ -38,6 +38,8 @@
 - Color Picker: Pick Color copies a color from anywhere on screen in the format set on its
   settings page (HEX, RGB, HSL, SwiftUI or NSColor); Color History lists the colors picked, to copy
   in any format
+- Clean Keyboard: turns every key off, media keys included, for 15 seconds to 5 minutes so the
+  keyboard can be wiped, with the time left over the screen; ⌃⌥⌘↩ turns it back on early
 - HTTP Status Codes: look a code up by number or name, grouped by hundred; Return opens its MDN
   page and ⌘K copies the code or its name
 - CleanShot X: Capture Area, Window, Fullscreen and Previous Area, Scrolling Capture, Record
