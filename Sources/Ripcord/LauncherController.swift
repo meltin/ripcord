@@ -137,8 +137,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
         || repositorySettings.depth != oldValue.depth
       {
         repositories = []
-        // Kept open behind Settings, the list would otherwise come back empty.
-        if model.mode == .repositories { scanRepositories() }
+        // Kept open behind Settings, the list would otherwise come back empty, or keep a removed
+        // folder's repositories until the scan ends.
+        if model.mode == .repositories {
+          refreshRows(selecting: nil)
+          scanRepositories()
+        }
       } else if repositorySettings != oldValue, model.mode == .repositories {
         refreshRows(selecting: model.selected?.id)
       }

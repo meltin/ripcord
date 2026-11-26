@@ -379,16 +379,18 @@ public enum Search {
   /// Search Repositories' list: repositories whose name or path holds the query, best first.
   /// Each opens in the app its settings give the Return pressed, or in Finder.
   public static func repositorySections(
-    for query: String, repositories: [Repository], settings: RepositorySettings
+    for query: String, repositories: [Repository], settings: RepositorySettings,
+    home: String = NSHomeDirectory()
   ) -> [SearchSection] {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
-    let home = NSHomeDirectory()
+    // A pasted absolute path is matched in its `~` form, as the paths are.
+    let pathQuery = tildePath(trimmed, home: home)
     let ranked = repositories.compactMap { repository -> (score: Int, repository: Repository)? in
       guard !trimmed.isEmpty else { return (0, repository) }
       let score = [
         Fuzzy.score(trimmed, in: repository.name),
         // From `~`, so the home folder's own path doesn't match every repository.
-        tildePath(repository.url.path, home: home).localizedStandardContains(trimmed) ? 0 : nil,
+        tildePath(repository.url.path, home: home).localizedStandardContains(pathQuery) ? 0 : nil,
       ].compactMap { $0 }.max()
       return score.map { ($0, repository) }
     }

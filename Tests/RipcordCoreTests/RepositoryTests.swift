@@ -97,11 +97,14 @@ import Testing
     #expect(result.action == .open(repository.url))
     #expect(
       Search.repositorySections(for: "zzz", repositories: [repository], settings: settings).isEmpty)
-    // The home folder's own path isn't something to search by.
-    let home = NSHomeDirectory()
-    let inHome = Repository(url: URL(fileURLWithPath: home + "/dev/ripcord"), remote: nil)
-    let homeName = URL(fileURLWithPath: home).lastPathComponent
-    #expect(
-      Search.repositorySections(for: homeName, repositories: [inHome], settings: settings).isEmpty)
+    // The home folder's own path isn't something to search by, but a pasted full path is.
+    let inHome = Repository(url: URL(fileURLWithPath: "/Users/al/dev/ripcord"), remote: nil)
+    func names(_ query: String) -> [String] {
+      Search.repositorySections(
+        for: query, repositories: [inHome], settings: settings, home: "/Users/al"
+      ).flatMap(\.results).map(\.title)
+    }
+    #expect(names("Users").isEmpty)
+    #expect(names("/Users/al/dev") == ["ripcord"])
   }
 }

@@ -187,7 +187,8 @@ private struct ResultRow: View {
   var body: some View {
     HStack(spacing: 12) {
       ResultIcon(result: result)
-      Text(result.title).font(.system(size: 14)).lineLimit(1)
+      // Ahead of a long path on the right, which shrinks first.
+      Text(result.title).font(.system(size: 14)).lineLimit(1).layoutPriority(1)
       // A repository's path goes on the right, as Raycast lines them up.
       if !result.subtitle.isEmpty, result.kind != .repository {
         Text(result.subtitle).font(.system(size: 14)).foregroundStyle(.secondary).lineLimit(1)
