@@ -15,6 +15,14 @@ public struct Bookmark: Equatable, Sendable {
   /// What comes before the link on its line (indent, `- `, a task list's `[x] `), kept when the
   /// bookmark is edited.
   public let prefix: String
+  /// The link's target as written on the line, which `url` may have percent-encoded.
+  public let rawURL: String
+
+  /// Whether the line holds only what the form shows, so an edit loses nothing written on it,
+  /// such as a link title (`"Tip"`) or a note after the link.
+  public var isEditable: Bool {
+    text == prefix + "[\(title)](\(rawURL))" + (description.map { " - \($0)" } ?? "")
+  }
 }
 
 /// `bookmarks.md` as written: every line kept with its own line ending, so a change rewrites
@@ -49,9 +57,17 @@ public struct BookmarkFile: Equatable, Sendable {
     case invalid(String)
   }
 
+  /// Whether the file starts with a UTF-8 byte order mark. It's kept off the first line, so a
+  /// moved line doesn't carry it away, and put back in front of the text.
+  public private(set) var hasByteOrderMark = false
+
   public init(text: String) {
     var lines: [(text: String, ending: String)] = []
     var rest = Substring(text)
+    if rest.unicodeScalars.first == "\u{FEFF}" {
+      hasByteOrderMark = true
+      rest = Substring(rest.unicodeScalars.dropFirst())
+    }
     // Swift reads "\r\n" as one Character, so a CRLF ending is found whole, not as "\n".
     while let end = rest.firstIndex(where: { $0 == "\n" || $0 == "\r\n" }) {
       lines.append((String(rest[..<end]), String(rest[end])))
@@ -62,7 +78,9 @@ public struct BookmarkFile: Equatable, Sendable {
   }
 
   /// The file's text, the same bytes as read for the lines no change touched.
-  public var text: String { lines.map { $0.text + $0.ending }.joined() }
+  public var text: String {
+    (hasByteOrderMark ? "\u{FEFF}" : "") + lines.map { $0.text + $0.ending }.joined()
+  }
 
   public static func == (lhs: BookmarkFile, rhs: BookmarkFile) -> Bool { lhs.text == rhs.text }
 
@@ -73,7 +91,7 @@ public struct BookmarkFile: Equatable, Sendable {
 
   /// One pass over the lines for headings and bookmarks; lines that are neither, and anything
   /// in a fenced code block, are left alone. Reading and changing the file both go by it.
-  private var scan: (headings: [Heading], bookmarks: [Bookmark]) {
+  private var scan: (headings: [Heading], bookmarks: [Bookmark], endsInFence: Bool) {
     var headings: [Heading] = []
     var bookmarks: [Bookmark] = []
     var group = Heading(title: "", line: -1)
@@ -95,23 +113,41 @@ public struct BookmarkFile: Equatable, Sendable {
         bookmarks.append(bookmark)
       }
     }
-    return (headings, bookmarks)
+    return (headings, bookmarks, fence != nil)
   }
 
-  /// Spaces, tabs and a UTF-8 byte order mark, which can start the first line.
-  static let blank = CharacterSet.whitespaces.union(["\u{FEFF}"])
+  static let blank = CharacterSet.whitespaces
 
   /// Without the bookmark on `line`, or nil when that line no longer holds `text` (the file
   /// changed since it was read).
   public func deleting(line: Int, text: String) -> BookmarkFile? {
     guard lines.indices.contains(line), lines[line].text == text else { return nil }
+    return removing(line..<line + 1)
+  }
+
+  /// Without `range`'s lines. Taking the last line away leaves the one before it last, without
+  /// a newline, as it was.
+  private func removing(_ range: Range<Int>) -> BookmarkFile {
     var file = self
-    let removed = file.lines.remove(at: line)
-    // The last line taken away leaves the one before it last, without a newline, as it was.
-    if line == file.lines.count, removed.ending.isEmpty, !file.lines.isEmpty {
+    let lastEnding = lines[range.upperBound - 1].ending
+    file.lines.removeSubrange(range)
+    if range.upperBound == lines.count, lastEnding.isEmpty, !file.lines.isEmpty {
       file.lines[file.lines.count - 1].ending = ""
     }
     return file
+  }
+
+  /// The bookmark's line and the lines indented under it (a note, sub-items), which go with it.
+  private func block(of bookmark: Bookmark) -> Range<Int> {
+    let indent = bookmark.prefix.prefix(while: \.isWhitespace).count
+    var end = bookmark.line + 1
+    while end < lines.count {
+      let text = lines[end].text
+      guard !text.allSatisfy(\.isWhitespace), text.prefix(while: \.isWhitespace).count > indent
+      else { break }
+      end += 1
+    }
+    return bookmark.line..<end
   }
 
   /// With a bookmark saved from the form: a new one when `original` is nil, otherwise that one
@@ -124,6 +160,10 @@ public struct BookmarkFile: Equatable, Sendable {
     let url = url.trimmingCharacters(in: .whitespaces)
     let description = description.trimmingCharacters(in: .whitespaces)
     let found: Bookmark? = if let original { try bookmark(original) } else { nil }
+    if let found, !found.isEditable {
+      throw .invalid(
+        "This bookmark's line has text the form doesn't show; edit it in bookmarks.md instead.")
+    }
     guard !title.isEmpty else { throw .invalid("A bookmark needs a title.") }
     guard !url.contains(where: \.isWhitespace), let parsedURL = URL(string: url),
       parsedURL.scheme != nil
@@ -144,7 +184,8 @@ public struct BookmarkFile: Equatable, Sendable {
     return try placing(text, moving: found, under: destination)
   }
 
-  /// With the bookmark moved under `destination`, its line kept as written.
+  /// With the bookmark moved under `destination`, its line and what's indented under it kept as
+  /// written.
   public func moving(line: Int, text: String, under destination: Destination) throws(EditError)
     -> (file: BookmarkFile, line: Int, text: String)
   {
@@ -161,12 +202,14 @@ public struct BookmarkFile: Equatable, Sendable {
   }
 
   /// `text` under `destination`: on `original`'s line when that's under it already, otherwise
-  /// after the last bookmark under that heading, with `original` taken out.
+  /// after the last bookmark there and what's indented under it, with `original` and its own
+  /// indented lines moved along.
   private func placing(_ text: String, moving original: Bookmark?, under destination: Destination)
     throws(EditError) -> (file: BookmarkFile, line: Int, text: String)
   {
     let current = headings
-    let target: Heading
+    var target: Heading?
+    var newTitle: String?
     switch destination {
     case .heading(let heading):
       guard heading.line == -1 || current.contains(heading) else { throw .changed }
@@ -177,36 +220,44 @@ public struct BookmarkFile: Equatable, Sendable {
         throw .invalid("A new group needs a name on one line.")
       }
       // One by that name already: there, rather than a second heading of the same name.
-      guard let existing = current.first(where: { $0.title == title }) else {
-        return appendingHeading(title, then: text, removing: original)
-      }
-      target = existing
+      target = current.first { $0.title == title }
+      newTitle = title
     }
-    if let original, original.groupLine == target.line {
+    if let original, let target, original.groupLine == target.line {
       var file = self
       file.lines[original.line].text = text
       return (file, original.line, text)
     }
     var file = self
-    var headingLine = target.line
+    var placed = [text]
+    var headingLine = target?.line ?? -1
     if let original {
-      // Found by `bookmark`, so it's there to take out.
-      file = file.deleting(line: original.line, text: original.text) ?? file
-      if headingLine > original.line { headingLine -= 1 }
+      let block = block(of: original)
+      placed += lines[block.dropFirst()].map(\.text)
+      file = removing(block)
+      if headingLine > original.line { headingLine -= block.count }
+    }
+    guard target != nil else {
+      // Lines after a code block left open would land inside it, out of the list.
+      guard !file.scan.endsInFence else {
+        throw .invalid("bookmarks.md ends inside a code block that isn't closed; close it first.")
+      }
+      return file.appendingHeading(newTitle ?? "", then: placed)
     }
     let after = file.scan
     let next = after.headings.first { $0.line > headingLine }?.line ?? file.lines.count
     let last =
-      after.bookmarks.last { $0.line > headingLine && $0.line < next }?.line ?? headingLine
-    file.insert(text, after: last)
+      after.bookmarks.last { $0.line > headingLine && $0.line < next }
+      .map { file.block(of: $0).upperBound - 1 } ?? headingLine
+    for (offset, line) in placed.enumerated() { file.insert(line, after: last + offset) }
     return (file, last + 1, text)
   }
 
-  /// With `# title` and then `text` at the end of the file, a blank line before them.
-  private func appendingHeading(_ title: String, then text: String, removing original: Bookmark?)
+  /// With `# title` and then `placed` at the end of the file, a blank line before them.
+  private func appendingHeading(_ title: String, then placed: [String])
     -> (file: BookmarkFile, line: Int, text: String)
   {
-    var file = original.flatMap { deleting(line: $0.line, text: $0.text) } ?? self
+    var file = self
     let ending = file.lineEnding
     // A file without a final newline stays without one.
     let endsOpen = file.lines.last?.ending.isEmpty ?? false
@@ -217,8 +268,10 @@ public struct BookmarkFile: Equatable, Sendable {
       }
     }
     file.lines.append(("# \(title)", ending))
-    file.lines.append((text, endsOpen ? "" : ending))
-    return (file, file.lines.count - 1, text)
+    let line = file.lines.count
+    file.lines += placed.map { ($0, ending) }
+    if endsOpen { file.lines[file.lines.count - 1].ending = "" }
+    return (file, line, placed[0])
   }
 
   /// Puts `text` after line `index` (-1 for the first line), with the ending its neighbour has.
@@ -289,7 +342,7 @@ public struct BookmarkFile: Equatable, Sendable {
     return Bookmark(
       title: title, url: url, description: description?.isEmpty == true ? nil : description,
       group: group.title, groupLine: group.line, line: index, text: text,
-      prefix: String(lead) + trimmed[..<item.startIndex])
+      prefix: String(lead) + trimmed[..<item.startIndex], rawURL: String(target))
   }
 }
 

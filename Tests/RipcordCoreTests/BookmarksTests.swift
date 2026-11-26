@@ -220,4 +220,57 @@ import Testing
       try save(file, "a", "https://a.example", under: .heading(.init(title: "Gone", line: 2)))
     }
   }
+
+  @Test func keepsIndentedLinesWithTheirBookmark() throws {
+    let file = BookmarkFile(
+      text:
+        "# Docs\n- [A](https://a.example)\n  - note about A\n# Tools\n- [T](https://t.example)\n")
+    let docs = try #require(file.headings.first)
+    // A new one goes after A's note, not between A and it.
+    #expect(
+      try save(file, "B", "https://b.example", under: .heading(docs)).file.text
+        == "# Docs\n- [A](https://a.example)\n  - note about A\n- [B](https://b.example)\n# Tools\n- [T](https://t.example)\n"
+    )
+    // Moving A takes its note along.
+    let a = try #require(file.bookmarks.first)
+    let tools = try #require(file.headings.last)
+    #expect(
+      try file.moving(line: a.line, text: a.text, under: .heading(tools)).file.text
+        == "# Docs\n# Tools\n- [T](https://t.example)\n- [A](https://a.example)\n  - note about A\n"
+    )
+  }
+
+  @Test func keepsTheByteOrderMarkAtTheStart() throws {
+    let file = BookmarkFile(text: "\u{FEFF}- [A](https://a.example)\n# Tools\n")
+    let a = try #require(file.bookmarks.first)
+    let tools = try #require(file.headings.first)
+    #expect(
+      try file.moving(line: a.line, text: a.text, under: .heading(tools)).file.text
+        == "\u{FEFF}# Tools\n- [A](https://a.example)\n")
+  }
+
+  @Test func editsOnlyWhatTheFormShows() throws {
+    let file = BookmarkFile(
+      text:
+        "# A\n- [Japan](https://ja.wikipedia.org/wiki/日本)\n- [Tip](https://t.example \"Home\")\n")
+    let japan = try #require(file.bookmarks.first)
+    #expect(japan.rawURL == "https://ja.wikipedia.org/wiki/日本")
+    #expect(japan.isEditable)
+    let a = try #require(file.headings.first)
+    #expect(
+      try save(file, "日本", japan.rawURL, replacing: japan, under: .heading(a)).text
+        == "- [日本](https://ja.wikipedia.org/wiki/日本)")
+    let tip = try #require(file.bookmarks.last)
+    #expect(!tip.isEditable)
+    #expect(throws: BookmarkFile.EditError.self) {
+      try save(file, "Tip 2", tip.rawURL, replacing: tip, under: .heading(a))
+    }
+  }
+
+  @Test func refusesANewGroupInsideAnOpenCodeBlock() throws {
+    let file = BookmarkFile(text: "# A\n```\ncode\n")
+    #expect(throws: BookmarkFile.EditError.self) {
+      try save(file, "x", "https://x.example", under: .newHeading("New"))
+    }
+  }
 }
