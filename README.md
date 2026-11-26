@@ -19,8 +19,8 @@
   capture, with a preview and details of the selected one. Return pastes into the app you were in,
   ⇧⌘P pins an item to the top and ⌃X deletes it. Copies a password manager marks as concealed are
   never recorded, and switching the command off on the Shortcuts page stops recording
-- Snippets: save text under Settings › Snippets, then Search Snippets pastes it into the app you
-  were in, filling in `{date}` and `{clipboard}`; ⇧⌘C copies it instead
+- Snippets: Create Snippet saves text from the panel, and Search Snippets pastes it into the app
+  you were in, filling in `{date}` and `{clipboard}`; ⇧⌘C copies it, ⌘E edits it, ⌃X deletes it
 - Drag the panel anywhere; it remembers the spot, and Reset Ripcord Window Position brings it back
 
 ## Quick start
