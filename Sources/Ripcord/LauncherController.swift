@@ -123,6 +123,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// What the panel switched away from, put back when it closes.
   private var previousInputSource: TISInputSource?
   var onOpenSettings: () -> Void = {}
+  /// Export Snippets and Import Snippets, which need file dialogs and the config.
+  var onExportSnippets: () -> Void = {}
+  var onImportSnippets: () -> Void = {}
   var isVisible: Bool { panel.isVisible }
 
   private let model = LauncherModel()
@@ -455,6 +458,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
       NSWorkspace.shared.activateFileViewerSelecting([url])
     case .run(.settings):
       break  // Opened before hide(), above.
+    case .run(.exportSnippets):
+      onExportSnippets()
+    case .run(.importSnippets):
+      onImportSnippets()
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
       .run(.createSnippet), .clip, .snippet:
       break  // Handled above, without hiding the panel.

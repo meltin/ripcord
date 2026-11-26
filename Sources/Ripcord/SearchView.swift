@@ -257,6 +257,8 @@ extension BuiltinCommand {
     case .clipboardHistory: "list.clipboard.fill"
     case .searchSnippets: "doc.plaintext.fill"
     case .createSnippet: "doc.badge.plus"
+    case .exportSnippets: "square.and.arrow.up"
+    case .importSnippets: "square.and.arrow.down"
     case .settings: "gearshape.fill"
     case .resetWindowPosition: "macwindow"
     case .quit: "power"
@@ -266,7 +268,7 @@ extension BuiltinCommand {
   fileprivate var color: Color {
     switch self {
     case .clipboardHistory, .quit: .red
-    case .searchSnippets, .createSnippet: .blue
+    case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .blue
     case .settings, .resetWindowPosition: .gray
     }
   }

@@ -2,13 +2,16 @@ import Foundation
 
 /// Commands Ripcord runs itself, listed alongside apps.
 public enum BuiltinCommand: CaseIterable, Sendable {
-  case clipboardHistory, searchSnippets, createSnippet, settings, resetWindowPosition, quit
+  case clipboardHistory, searchSnippets, createSnippet, exportSnippets, importSnippets, settings
+  case resetWindowPosition, quit
 
   public var title: String {
     switch self {
     case .clipboardHistory: "Clipboard History"
     case .searchSnippets: "Search Snippets"
     case .createSnippet: "Create Snippet"
+    case .exportSnippets: "Export Snippets"
+    case .importSnippets: "Import Snippets"
     case .settings: "Ripcord Settings"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .quit: "Quit Ripcord"
@@ -21,6 +24,8 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .clipboardHistory: "command:clipboard-history"
     case .searchSnippets: "command:search-snippets"
     case .createSnippet: "command:create-snippet"
+    case .exportSnippets: "command:export-snippets"
+    case .importSnippets: "command:import-snippets"
     case .settings: "command:settings"
     case .resetWindowPosition: "command:reset-window-position"
     case .quit: "command:quit"

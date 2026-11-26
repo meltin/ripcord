@@ -1,6 +1,7 @@
 import AppKit
 import RipcordCore
 import ServiceManagement
+import UniformTypeIdentifiers
 
 @main
 @MainActor
@@ -35,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     statusItem = makeStatusItem()
     launcher.onOpenSettings = { [weak self] in self?.openSettings() }
     launcher.editSnippets = { [weak self] change in self?.editSnippets(change) ?? false }
+    launcher.onExportSnippets = { [weak self] in self?.exportSnippets() }
+    launcher.onImportSnippets = { [weak self] in self?.importSnippets() }
     settings.model.onSave = { [weak self] in self?.applyConfig() }
     settings.model.onRecordingChange = { [weak self] isRecording in
       self?.isRecording = isRecording
@@ -81,6 +84,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     model.saveIfChanged()
     if let error = model.loadError { showError(error) }
     return model.loadError == nil
+  }
+
+  /// Writes every snippet to a JSON file Raycast can import too.
+  private func exportSnippets() {
+    NSApp.activate()
+    let panel = NSSavePanel()
+    panel.nameFieldStringValue = "snippets.json"
+    panel.allowedContentTypes = [.json]
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    do {
+      let snippets = (try? Config.load(from: configURL))?.snippets ?? config.snippets
+      try Snippet.exportData(snippets).write(to: url, options: .atomic)
+    } catch {
+      showError("Couldn't export the snippets: \(error.localizedDescription)")
+    }
+  }
+
+  /// Adds the snippets in a JSON file, such as one Raycast exported, skipping ones already here.
+  private func importSnippets() {
+    NSApp.activate()
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.json]
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    do {
+      let data = try Data(contentsOf: url)
+      var added = 0
+      var failure: Error?
+      let saved = editSnippets { current in
+        do {
+          let merged = try Snippet.merging(data, into: current)
+          added = merged.added
+          return merged.snippets
+        } catch {
+          failure = error
+          return nil
+        }
+      }
+      if let failure { throw failure }
+      if saved {
+        showMessage(added == 1 ? "Imported 1 snippet." : "Imported \(added) snippets.")
+      }
+    } catch {
+      showError("Couldn't import \(url.lastPathComponent): \(error.localizedDescription)")
+    }
   }
 
   @objc private func openSettings() {
@@ -219,6 +266,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     item.menu = menu
     return item
+  }
+
+  private func showMessage(_ message: String) {
+    let alert = NSAlert()
+    alert.messageText = message
+    alert.runModal()
   }
 
   private func showError(_ message: String) {

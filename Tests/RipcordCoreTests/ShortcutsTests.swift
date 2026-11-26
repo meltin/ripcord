@@ -178,6 +178,8 @@ import Testing
     #expect(BuiltinCommand.clipboardHistory.settingsKey == "command:clipboard-history")
     #expect(BuiltinCommand.searchSnippets.settingsKey == "command:search-snippets")
     #expect(BuiltinCommand.createSnippet.settingsKey == "command:create-snippet")
+    #expect(BuiltinCommand.exportSnippets.settingsKey == "command:export-snippets")
+    #expect(BuiltinCommand.importSnippets.settingsKey == "command:import-snippets")
     #expect(BuiltinCommand.settings.settingsKey == "command:settings")
     #expect(BuiltinCommand.resetWindowPosition.settingsKey == "command:reset-window-position")
     #expect(BuiltinCommand.quit.settingsKey == "command:quit")

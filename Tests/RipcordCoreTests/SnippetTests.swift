@@ -36,6 +36,25 @@ import Testing
     #expect(values["uuid"] == "00000000-0000-0000-0000-000000000001")
   }
 
+  @Test func importsRaycastsExportOnce() throws {
+    let raycast = Data(
+      #"""
+      [{"name": "Address", "text": "1 Infinite Loop", "keyword": "addr"},
+       {"name": "Thanks", "text": "Thank you!"}, {"name": "Empty", "text": ""}]
+      """#.utf8)
+    let first = try Snippet.merging(raycast, into: [Snippet(name: "Thanks", text: "Thank you!")])
+    #expect(first.added == 1)
+    #expect(first.snippets.map(\.name) == ["Thanks", "Address"])
+    #expect(first.snippets[1].keyword == "addr")
+    #expect(try Snippet.merging(raycast, into: first.snippets).added == 0)
+  }
+
+  @Test func exportsWhatImportReads() throws {
+    let snippets = [Snippet(name: "Sig", text: "Best,\nMe", keyword: "sig", tags: ["mail"])]
+    let data = try Snippet.exportData(snippets)
+    #expect(try Snippet.merging(data, into: []).snippets == snippets)
+  }
+
   @Test func readsTagsAsTyped() {
     #expect(Snippet.tags(from: " work, mail ,,work ") == ["work", "mail"])
     #expect(Snippet.tags(from: " , ") == nil)

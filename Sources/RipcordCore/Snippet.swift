@@ -75,4 +75,24 @@ public struct Snippet: Codable, Equatable, Sendable {
       "uuid": uuid.uuidString,
     ]
   }
+
+  /// Snippets as a JSON file, in the shape Raycast exports and imports (name, text, keyword).
+  public static func exportData(_ snippets: [Snippet]) throws -> Data {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+    return try encoder.encode(snippets)
+  }
+
+  /// `imported` added after `current`, leaving out any already there with the same name and
+  /// text, so importing a file twice adds nothing. A Raycast export reads as is.
+  public static func merging(_ data: Data, into current: [Snippet]) throws -> (
+    snippets: [Snippet], added: Int
+  ) {
+    let imported = try JSONDecoder().decode([Snippet].self, from: data)
+    let new = imported.reduce(into: [Snippet]()) { kept, snippet in
+      let seen = (current + kept).contains { $0.name == snippet.name && $0.text == snippet.text }
+      if !seen, !snippet.text.isEmpty { kept += [snippet] }
+    }
+    return (current + new, new.count)
+  }
 }
