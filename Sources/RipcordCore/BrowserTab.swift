@@ -16,11 +16,13 @@ public enum BrowserTab {
       }
     guard let terms else { return nil }
     return """
-      tell application id "\(bundleID)"
-        if (count of windows) is 0 then return ""
-        set theTab to \(terms.tab) of front window
-        return (URL of theTab) & linefeed & (\(terms.title) of theTab)
-      end tell
+      with timeout of 5 seconds
+        tell application id "\(bundleID)"
+          if (count of windows) is 0 then return ""
+          set theTab to \(terms.tab) of front window
+          return (URL of theTab) & linefeed & (\(terms.title) of theTab)
+        end tell
+      end timeout
       """
   }
 
@@ -30,7 +32,10 @@ public enum BrowserTab {
     guard !trimmed.isEmpty else { return nil }
     let url = trimmed.prefix { !$0.isNewline }
     let title = trimmed.dropFirst(url.count).trimmingCharacters(in: .whitespacesAndNewlines)
-    guard URL(string: String(url))?.scheme != nil else { return nil }
+    // Web pages and files only: a new tab's chrome://newtab or about:blank isn't a bookmark.
+    guard let scheme = URL(string: String(url))?.scheme?.lowercased(),
+      ["http", "https", "file"].contains(scheme)
+    else { return nil }
     return (String(url), title)
   }
 }

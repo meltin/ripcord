@@ -19,5 +19,6 @@ import Testing
     #expect(tab?.title == "Tabler Icons: 6550+ free icons")
     #expect(BrowserTab.parse("") == nil)
     #expect(BrowserTab.parse("not a url\nTitle") == nil)
+    #expect(BrowserTab.parse("chrome://newtab/\nNew Tab") == nil)
   }
 }

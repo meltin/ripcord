@@ -47,8 +47,9 @@
   keyboard can be wiped, with the time left over the screen; ⌃⌥⌘↩ turns it back on early
 - Bookmarks: Search Bookmarks lists the Markdown links in `~/.config/ripcord/bookmarks.md`
   (`- [Title](URL) - description`) under their `#` headings; Return opens one, and ⌘K copies its
-  URL or title, edits it, moves it to another group or deletes it. Add Bookmark opens a form for a
-  new one, filled with the tab you're on in Safari, Chrome or Arc. Only the lines a change touches are rewritten; the rest stays as you wrote it
+  URL or title, edits it, moves it to another group or deletes it. Add Bookmark opens a form for
+  a new one, filled with the tab you're on in Safari, Chrome or Arc. Only the lines a change
+  touches are rewritten; the rest stays as you wrote it
 - Emoji & Symbols: Search Emoji & Symbols shows emoji and symbols (→ ° ⌘ and the like) in a grid by
   category, Frequently Used first; search in English or Japanese (`cat`, `ねこ`), Return pastes,
   ⌘↵ copies, and ⌘K picks a skin tone that's remembered
