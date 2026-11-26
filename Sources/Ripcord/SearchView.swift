@@ -32,6 +32,14 @@ struct SearchView: View {
             text: model.query,
             placeholder: model.mode.placeholder,
             onChange: onQueryChange, onCommand: onCommand)
+          if model.mode == .snippets {
+            TagFilter(
+              tags: Set(model.snippets.flatMap { $0.tags ?? [] }).sorted {
+                $0.localizedStandardCompare($1) == .orderedAscending
+              },
+              selection: model.snippetTag
+            ) { onCommand(.filterTag($0)) }
+          }
         }
       }
       .padding(.horizontal, 20)
@@ -559,6 +567,31 @@ private struct IconPicker: View {
     // The blank document is the default, so it's stored as no icon.
     selection = matches[index].symbol == "doc" ? nil : matches[index].symbol
     onClose()
+  }
+}
+
+/// Search Snippets' "All Tags" dropdown, in the header's corner as Raycast puts it.
+private struct TagFilter: View {
+  let tags: [String]
+  let selection: String?
+  let onSelect: (String?) -> Void
+
+  var body: some View {
+    if !tags.isEmpty {
+      Menu {
+        Button("All Tags") { onSelect(nil) }
+        Divider()
+        ForEach(tags, id: \.self) { tag in
+          Button(tag) { onSelect(tag) }
+        }
+      } label: {
+        Label(selection ?? "All Tags", systemImage: "tag")
+      }
+      .menuStyle(.borderlessButton)
+      .fixedSize()
+      .font(.system(size: 13))
+      .foregroundStyle(.secondary)
+    }
   }
 }
 

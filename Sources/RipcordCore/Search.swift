@@ -65,7 +65,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
 
   public enum SnippetAction: Equatable, Sendable {
     /// `delete` asks; `confirmDelete` deletes.
-    case paste, copy, edit, delete, confirmDelete
+    case paste, copy, edit, duplicate, delete, confirmDelete
   }
 
   public enum ClipAction: Equatable, Sendable {
@@ -123,6 +123,9 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
           action: .snippet(index, .copy)),
         MenuAction(
           title: "Edit Snippet", symbol: "pencil", shortcut: "⌘E", action: .snippet(index, .edit)),
+        MenuAction(
+          title: "Duplicate Snippet", symbol: "plus.square.on.square", shortcut: "⌘D",
+          action: .snippet(index, .duplicate)),
         MenuAction(
           title: "Create Snippet", symbol: "plus", shortcut: "⌘N", action: .run(.createSnippet)),
         MenuAction(
@@ -309,7 +312,10 @@ public enum Search {
 
   /// Search Snippets' list: snippets whose name, keyword or text contains the query, by name; an
   /// exactly typed keyword comes first. Snippets with no text yet are left out.
-  public static func snippetSections(for query: String, snippets: [Snippet]) -> [SearchSection] {
+  /// `tag`, when set, keeps only the snippets carrying it.
+  public static func snippetSections(
+    for query: String, snippets: [Snippet], tag: String? = nil
+  ) -> [SearchSection] {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
     func title(_ snippet: Snippet) -> String {
       snippet.name.isEmpty ? "Untitled Snippet" : snippet.name
@@ -318,7 +324,7 @@ public enum Search {
       snippet.keyword?.trimmingCharacters(in: .whitespaces).nilIfEmpty
     }
     let matches = snippets.enumerated().filter { _, snippet in
-      !snippet.text.isEmpty
+      !snippet.text.isEmpty && (tag.map { snippet.tags?.contains($0) == true } ?? true)
         && (trimmed.isEmpty
           || ([snippet.name, snippet.text] + [keyword(snippet)].compactMap { $0 }
             + (snippet.tags ?? []))

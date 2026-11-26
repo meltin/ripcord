@@ -83,6 +83,12 @@ import Testing
     #expect(results.map(\.symbol) == ["house"])
   }
 
+  @Test func filtersByTag() {
+    let titles = Search.snippetSections(for: "", snippets: snippets, tag: "mail")
+      .flatMap(\.results).map(\.title)
+    #expect(titles == ["Greeting"])
+  }
+
   @Test func findsAndShowsTags() {
     let results = Search.snippetSections(for: "mail", snippets: snippets).flatMap(\.results)
     #expect(results.map(\.title) == ["Greeting"])
@@ -109,10 +115,11 @@ import Testing
     #expect(result.kind.primaryAction == "Paste to App")
     #expect(result.keyword == "sig")
     #expect(result.symbol == "doc")
-    #expect(result.actions.map(\.shortcut) == ["↵", "⇧⌘C", "⌘E", "⌘N", "⌃X"])
+    #expect(result.actions.map(\.shortcut) == ["↵", "⇧⌘C", "⌘E", "⌘D", "⌘N", "⌃X"])
     #expect(
       result.actions.map(\.action) == [
-        .snippet(4, .paste), .snippet(4, .copy), .snippet(4, .edit), .run(.createSnippet),
+        .snippet(4, .paste), .snippet(4, .copy), .snippet(4, .edit), .snippet(4, .duplicate),
+        .run(.createSnippet),
         .snippet(4, .delete),
       ])
   }
