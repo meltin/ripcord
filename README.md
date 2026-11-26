@@ -87,8 +87,9 @@ scripts/create-signing-certificate.sh
 ```
 
 It adds a self-signed certificate to your login keychain and asks for your password once, to trust
-it for code signing. `scripts/build-app.sh` signs with it from then on. Grant Accessibility to the
-first build signed with it; later builds keep it.
+it for code signing. `scripts/build-app.sh` signs with it from then on. Once after creating it,
+remove Ripcord from the Accessibility list (or run the `tccutil reset` command above) and grant it
+to the next build; later builds keep it.
 
 System Actions use Accessibility for the music and volume keys too, as Window Management does to
 move windows. Empty Trash, Toggle System Appearance and Log Out, Restart and Shut Down ask macOS
