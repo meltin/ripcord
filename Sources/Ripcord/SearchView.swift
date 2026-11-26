@@ -1221,7 +1221,7 @@ struct Keycap: View {
 
   var body: some View {
     // Filled and softly edged, like Raycast's keycaps.
-    Text(label)
+    text
       .font(.system(size: 10, weight: .medium))
       .foregroundStyle(.secondary)
       .padding(.horizontal, 4)
@@ -1254,6 +1254,17 @@ struct SearchField: NSViewRepresentable {
   let placeholder: String
   var fontSize: CGFloat = 18
   let onChange: (String) -> Void
+  /// ↵ drawn as SF Symbols' return: the font's ↵ sits above ⌘ and the other modifiers.
+  private var text: Text {
+    label.reduce(Text("")) { text, character in
+      let piece =
+        character == "↵"
+        ? Text(Image(systemName: "return")).font(.system(size: 9, weight: .semibold))
+        : Text(String(character))
+      return Text("\(text)\(piece)")
+    }
+  }
+
   let onCommand: (SearchCommand) -> Void
   /// When the field stops being edited, as when another control is clicked.
   var onEnd: () -> Void = {}
