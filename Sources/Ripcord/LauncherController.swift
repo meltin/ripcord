@@ -222,6 +222,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Sleep Timer: sleep the Mac, or turn its display off, after this many seconds.
   var onSleepTimer: (_ seconds: TimeInterval, _ displayOnly: Bool) -> Void = { _, _ in }
   var onStopSleepTimer: () -> Void = {}
+  /// Clean Keyboard: block the keyboard for this many seconds.
+  var onCleanKeyboard: (TimeInterval) -> Void = { _ in }
   var onImportSnippets: () -> Void = {}
   var isVisible: Bool { panel.isVisible }
 
@@ -647,13 +649,14 @@ final class LauncherController: NSObject, NSWindowDelegate {
       do { try colors.delete(hex: hex) } catch { onError(error.localizedDescription) }
       return refreshRows(selecting: model.selected?.id)
     }
-    if action == .run(.sleepTimer) {
-      // As Raycast asks for its argument: the title in the field, the time to be typed after it.
+    // A command that takes a time: its title in the field and the time to be typed after it, as
+    // Raycast asks for an argument.
+    if case .run(let command) = action, [.sleepTimer, .cleanKeyboard].contains(command) {
       // Set Alias…'s card would stay up over rows that changed under it.
       closeEditor(backToMenu: false)
       if !panel.isVisible { show() }
       model.mode = .root
-      return update(BuiltinCommand.sleepTimer.title + " ")
+      return update(command.title + " ")
     }
     if action == .run(.searchRepositories) {
       // Not when its hotkey is closing the list.
@@ -735,8 +738,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onStopSleepTimer()
     case .run(.pickColor):
       pickColor()
+    case .cleanKeyboard(let seconds):
+      onCleanKeyboard(seconds)
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
       .run(.searchRepositories), .run(.httpStatusCodes), .run(.sleepTimer), .run(.colorHistory),
+      .run(.cleanKeyboard),
       .deleteColor,
       .run(.createSnippet), .clip, .snippet, .system, .window:
       break  // Handled above, without hiding the panel.

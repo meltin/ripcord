@@ -7,6 +7,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case caffeinate, decaffeinate
   case sleepTimer, stopSleepTimer
   case pickColor, colorHistory
+  case cleanKeyboard
   case resetWindowPosition, quit
 
   public var title: String {
@@ -25,6 +26,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .stopSleepTimer: "Stop Sleep Timer"
     case .pickColor: "Pick Color"
     case .colorHistory: "Color History"
+    case .cleanKeyboard: "Clean Keyboard"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .quit: "Quit Ripcord"
     }
@@ -36,6 +38,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .caffeinate, .decaffeinate: "Coffee"
     case .sleepTimer, .stopSleepTimer: "Sleep Timer"
     case .pickColor, .colorHistory: "Color Picker"
+    case .cleanKeyboard: "Clean Keyboard"
     default: "Ripcord"
     }
   }
@@ -57,6 +60,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .stopSleepTimer: "command:stop-sleep-timer"
     case .pickColor: "command:pick-color"
     case .colorHistory: "command:color-history"
+    case .cleanKeyboard: "command:clean-keyboard"
     case .resetWindowPosition: "command:reset-window-position"
     case .quit: "command:quit"
     }
@@ -161,6 +165,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case sleepTimer(TimeInterval, displayOnly: Bool)
     /// Removes the picked color with this hex from Color History.
     case deleteColor(String)
+    /// Blocks the keyboard for this many seconds, to wipe it.
+    case cleanKeyboard(TimeInterval)
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -308,7 +314,9 @@ public enum Search {
     let links = quicklinks.filter(\.isEnabled)
     let trimmed = query.trimmingCharacters(in: .whitespaces)
     guard trimmed.isEmpty else {
-      let found = results(for: trimmed, apps: apps, quicklinks: links, items: items)
+      // As typed: results trims it too, but a command's argument needs to see the space after
+      // its title.
+      let found = results(for: query, apps: apps, quicklinks: links, items: items)
       guard found.isEmpty else { return [SearchSection(title: "Results", results: found)] }
       // Like Raycast's fallback commands: hand the whole query to each Quicklink.
       let fallbacks = links.compactMap { link in
@@ -434,22 +442,55 @@ public enum Search {
       .prefix(30)
       .map(\.result)
 
-    return [calculation].compactMap { $0 } + expanded + [caffeinateFor].compactMap { $0 } + sleepIn
+    // "clean keyboard 30s", or the usual times while none is typed yet.
+    // The usual times only once the command put its title and a space in the field: the title or
+    // an alias typed alone must not offer a row that turns the keyboard off on Return.
+    let cleanArguments = typedArguments(
+      after: .cleanKeyboard, in: String(query.drop(while: \.isWhitespace)), items: items)
+    let cleanTimes: [TimeInterval] =
+      cleanArguments.contains("")
+      ? [15, 30, 60, 120]
+      : cleanArguments.lazy.compactMap { text in
+        // A number without a unit is seconds here, as the usual times are, decimals too.
+        text.allSatisfy { $0.isASCII && ($0.isNumber || $0 == ".") }
+          ? Double(text) : Coffee.duration(from: text)
+      }.first.map { [$0] } ?? []
+    let cleanFor: [SearchResult] = cleanTimes.filter { $0 > 0 && $0 <= longestClean }.map {
+      seconds in
+      SearchResult(
+        id: "clean-keyboard-\(Int(seconds))",
+        title: "Clean Keyboard for \(Coffee.format(seconds))", subtitle: "Clean Keyboard",
+        keyword: nil, kind: .command, action: .cleanKeyboard(seconds))
+    }
+    let timed: [SearchResult] = [caffeinateFor].compactMap { $0 } + sleepIn + cleanFor
+    return [calculation].compactMap { $0 } + expanded + timed
       + ranked
   }
+
+  /// The longest Clean Keyboard: no keyboard for more than five minutes, typed or not.
+  public static let longestClean: TimeInterval = 300
 
   /// The time typed after `command`'s title or alias, as in "caffeinate 1h 30m"; nil when it's
   /// switched off or what follows isn't a time.
   private static func typedDuration(
     after command: BuiltinCommand, in query: String, items: [String: ItemSettings]
   ) -> TimeInterval? {
+    // Each name that starts the query in turn, so an alias that starts with the title still works.
+    typedArguments(after: command, in: query, items: items).lazy.compactMap(Coffee.duration(from:))
+      .first
+  }
+
+  /// What's typed after `command`'s title or alias and a space, trimmed, for each of the two
+  /// that starts the query; none when the command is switched off.
+  private static func typedArguments(
+    after command: BuiltinCommand, in query: String, items: [String: ItemSettings]
+  ) -> [String] {
     let settings = items[command.settingsKey] ?? ItemSettings()
-    guard settings.isEnabled else { return nil }
+    guard settings.isEnabled else { return [] }
     return [command.title, settings.alias]
       .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
       .filter { !$0.isEmpty && query.lowercased().hasPrefix($0.lowercased() + " ") }
-      .lazy.compactMap { Coffee.duration(from: String(query.dropFirst($0.count + 1))) }
-      .first
+      .map { String(query.dropFirst($0.count + 1)).trimmingCharacters(in: .whitespaces) }
   }
 
   /// Clipboard History's list: pinned items, then the rest by the day they were last copied,
