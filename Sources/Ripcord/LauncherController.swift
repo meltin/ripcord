@@ -190,19 +190,36 @@ final class LauncherController: NSObject, NSWindowDelegate {
     clipboard.start()
   }
 
+  /// A command the panel hid in the middle of, as when the user clicked another app or pressed
+  /// the hotkey, reopened as it was by the launcher hotkey for a while: Raycast's Pop to Root
+  /// Search, whose default is 90 seconds.
+  private var leftOpen: (mode: LauncherMode, at: Date)?
+  private static let popToRootAfter: TimeInterval = 90
+
   func toggle() {
-    panel.isVisible ? hide() : show()
+    panel.isVisible ? hide(keepingMode: true) : show(resuming: true)
   }
 
   func windowDidResignKey(_ notification: Notification) {
-    hide()
+    // Not visible when orderOut itself resigned the key, after a finished action.
+    if panel.isVisible { hide(keepingMode: true) }
   }
 
-  private func show(_ mode: LauncherMode = .root) {
+  private func show(_ mode: LauncherMode = .root, resuming: Bool = false) {
+    let resumed = leftOpen.flatMap { left in
+      resuming && Date.now.timeIntervalSince(left.at) < Self.popToRootAfter ? left.mode : nil
+    }
+    leftOpen = nil
     refreshApps()
     model.pasteTarget = NSWorkspace.shared.frontmostApplication?.localizedName
-    model.mode = mode
-    update("")
+    if let resumed {
+      // The query, selection and any draft are as they were; only the rows are re-read.
+      model.mode = resumed
+      refreshRows(selecting: model.selected?.id)
+    } else {
+      model.mode = mode
+      update("")
+    }
     isPlacing = true
     panel.setFrameTopLeftPoint(savedTopLeft() ?? defaultTopLeft())
     isPlacing = false
@@ -267,12 +284,19 @@ final class LauncherController: NSObject, NSWindowDelegate {
     return NSScreen.screens.contains { $0.visibleFrame.intersects(frame) } ? point : nil
   }
 
-  private func hide() {
+  /// `keepingMode` leaves a command's list or form as it is, to come back to (`leftOpen`).
+  private func hide(keepingMode: Bool = false) {
     panel.orderOut(nil)
     model.isPickingIcon = false
+    model.menu = nil
+    restoreInputSource()
+    if keepingMode, model.mode != .root {
+      leftOpen = (model.mode, .now)
+      return
+    }
+    leftOpen = nil
     // A filter left on would hide snippets the next time, unasked.
     model.snippetTag = nil
-    restoreInputSource()
     model.mode = .root
     update("")
   }
