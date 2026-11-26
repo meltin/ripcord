@@ -26,6 +26,11 @@ public enum CleanShotCommand: String, CaseIterable, Sendable {
   /// CleanShot X's bundle ID, for finding the app and hiding the commands without it.
   public static let bundleID = "pl.maketheweb.cleanshotx"
 
+  /// Whether an app is a CleanShot X: its ID, or one built on it, as a store's edition may be.
+  public static func isCleanShot(bundleID: String?) -> Bool {
+    bundleID.map { $0 == Self.bundleID || $0.hasPrefix(Self.bundleID + "-") } ?? false
+  }
+
   public var title: String {
     switch self {
     case .allInOne: "All-In-One"

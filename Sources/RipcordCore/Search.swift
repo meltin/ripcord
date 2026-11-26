@@ -374,7 +374,7 @@ public enum Search {
       return ([command.title], settings.alias, result(for: command, alias: settings.alias))
     }
     // Only with CleanShot X installed: its commands would open nothing otherwise.
-    let hasCleanShot = apps.contains { $0.bundleID == CleanShotCommand.bundleID }
+    let hasCleanShot = apps.contains { CleanShotCommand.isCleanShot(bundleID: $0.bundleID) }
     let cleanShotCandidates: [Candidate] = (hasCleanShot ? CleanShotCommand.allCases : [])
       .compactMap { command in
         let settings = items[command.settingsKey] ?? ItemSettings()

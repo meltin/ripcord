@@ -25,6 +25,13 @@ import Testing
       })
   }
 
+  @Test func knowsItsEditionsByBundleID() {
+    #expect(CleanShotCommand.isCleanShot(bundleID: "pl.maketheweb.cleanshotx"))
+    #expect(CleanShotCommand.isCleanShot(bundleID: "pl.maketheweb.cleanshotx-setapp"))
+    #expect(!CleanShotCommand.isCleanShot(bundleID: "pl.maketheweb.cleanshotxyz"))
+    #expect(!CleanShotCommand.isCleanShot(bundleID: nil))
+  }
+
   @Test func takesAnAliasAndConfigureCommand() throws {
     let key = CleanShotCommand.captureText.settingsKey
     let items = [key: ItemSettings(alias: "ocr")]
