@@ -2,10 +2,11 @@ import Foundation
 
 /// Commands Ripcord runs itself, listed alongside apps.
 public enum BuiltinCommand: CaseIterable, Sendable {
-  case settings, resetWindowPosition, quit
+  case clipboardHistory, settings, resetWindowPosition, quit
 
   public var title: String {
     switch self {
+    case .clipboardHistory: "Clipboard History"
     case .settings: "Ripcord Settings"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .quit: "Quit Ripcord"
@@ -15,6 +16,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   /// The key its settings are stored under. Spelled out so renaming a case never strands them.
   public var settingsKey: String {
     switch self {
+    case .clipboardHistory: "command:clipboard-history"
     case .settings: "command:settings"
     case .resetWindowPosition: "command:reset-window-position"
     case .quit: "command:quit"
@@ -45,14 +47,20 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case copy(String)
     case reveal(URL)
     case run(BuiltinCommand)
+    case clip(UUID, ClipAction)
+  }
+
+  public enum ClipAction: Equatable, Sendable {
+    case paste, copy, togglePin, delete
   }
 
   public enum Kind: Equatable, Sendable {
-    case application, calculator, quicklink, command
+    case application, calculator, quicklink, command, text, image
 
     public var primaryAction: String {
       switch self {
       case .calculator: "Copy Answer"
+      case .text, .image: "Paste to App"
       case .application, .quicklink, .command: "Open Command"
       }
     }
@@ -78,6 +86,17 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
           title: "Copy URL", symbol: "doc.on.doc", shortcut: "⇧⌘C",
           action: .copy(url.absoluteString)),
       ]
+    case .clip(let id, _):
+      return [
+        primary,
+        MenuAction(
+          title: "Copy to Clipboard", symbol: "doc.on.doc", shortcut: "⇧⌘C",
+          action: .clip(id, .copy)),
+        MenuAction(
+          title: isPinned ? "Unpin" : "Pin", symbol: isPinned ? "pin.slash" : "pin",
+          shortcut: "⇧⌘P", action: .clip(id, .togglePin)),
+        MenuAction(title: "Delete", symbol: "trash", shortcut: "⌃X", action: .clip(id, .delete)),
+      ]
     default:
       return [primary]
     }
@@ -90,6 +109,9 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   public let keyword: String?
   public let kind: Kind
   public let action: Action
+  /// A clipboard image's file, drawn as the row's icon.
+  public var thumbnail: URL? = nil
+  public var isPinned = false
 }
 
 public struct SearchSection: Identifiable, Equatable, Sendable {
@@ -194,6 +216,59 @@ public enum Search {
       .map(\.result)
 
     return [calculation].compactMap { $0 } + expanded + ranked
+  }
+
+  /// Clipboard History's list: pinned items, then the rest by the day they were last copied,
+  /// newest first, each kept to items whose text contains the query. Images match "image" or
+  /// their file name.
+  public static func clipboardSections(
+    for query: String, history: ClipboardHistory, now: Date = .now,
+    calendar: Calendar = .current
+  ) -> [SearchSection] {
+    let trimmed = query.trimmingCharacters(in: .whitespaces)
+    let matches = history.items.compactMap { item -> (item: ClipItem, result: SearchResult)? in
+      let id = "clip:\(item.id)"
+      let action = SearchResult.Action.clip(item.id, .paste)
+      switch item.content {
+      case .text(let text):
+        guard trimmed.isEmpty || text.localizedStandardContains(trimmed) else { return nil }
+        // All of it on one line, as Raycast shows it, so a second line isn't hidden.
+        let line = text.drop(while: \.isWhitespace).prefix(1000)
+          .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return (
+          item,
+          SearchResult(
+            id: id, title: String(line.prefix(200)), subtitle: "", keyword: nil, kind: .text,
+            action: action, isPinned: item.isPinned)
+        )
+      case .image(_, let width, let height):
+        // A copied file goes by its name, as Raycast lists it; a pasted image by its size.
+        let title = item.name ?? "Image"
+        guard
+          trimmed.isEmpty || "image".localizedStandardContains(trimmed)
+            || title.localizedStandardContains(trimmed)
+        else { return nil }
+        return (
+          item,
+          SearchResult(
+            id: id, title: title, subtitle: item.name == nil ? "\(width)×\(height)" : "",
+            keyword: nil, kind: .image,
+            action: action, thumbnail: history.imageURL(of: item), isPinned: item.isPinned)
+        )
+      }
+    }
+    let yesterday = calendar.date(byAdding: .day, value: -1, to: now) ?? now
+    func day(of item: ClipItem) -> String {
+      if calendar.isDate(item.date, inSameDayAs: now) { return "Today" }
+      return calendar.isDate(item.date, inSameDayAs: yesterday) ? "Yesterday" : "Earlier"
+    }
+    let pinned = matches.filter(\.item.isPinned).map(\.result)
+    let unpinned = matches.filter { !$0.item.isPinned }
+    let days = ["Today", "Yesterday", "Earlier"].map { title in
+      SearchSection(
+        title: title, results: unpinned.filter { day(of: $0.item) == title }.map(\.result))
+    }
+    return ([SearchSection(title: "Pinned", results: pinned)] + days).filter { !$0.results.isEmpty }
   }
 
   /// Every app, Quicklink and command the Shortcuts page lists, in its three sections. Disabled

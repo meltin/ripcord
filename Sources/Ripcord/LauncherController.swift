@@ -10,9 +10,19 @@ struct OpenMenu {
   var selection = 0
 }
 
+/// What the panel lists: apps and commands, or one command's own list.
+enum LauncherMode {
+  case root, clipboard
+}
+
 @MainActor
 @Observable
 final class LauncherModel {
+  var mode = LauncherMode.root
+  /// The history the clipboard rows were built from, for the preview of the selected one.
+  var clipboard: ClipboardHistory?
+  /// The app a paste lands in: the one in front when the panel opened, as it never activates.
+  var pasteTarget: String?
   var query = ""
   var sections: [SearchSection] = []
   var selection = 0
@@ -24,7 +34,7 @@ final class LauncherModel {
 }
 
 enum SearchCommand {
-  case up, down, submit, cancel
+  case up, down, submit, cancel, back
   case activate(String)
   case toggleMenu(root: Bool)
   case runMenuItem(Int)
@@ -54,7 +64,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
     didSet { if quicklinks != oldValue { update(model.query) } }
   }
   var items: [String: ItemSettings] = [:] {
-    didSet { if items != oldValue { update(model.query) } }
+    didSet {
+      guard items != oldValue else { return }
+      clipboard.isEnabled = items[BuiltinCommand.clipboardHistory.settingsKey]?.isEnabled ?? true
+      update(model.query)
+    }
   }
   var onOpenSettings: () -> Void = {}
   var isVisible: Bool { panel.isVisible }
@@ -65,6 +79,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
     styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
   private var apps: [AppEntry] = []
   private var isPlacing = false
+  private let clipboard = ClipboardMonitor(
+    directory: URL.applicationSupportDirectory.appending(path: "Ripcord/Clipboard"))
+  /// Opened straight into a command by its hotkey, so Esc closes the panel instead of going
+  /// back to the root search.
+  private var closesOnCancel = false
 
   override init() {
     super.init()
@@ -87,6 +106,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
         onQueryChange: { [weak self] in self?.update($0) },
         onCommand: { [weak self] in self?.handle($0) }))
     panel.contentView = glass
+
+    clipboard.onChange = { [weak self] in
+      guard let self, model.mode == .clipboard else { return }
+      refreshRows(selecting: model.selected?.id)
+    }
+    clipboard.start()
   }
 
   func toggle() {
@@ -97,8 +122,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
     hide()
   }
 
-  private func show() {
+  private func show(_ mode: LauncherMode = .root) {
     refreshApps()
+    model.pasteTarget = NSWorkspace.shared.frontmostApplication?.localizedName
+    model.mode = mode
     update("")
     isPlacing = true
     panel.setFrameTopLeftPoint(savedTopLeft() ?? defaultTopLeft())
@@ -148,6 +175,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   private func hide() {
     panel.orderOut(nil)
+    model.mode = .root
     update("")
   }
 
@@ -155,9 +183,17 @@ final class LauncherController: NSObject, NSWindowDelegate {
     Task {
       apps = await Task.detached(priority: .userInitiated) { AppIndex.scan() }.value
       // Refresh the rows only: a ↓ or ⌘K pressed while the scan ran must survive it.
-      model.sections = sections(for: model.query)
-      model.selection = min(model.selection, max(model.results.count - 1, 0))
+      refreshRows()
     }
+  }
+
+  /// New rows for the same query. The selection follows the row `id` when it's still listed,
+  /// since a pinned or newly copied clip reorders the rows; otherwise it keeps its place.
+  private func refreshRows(selecting id: String? = nil) {
+    model.sections = sections(for: model.query)
+    model.selection =
+      id.flatMap { id in model.results.firstIndex { $0.id == id } }
+      ?? min(model.selection, max(model.results.count - 1, 0))
   }
 
   private func update(_ query: String) {
@@ -168,6 +204,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
   }
 
   private func sections(for query: String) -> [SearchSection] {
+    if model.mode == .clipboard {
+      model.clipboard = clipboard.history
+      return Search.clipboardSections(for: query, history: clipboard.history)
+    }
     let running = NSWorkspace.shared.runningApplications
       .filter { $0.activationPolicy == .regular }
       .compactMap { app in
@@ -204,7 +244,14 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .up: model.selection = max(model.selection - 1, 0)
     case .down: model.selection = min(model.selection + 1, max(count - 1, 0))
     case .submit: model.selected.map { perform($0.action) } ?? NSSound.beep()
-    case .cancel: hide()
+    case .cancel:
+      // Like Raycast: Esc leaves a command's list for the root search first.
+      guard model.mode != .root, !closesOnCancel else { return hide() }
+      model.mode = .root
+      update("")
+    case .back:
+      model.mode = .root
+      update("")
     case .activate(let id): model.results.first { $0.id == id }.map { perform($0.action) }
     case .toggleMenu(let root): toggleMenu(root: root)
     case .runMenuItem(let index):
@@ -234,7 +281,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   private func handleKeyEquivalent(_ event: NSEvent) -> Bool {
     let flags = event.modifierFlags.intersection([.control, .option, .shift, .command])
-    guard flags.contains(.command), let key = event.charactersIgnoringModifiers?.lowercased()
+    // ⌃ too, for Raycast's ⌃X Delete.
+    guard !flags.isDisjoint(with: [.command, .control]),
+      let key = event.charactersIgnoringModifiers?.lowercased()
     else { return false }
     // An accessory app has no Edit menu, so ⌘X/C/V/A never reach the search field otherwise.
     let editing = [
@@ -262,6 +311,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   func perform(_ action: SearchResult.Action) {
     // Like Raycast, the panel stays open and glides home, so the reset is visible at once.
     if action == .run(.resetWindowPosition) { return resetPosition() }
+    if action == .run(.clipboardHistory) { return openClipboardHistory() }
+    if case .clip(let id, let clipAction) = action { return perform(clipAction, on: id) }
     // Open Settings while the panel still holds the key press, so macOS treats it as the
     // user's request to bring Ripcord forward.
     if action == .run(.settings) { onOpenSettings() }
@@ -272,14 +323,46 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .copy(let text):
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(text, forType: .string)
+      // Signed as Ripcord's, by the nspasteboard.org convention, so the history credits it.
+      NSPasteboard.general.setString(
+        Bundle.main.bundleIdentifier ?? "", forType: .init("org.nspasteboard.source"))
     case .reveal(let url):
       NSWorkspace.shared.activateFileViewerSelecting([url])
     case .run(.settings):
       break  // Opened before hide(), above.
-    case .run(.resetWindowPosition):
+    case .run(.resetWindowPosition), .run(.clipboardHistory), .clip:
       break  // Handled above, without hiding the panel.
     case .run(.quit):
       NSApp.terminate(nil)
+    }
+  }
+
+  private func openClipboardHistory() {
+    // Its hotkey closes its own list, as the launcher hotkey closes the panel.
+    if panel.isVisible, model.mode == .clipboard { return hide() }
+    closesOnCancel = !panel.isVisible
+    guard panel.isVisible else { return show(.clipboard) }
+    model.mode = .clipboard
+    update("")
+  }
+
+  private func perform(_ action: SearchResult.ClipAction, on id: UUID) {
+    switch action {
+    case .paste, .copy:
+      let copied = clipboard.copy(id)
+      hide()
+      guard copied else { return NSSound.beep() }
+      guard action == .paste else { return }
+      // After the panel has given the key back to the app being pasted into.
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [clipboard] in
+        // Without the permission the item is only copied; say so, as other failures do.
+        if !clipboard.pasteIntoFrontmostApp() { NSSound.beep() }
+      }
+    case .togglePin, .delete:
+      let selected = model.selected?.id
+      action == .delete ? clipboard.delete(id) : clipboard.togglePin(id)
+      model.menu = nil
+      refreshRows(selecting: action == .togglePin ? "clip:\(id)" : selected)
     }
   }
 }
