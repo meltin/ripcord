@@ -46,10 +46,15 @@ import Testing
     #expect(
       script(base[0], base[1], "# @raycast.mode silent", "# @raycast.needsConfirmation true")
         == nil)
+    let mode = "# @raycast.mode silent"
+    let dropdown = #"# @raycast.argument1 { "type": "dropdown", "placeholder": "q", "data": [] }"#
+    #expect(script(base[0], base[1], mode, dropdown) == nil)
+    #expect(script(base[0], base[1], mode, "# @raycast.argument1 {broken") == nil)
+    // argument2 without argument1.
     #expect(
       script(
-        base[0], base[1], "# @raycast.mode silent",
-        #"# @raycast.argument1 { "type": "text", "placeholder": "q" }"#) == nil)
+        base[0], base[1], mode, #"# @raycast.argument2 { "type": "text", "placeholder": "q" }"#)
+        == nil)
     #expect(script("# @raycast.schemaVersion 2", base[1], "# @raycast.mode silent") == nil)
   }
 
@@ -86,6 +91,22 @@ import Testing
     #expect(row.action == .runScript("/tmp/Tools/hello.sh"))
     #expect(row.subtitle == "Tools")
     #expect(row.itemKey == hello.settingsKey)
+  }
+
+  @Test func readsArguments() throws {
+    let found = try #require(
+      script(
+        "# @raycast.schemaVersion 1", "# @raycast.title Search Flights", "# @raycast.mode silent",
+        #"# @raycast.argument1 { "type": "text", "placeholder": "from city", "percentEncoded": true }"#,
+        #"# @raycast.argument2 { "type": "password", "placeholder": "to", "optional": true }"#))
+    #expect(found.arguments.map(\.placeholder) == ["from city", "to"])
+    #expect(found.arguments.map(\.type) == [.text, .password])
+    // The first is required; the second, optional, may stay empty.
+    #expect(found.firstMissing(in: ["", "x"]) == 0)
+    #expect(found.firstMissing(in: ["Tokyo"]) == nil)
+    #expect(found.processArguments(["New York & co", ""]) == ["New%20York%20%26%20co", ""])
+    #expect(found.processArguments(["a"]) == ["a", ""])
+    #expect(found.processArguments(["it's (fun)!"]) == ["it's%20(fun)!", ""])
   }
 
   @Test func dropsColorCodes() {

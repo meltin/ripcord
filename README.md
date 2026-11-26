@@ -56,8 +56,9 @@
 - Script Commands: Raycast's Script Commands in the folders set under Settings › Script Commands
   are listed in the root search; `silent` ones show their last line over the screen, `compact`
   ones over the footer and `fullOutput` ones all of it in the panel, and a failure shows its exit
-  code and error. Scripts with arguments, `needsConfirmation` or a refreshing `inline` aren't run
-  yet
+  code and error. A script's arguments are fields beside the search bar: Tab moves to them, and
+  Return runs it once the required ones are filled. Dropdown arguments, `needsConfirmation` and a
+  refreshing `inline` aren't run yet
 - HTTP Status Codes: look a code up by number or name, grouped by hundred; Return opens its MDN
   page and ⌘K copies the code or its name
 - CleanShot X: Capture Area, Window, Fullscreen and Previous Area, Scrolling Capture, Record

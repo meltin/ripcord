@@ -12,6 +12,42 @@ public struct ScriptCommand: Equatable, Sendable {
   public let packageName: String
   /// Where the script runs; its own folder unless `currentDirectoryPath` says otherwise.
   public let directory: URL
+  /// Up to three, typed into fields beside the search bar and passed as $1, $2 and $3.
+  public var arguments: [Argument] = []
+
+  /// An `argumentN` field, as Raycast's ARGUMENTS.md documents it; a dropdown isn't read yet.
+  public struct Argument: Equatable, Sendable, Decodable {
+    public let type: Kind
+    public let placeholder: String
+    public var optional: Bool? = nil
+    public var percentEncoded: Bool? = nil
+
+    public enum Kind: String, Equatable, Sendable, Decodable {
+      case text, password
+    }
+
+    public var isRequired: Bool { optional != true }
+  }
+
+  /// The index of the first required argument left empty in `values`; nil when it can run.
+  public func firstMissing(in values: [String]) -> Int? {
+    arguments.indices.first { index in
+      arguments[index].isRequired && (values.indices.contains(index) ? values[index] : "").isEmpty
+    }
+  }
+
+  /// What the process gets as $1…: each value, percent-encoded where asked; an optional one
+  /// left empty is "" so the later ones keep their places.
+  public func processArguments(_ values: [String]) -> [String] {
+    arguments.indices.map { index in
+      let value = values.indices.contains(index) ? values[index] : ""
+      guard arguments[index].percentEncoded == true else { return value }
+      // What JavaScript's encodeURIComponent keeps, as Raycast encodes: a space is %20, & is %26.
+      let kept = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
+      return value.addingPercentEncoding(withAllowedCharacters: kept) ?? value
+    }
+  }
 
   public enum Mode: String, Equatable, Sendable {
     /// The last line of output in a toast, the panel kept open.
@@ -26,8 +62,8 @@ public struct ScriptCommand: Equatable, Sendable {
   public var settingsKey: String { "script:\(url.path)" }
 
   /// Reads the metadata from the first lines of `text`; nil for a file that isn't a Script
-  /// Command, or one using what Ripcord doesn't run yet (arguments, inline with a refresh time,
-  /// a confirmation), which is left out rather than run differently.
+  /// Command, or one using what Ripcord doesn't run yet (a dropdown argument, inline with a
+  /// refresh time, a confirmation), which is left out rather than run differently.
   public static func parse(_ text: String, url: URL) -> ScriptCommand? {
     var values: [String: String] = [:]
     // Comments starting `#` or `//`, as Raycast's README requires.
@@ -56,9 +92,16 @@ public struct ScriptCommand: Equatable, Sendable {
       case "inline" where values["refreshTime"] == nil: .compact
       default: nil
       }
-    guard let mode, values["needsConfirmation"] != "true",
-      !values.keys.contains(where: { $0.hasPrefix("argument") })
-    else { return nil }
+    guard let mode, values["needsConfirmation"] != "true" else { return nil }
+    // argument1 to 3 in order; one that doesn't decode (a dropdown, broken JSON) or a gap
+    // leaves the script out.
+    let given = values.keys.filter { $0.hasPrefix("argument") }
+    let arguments = (1...3).prefix { values["argument\($0)"] != nil }.compactMap { number in
+      values["argument\(number)"].flatMap {
+        try? JSONDecoder().decode(Argument.self, from: Data($0.utf8))
+      }
+    }
+    guard arguments.count == given.count else { return nil }
     let folder = url.deletingLastPathComponent()
     let directory = values["currentDirectoryPath"].map { path in
       URL(
@@ -74,7 +117,7 @@ public struct ScriptCommand: Equatable, Sendable {
     return ScriptCommand(
       url: url, title: title, mode: mode, icon: icon,
       packageName: values["packageName"] ?? folder.lastPathComponent,
-      directory: directory ?? folder)
+      directory: directory ?? folder, arguments: arguments)
   }
 
   /// How far into a file the metadata is looked for.

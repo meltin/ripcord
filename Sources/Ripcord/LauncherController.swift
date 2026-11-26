@@ -158,6 +158,20 @@ final class LauncherModel {
   var scriptOutput: (title: String, output: String?, failed: Bool) = ("", nil, false)
   /// A compact Script Command's last line, shown over the footer for a moment.
   var toast: (text: String, failed: Bool)?
+  /// Each script's arguments by path, for the fields beside the search bar.
+  var scriptArguments: [String: [ScriptCommand.Argument]] = [:]
+  /// What's typed in those fields, by script path; dropped as the panel hides, passwords too.
+  var argumentValues: [String: [String]] = [:]
+  /// The argument field to focus, for the view to take and clear.
+  var argumentFocusRequest: Int?
+  /// An argument field has had the focus since the search field last took it.
+  var isEditingArgument = false
+  /// The selected row's script path, when it takes arguments.
+  var argumentScript: String? {
+    guard case .runScript(let path) = selected?.action, scriptArguments[path]?.isEmpty == false
+    else { return nil }
+    return path
+  }
   /// A new bookmark's draft, kept while an edit has the form.
   var addDraft: BookmarkDraft?
 
@@ -177,6 +191,8 @@ final class LauncherModel {
 
 enum SearchCommand {
   case up, down, left, right, submit, cancel, back
+  /// Tab in the search field: on to the selected script's first argument.
+  case nextField
   case filterCategory(Int?)
   case activate(String)
   case toggleMenu(root: Bool)
@@ -362,8 +378,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     panel.typingHandler = { [weak self] in self?.typeIntoMenu($0) ?? false }
     panel.escapeHandler = { [weak self] in
       // Only the form: the search field turns Esc into .cancel itself.
-      // The output view has no field either.
-      guard let self, model.mode.isForm || model.mode == .scriptOutput else { return false }
+      // The output view has no field either, and an argument field acts as the search field.
+      guard let self, model.mode.isForm || model.mode == .scriptOutput || model.isEditingArgument
+      else { return false }
       // An open icon list closes first, as a menu does.
       if model.isPickingIcon {
         model.isPickingIcon = false
@@ -506,6 +523,13 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private func hide(keepingMode: Bool = false) {
     stashDraft()
     model.toast = nil
+    model.argumentValues = [:]
+    model.argumentFocusRequest = nil
+    if model.isEditingArgument {
+      // The search field takes the focus back for next time.
+      model.isEditingArgument = false
+      model.searchFieldID += 1
+    }
     // A recording left running would keep every hotkey unregistered.
     closeEditor(backToMenu: false)
     panel.orderOut(nil)
@@ -530,8 +554,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private func refreshApps() {
     Task {
       apps = await Task.detached(priority: .userInitiated) { AppIndex.scan() }.value
-      // Refresh the rows only: a ↓ or ⌘K pressed while the scan ran must survive it.
-      refreshRows()
+      // Refresh the rows only: a ↓ or ⌘K pressed while the scan ran must survive it. A script
+      // asking for an argument stays selected by ID when new apps land above it.
+      refreshRows(selecting: model.argumentScript == nil ? nil : model.selected?.id)
     }
   }
 
@@ -689,6 +714,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
       goBack()
     case .back:
       goBack()
+    case .nextField:
+      // Not behind an open menu.
+      if model.menu == nil, model.argumentScript != nil { model.argumentFocusRequest = 0 }
     case .activate(let id): model.results.first { $0.id == id }.map { perform($0.action) }
     case .toggleMenu(let root): toggleMenu(root: root)
     case .filterTag(let tag):
@@ -760,6 +788,28 @@ final class LauncherController: NSObject, NSWindowDelegate {
           fileURLWithPath: ($0 as NSString).expandingTildeInPath,
           relativeTo: URL(fileURLWithPath: home))
       })
+    // A folder listed twice gives its scripts twice.
+    model.scriptArguments = Dictionary(
+      scripts.map { ($0.url.path, $0.arguments) }, uniquingKeysWith: { first, _ in first })
+  }
+
+  /// Shows the script's row with its empty field focused: like Raycast, it doesn't run with a
+  /// required argument missing, whichever way it was started.
+  private func askForArgument(_ index: Int, of script: ScriptCommand) {
+    let path = script.url.path
+    if !(panel.isVisible && model.argumentScript == path) {
+      if !panel.isVisible { show() } else if model.mode != .root { open(.root) }
+      update(script.title)
+      if let row = model.results.firstIndex(where: { $0.action == .runScript(path) }) {
+        model.selection = row
+      }
+    }
+    // Once the panel is key: shown just now, it would hand the focus back to the search field.
+    // Only while the row is still there, or the request would wait for another script.
+    DispatchQueue.main.async { [weak self] in
+      guard let self, model.argumentScript == path else { return }
+      model.argumentFocusRequest = index
+    }
   }
 
   /// Runs a Script Command as its mode says: silent closes the panel and shows the last line
@@ -770,6 +820,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
     guard let script = scripts.first(where: { $0.url.path == path }) else {
       return onError("That script is gone from its folder.")
     }
+    // Read before a silent one hides the panel, which drops them.
+    let values = model.argumentValues[path] ?? []
+    if let missing = script.firstMissing(in: values) { return askForArgument(missing, of: script) }
+    // Typed for this run, as Raycast's fields empty once it runs; a password isn't kept.
+    model.argumentValues[path] = nil
     // Hidden already when its hotkey ran it: what was left open there stays.
     if script.mode == .silent, panel.isVisible { hide() }
     if script.mode == .fullOutput {
@@ -779,7 +834,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       if !(panel.isVisible && model.mode == .scriptOutput) { open(.scriptOutput) }
     }
     let run = outputRun
-    ScriptRunner.run(script) { [weak self] result in
+    ScriptRunner.run(script, arguments: script.processArguments(values)) { [weak self] result in
       DispatchQueue.main.async {
         MainActor.assumeIsolated { self?.finish(script, result, run: run) }
       }
