@@ -899,6 +899,10 @@ private struct ApplicationsPage: View {
   @State private var filter = ""
   /// The one app shown, by settings key, until the search is edited; the field shows its name.
   @State private var onlyApp: String?
+  /// An app asked for that the scan hasn't listed yet. Kept here, not on the model, so leaving
+  /// the page drops it; `rescanned` allows one fresh scan for an app installed since.
+  @State private var pendingApp: String?
+  @State private var rescanned = false
 
   private var entries: [CatalogEntry] {
     if let onlyApp { return model.appEntries.filter { $0.target == .item(onlyApp) } }
@@ -941,7 +945,13 @@ private struct ApplicationsPage: View {
     .onAppear { if model.apps.isEmpty { model.loadApps() } }
     // Waits for the scan: an app it didn't list (one run from Downloads, say) leaves the whole
     // list showing rather than an empty one.
-    .onChange(of: model.requestedApp, initial: true) { showRequestedApp() }
+    .onChange(of: model.requestedApp, initial: true) {
+      guard let key = model.requestedApp else { return }
+      model.requestedApp = nil
+      pendingApp = key
+      rescanned = false
+      showRequestedApp()
+    }
     .onChange(of: model.appEntries) { showRequestedApp() }
     .onChange(of: filter) {
       // Typing in the search ends the one-app view.
@@ -955,10 +965,25 @@ private struct ApplicationsPage: View {
 
   /// Shows the app Configure Command asked for alone, once the scan has listed it.
   private func showRequestedApp() {
-    guard let key = model.requestedApp, !model.appEntries.isEmpty else { return }
-    model.requestedApp = nil
-    // Not in the scanned list: the whole list stays, rather than an empty one.
-    guard let entry = model.appEntries.first(where: { $0.target == .item(key) }) else { return }
+    guard let key = pendingApp, !model.appEntries.isEmpty else { return }
+    guard let entry = model.appEntries.first(where: { $0.target == .item(key) }) else {
+      // The whole list, not an empty one nor the app asked for before, while it isn't found.
+      onlyApp = nil
+      filter = ""
+      // Installed since the last scan, perhaps: look once more. A scan with nothing new sends
+      // no change, so the request ends here either way unless the app turns up.
+      if !rescanned {
+        rescanned = true
+        model.loadApps()
+      } else {
+        pendingApp = nil
+      }
+      return
+    }
+    pendingApp = nil
+    // An edit on a row about to be hidden would go on unseen, a recording swallowing keys.
+    model.stopRecording()
+    model.editingAlias = nil
     onlyApp = key
     filter = entry.title
   }
