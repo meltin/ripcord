@@ -41,9 +41,23 @@ struct ConfigureEditor {
 /// The ⌘K actions of a row, or the root menu behind the footer's left button.
 struct OpenMenu {
   let title: String
+  /// Every action; `shown` is what the filter leaves.
   let items: [MenuAction]
   let isRoot: Bool
   var selection = 0
+  /// "Search for actions…", typed while the menu is open; `selection` indexes `shown`.
+  var filter = ""
+  /// The app a paste goes to, which the card names ("Paste to Rex"), so the filter matches it.
+  var pasteTarget: String?
+
+  var shown: [MenuAction] {
+    let typed = filter.trimmingCharacters(in: .whitespaces)
+    return typed.isEmpty
+      ? items
+      : items.filter {
+        Ripcord.title(of: $0.action, else: $0.title, pasteTarget).localizedStandardContains(typed)
+      }
+  }
 }
 
 /// Add Bookmark's or Edit Bookmark's form.
@@ -167,10 +181,14 @@ final class LauncherPanel: NSPanel {
   /// Sees Esc before the focused field; true when it handled it. A text editor would otherwise
   /// take Esc to show word completions.
   var escapeHandler: (() -> Bool)?
+  /// Sees typing before the focused field; true when it took the key, as an open menu's
+  /// "Search for actions…" does.
+  var typingHandler: ((NSEvent) -> Bool)?
 
   override var canBecomeKey: Bool { true }
 
   override func sendEvent(_ event: NSEvent) {
+    if event.type == .keyDown, typingHandler?(event) == true { return }
     if event.type == .keyDown, event.keyCode == UInt16(kVK_Escape),
       // Esc first cancels Japanese input that's still being composed.
       (firstResponder as? NSTextView)?.hasMarkedText() != true,
@@ -320,6 +338,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     panel.isMovableByWindowBackground = true
     panel.delegate = self
     panel.keyEquivalentHandler = { [weak self] in self?.handleKeyEquivalent($0) ?? false }
+    panel.typingHandler = { [weak self] in self?.typeIntoMenu($0) ?? false }
     panel.escapeHandler = { [weak self] in
       // Only the form: the search field turns Esc into .cancel itself.
       guard let self, model.mode.isForm else { return false }
@@ -595,11 +614,18 @@ final class LauncherController: NSObject, NSWindowDelegate {
         model.menu?.selection = max(menu.selection - 1, 0)
         return
       case .down:
-        model.menu?.selection = min(menu.selection + 1, menu.items.count - 1)
+        model.menu?.selection = min(menu.selection + 1, max(menu.shown.count - 1, 0))
         return
       case .submit:
-        return perform(menu.items[menu.selection].action)
+        guard menu.shown.indices.contains(menu.selection) else { return NSSound.beep() }
+        return perform(menu.shown[menu.selection].action)
       case .cancel:
+        // Esc clears what's typed first, then closes, as Raycast's does.
+        if !menu.filter.isEmpty {
+          model.menu?.filter = ""
+          model.menu?.selection = 0
+          return
+        }
         model.menu = nil
         return
       // The grid behind the menu stays put; the menu acts on what's selected.
@@ -644,7 +670,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       model.snippetTag = tag
       update(model.query)
     case .runMenuItem(let index):
-      if let items = model.menu?.items, items.indices.contains(index) {
+      if let items = model.menu?.shown, items.indices.contains(index) {
         perform(items[index].action)
       }
     case .selectMenuItem(let index): model.menu?.selection = index
@@ -695,6 +721,54 @@ final class LauncherController: NSObject, NSWindowDelegate {
     do { try draftStore.save(drafts) } catch { onError(error.localizedDescription) }
   }
 
+  /// Letters typed while a menu is open go to its "Search for actions…", and Delete takes the
+  /// last one back; arrows, Return and Esc still reach the field, and shortcuts still fire.
+  private func typeIntoMenu(_ event: NSEvent) -> Bool {
+    guard model.menu != nil, model.configureEditor == nil, model.confirmation == nil else {
+      return false
+    }
+    // Read first: reading the menu while writing it in one statement traps.
+    let filter = model.menu?.filter ?? ""
+    if event.keyCode == UInt16(kVK_Delete) || event.keyCode == UInt16(kVK_ForwardDelete) {
+      // Nothing typed: the key does nothing, and the selection stays.
+      guard !filter.isEmpty else { return true }
+      let flags = event.modifierFlags
+      // ⌘⌫ clears it, ⌥⌫ takes the last word, ⌫ the last letter, as a field does.
+      let kept =
+        flags.contains(.command)
+        ? ""
+        : flags.contains(.option)
+          ? String(
+            filter.trimmingCharacters(in: .whitespaces).reversed()
+              .drop { !$0.isWhitespace }.reversed())
+          : String(filter.dropLast())
+      model.menu?.filter = kept
+      model.menu?.selection = 0
+      return true
+    }
+    // ⌘V pastes into the filter, one line of it.
+    if event.modifierFlags.intersection([.command, .control, .option]) == .command,
+      event.charactersIgnoringModifiers?.lowercased() == "v"
+    {
+      let pasted = NSPasteboard.general.string(forType: .string) ?? ""
+      model.menu?.filter =
+        filter + (pasted.split(whereSeparator: \.isNewline).first.map(String.init) ?? "")
+      model.menu?.selection = 0
+      return true
+    }
+    // Other ⌘ and ⌃ keys are shortcuts, for the menu's actions.
+    guard event.modifierFlags.isDisjoint(with: [.command, .control]) else { return false }
+    // Printable text only: arrows and the like come as function-key characters.
+    guard let text = event.characters, !text.isEmpty,
+      text.unicodeScalars.allSatisfy({
+        !CharacterSet.controlCharacters.contains($0) && !(0xF700...0xF8FF).contains($0.value)
+      })
+    else { return false }
+    model.menu?.filter += text
+    model.menu?.selection = 0
+    return true
+  }
+
   /// Selects the row of the item with `key` after a favorite moved it: its row ID can differ
   /// between Running and Favorites, as a running app's path does.
   private func select(itemKey key: String) {
@@ -738,7 +812,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return
     }
     if !wantsRoot, let selected = model.selected {
-      model.menu = OpenMenu(title: selected.title, items: selected.actions, isRoot: false)
+      model.menu = OpenMenu(
+        title: selected.title, items: selected.actions, isRoot: false,
+        pasteTarget: model.pasteTarget)
     } else {
       let version =
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String

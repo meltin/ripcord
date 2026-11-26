@@ -1505,7 +1505,48 @@ private struct MenuCard: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-      ForEach(Array(menu.items.enumerated()), id: \.offset) { index, item in
+      // Long menus scroll, so the card stays inside the panel with its search line.
+      let rows = menu.shown
+      Group {
+        if rows.count > Self.visibleRows {
+          ScrollView { items(rows) }.thinScroller().frame(height: CGFloat(Self.visibleRows) * 36)
+        } else {
+          items(rows)
+        }
+      }
+      if rows.isEmpty {
+        Text("No Results").font(.system(size: 13)).foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity).frame(height: 34)
+      }
+      // Raycast's "Search for actions…": typing while the menu is open lands here.
+      Divider().opacity(0.5).padding(.top, 4)
+      HStack(spacing: 0) {
+        Text(menu.filter.isEmpty ? "Search for actions…" : menu.filter)
+          .foregroundStyle(menu.filter.isEmpty ? .tertiary : .primary)
+          .lineLimit(1)
+          .truncationMode(.head)
+        if !menu.filter.isEmpty {
+          // A caret, as the field the text appears to be typed into would show.
+          Rectangle().fill(Color(nsColor: FocusingTextField.caretColor)).frame(width: 2, height: 16)
+        }
+        Spacer()
+      }
+      .font(.system(size: 13))
+      .padding(.horizontal, 10)
+      .frame(height: 34)
+    }
+    .padding(6)
+    // Room for "Open in Visual Studio Code" and its keys on one line.
+    .frame(width: 340)
+    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+  }
+
+  /// Rows before the list scrolls: what fits over the panel's list with the search line.
+  private static let visibleRows = 9
+
+  private func items(_ rows: [MenuAction]) -> some View {
+    VStack(alignment: .leading, spacing: 2) {
+      ForEach(Array(rows.enumerated()), id: \.offset) { index, item in
         if item.startsSection, index > 0 {
           Divider().opacity(0.5).padding(.vertical, 4)
         }
@@ -1545,10 +1586,6 @@ private struct MenuCard: View {
         .onHover { if $0 { onCommand(.selectMenuItem(index)) } }
       }
     }
-    .padding(6)
-    // Room for "Open in Visual Studio Code" and its keys on one line.
-    .frame(width: 340)
-    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
   }
 }
 
@@ -1661,7 +1698,7 @@ private func menuIcon(_ item: MenuAction) -> NSImage? {
 }
 
 /// "Paste to Rex" rather than "Paste to App", naming the app the paste lands in.
-private func title(
+func title(
   of action: SearchResult.Action, else fallback: String, _ pasteTarget: String?
 ) -> String {
   guard action.isPaste, let pasteTarget else { return fallback }
@@ -1791,6 +1828,9 @@ struct SearchField: NSViewRepresentable {
 }
 
 final class FocusingTextField: NSTextField {
+  /// The app icon's orange.
+  static let caretColor = NSColor(red: 1, green: 0.353, blue: 0.122, alpha: 1)
+
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
     window?.makeFirstResponder(self)
@@ -1800,7 +1840,7 @@ final class FocusingTextField: NSTextField {
   override func becomeFirstResponder() -> Bool {
     let became = super.becomeFirstResponder()
     if let editor = currentEditor() as? NSTextView {
-      editor.insertionPointColor = NSColor(red: 1, green: 0.353, blue: 0.122, alpha: 1)
+      editor.insertionPointColor = Self.caretColor
       // The window's shared field editor paints a white well behind the text; this field is
       // bare, like the panel it sits in.
       editor.drawsBackground = false
@@ -1811,7 +1851,7 @@ final class FocusingTextField: NSTextField {
 }
 
 extension SearchResult.Action {
-  fileprivate var isPaste: Bool {
+  var isPaste: Bool {
     switch self {
     case .clip(_, .paste), .snippet(_, .paste), .emoji(_, _, .paste): true
     default: false
