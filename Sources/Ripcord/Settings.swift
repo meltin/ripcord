@@ -404,6 +404,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case colorPicker = "Color Picker"
   case cleanKeyboard = "Clean Keyboard"
   case bookmarks = "Bookmarks"
+  case scripts = "Script Commands"
   case emoji = "Emoji & Symbols"
   case cleanShot = "CleanShot X"
   case repositories = "Git Repositories"
@@ -428,6 +429,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .cleanKeyboard: "keyboard"
     case .bookmarks: "bookmark.fill"
     case .emoji: "face.smiling"
+    case .scripts: "terminal"
     case .cleanShot: "camera.viewfinder"
     case .repositories: "arrow.triangle.branch"
     case .httpStatusCodes: "network"
@@ -448,6 +450,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .cleanKeyboard: .cyan
     case .bookmarks: .yellow
     case .emoji: .orange
+    case .scripts: .gray
     case .cleanShot: .purple
     case .repositories: .orange
     case .httpStatusCodes: .teal
@@ -481,6 +484,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       "Find the Git repositories in your folders and open each in the app you pick for its Return."
     case .httpStatusCodes:
       "Look up a status code by number or name, open its MDN page, or copy it."
+    case .scripts:
+      "Raycast Script Commands in the folders below. Give one an alias or hotkey from its ⌘K in the panel."
     case .emoji:
       "Search emoji and symbols by their English or Japanese names, and paste or copy one."
     case .bookmarks:
@@ -502,7 +507,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
     case .cleanShot: Set(CleanShotCommand.allCases.map(\.settingsKey))
-    case .general, .permissions, .applications, .quicklinks: nil
+    case .general, .permissions, .applications, .quicklinks, .scripts: nil
     }
   }
 }
@@ -573,6 +578,18 @@ struct SettingsView: View {
             PageHeader(page: .repositories)
             RepositoriesSettings(model: model)
             CommandsList(model: model, page: .repositories)
+          }
+        case .scripts:
+          PageScroll(model: model) {
+            PageHeader(page: .scripts)
+            Card {
+              SettingRow(
+                title: "Folders",
+                description:
+                  "Scripts with @raycast metadata in these folders, not their subfolders."
+              ) { EmptyView() }
+              FolderList(folders: $model.config.scriptFolders)
+            }
           }
         default:
           PageScroll(model: model) {
@@ -1201,32 +1218,7 @@ private struct RepositoriesSettings: View {
         Stepper(
           "Depth \(settings.depth)", value: $model.config.repositories.depth, in: 1...6)
       }
-      ForEach(Array(settings.folders.enumerated()), id: \.offset) { index, folder in
-        Divider()
-        HStack {
-          Glyph("folder").foregroundStyle(.secondary)
-          Text(folder).font(.system(size: 13, design: .monospaced))
-          Spacer()
-          Button {
-            model.config.repositories.folders = settings.folders.enumerated()
-              .filter { $0.offset != index }.map(\.element)
-          } label: {
-            Glyph("minus.circle")
-          }
-          .buttonStyle(.borderless)
-          .foregroundStyle(.secondary)
-          .accessibilityLabel("Remove \(folder)")
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 8)
-      }
-      Divider()
-      HStack {
-        Spacer()
-        Button("Add Folder…", action: addFolder)
-      }
-      .padding(.horizontal, 18)
-      .padding(.vertical, 10)
+      FolderList(folders: $model.config.repositories.folders)
     }
     Card {
       SettingRow(
@@ -1240,18 +1232,50 @@ private struct RepositoriesSettings: View {
     }
   }
 
+}
+
+/// A card's folders, each removable, and Add Folder… under them: Git Repositories' and Script
+/// Commands'.
+private struct FolderList: View {
+  @Binding var folders: [String]
+
+  var body: some View {
+    ForEach(Array(folders.enumerated()), id: \.offset) { index, folder in
+      Divider()
+      HStack {
+        Glyph("folder").foregroundStyle(.secondary)
+        Text(folder).font(.system(size: 13, design: .monospaced))
+        Spacer()
+        Button {
+          folders = folders.enumerated().filter { $0.offset != index }.map(\.element)
+        } label: {
+          Glyph("minus.circle")
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel("Remove \(folder)")
+      }
+      .padding(.horizontal, 18)
+      .padding(.vertical, 8)
+    }
+    Divider()
+    HStack {
+      Spacer()
+      Button("Add Folder…", action: addFolder)
+    }
+    .padding(.horizontal, 18)
+    .padding(.vertical, 10)
+  }
+
   private func addFolder() {
     let panel = NSOpenPanel()
     panel.canChooseDirectories = true
     panel.canChooseFiles = false
     panel.prompt = "Add"
     guard panel.runModal() == .OK, let url = panel.url else { return }
-    let home = NSHomeDirectory()
     // Kept with ~, so the config reads the same on another account.
-    let path = Search.tildePath(url.path, home: home)
-    if !settings.folders.contains(path) {
-      model.config.repositories.folders = settings.folders + [path]
-    }
+    let path = Search.tildePath(url.path, home: NSHomeDirectory())
+    if !folders.contains(path) { folders = folders + [path] }
   }
 }
 

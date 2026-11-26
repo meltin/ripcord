@@ -153,6 +153,8 @@ final class LauncherModel {
   /// Search Emoji & Symbols' categories, and the one picked; nil shows them all.
   var emojiGroups: [String] = []
   var emojiCategory: Int?
+  /// A compact Script Command's last line, shown over the footer for a moment.
+  var toast: (text: String, failed: Bool)?
   /// A new bookmark's draft, kept while an edit has the form.
   var addDraft: BookmarkDraft?
 
@@ -235,6 +237,14 @@ final class LauncherController: NSObject, NSWindowDelegate {
       update(model.query)
     }
   }
+  /// Folders holding Raycast Script Commands, from the config.
+  var scriptFolders: [String] = [] {
+    didSet { if scriptFolders != oldValue { rescanScripts() } }
+  }
+  /// The Script Commands in `scriptFolders`, read again each time the panel shows.
+  private var scripts: [ScriptCommand] = []
+  /// Which compact run's toast is showing, so an older one doesn't clear a newer.
+  private var scriptRun = 0
   /// The root search's Favorites, by item key.
   var favorites: [String] = [] {
     didSet {
@@ -408,6 +418,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     leftOpen = nil
     refreshApps()
     model.pasteTarget = NSWorkspace.shared.frontmostApplication?.localizedName
+    // A script added or edited since shows up; only each file's head is read.
+    rescanScripts()
     if let resumed {
       // The query, selection and any draft are as they were; only the rows are re-read.
       if resumed == .bookmarks, !loadBookmarks() { return show() }
@@ -574,7 +586,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       }
     return Search.sections(
       for: query, apps: apps, running: running, quicklinks: quicklinks, items: items,
-      favorites: favorites, drafts: draftStore.drafts)
+      favorites: favorites, drafts: draftStore.drafts, scripts: scripts)
   }
 
   private func handle(_ command: SearchCommand) {
@@ -731,6 +743,52 @@ final class LauncherController: NSObject, NSWindowDelegate {
     let data = output.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
     return process.terminationStatus == 0 ? String(decoding: data, as: UTF8.self) : ""
+  }
+
+  private func rescanScripts() {
+    let home = NSHomeDirectory()
+    scripts = ScriptCommand.scan(
+      scriptFolders.map {
+        URL(
+          fileURLWithPath: ($0 as NSString).expandingTildeInPath,
+          relativeTo: URL(fileURLWithPath: home))
+      })
+  }
+
+  /// Runs a Script Command as its mode says: silent closes the panel and shows the last line
+  /// over the screen; compact keeps the panel and shows it over the footer. A failure shows the
+  /// exit code and the last line of what the script printed.
+  private func runScript(_ path: String) {
+    guard let script = scripts.first(where: { $0.url.path == path }) else {
+      return onError("That script is gone from its folder.")
+    }
+    scriptRun += 1
+    let run = scriptRun
+    if script.mode == .silent { hide() }
+    ScriptRunner.run(script) { [weak self] result in
+      DispatchQueue.main.async {
+        MainActor.assumeIsolated { self?.finish(script, result, run: run) }
+      }
+    }
+  }
+
+  private func finish(_ script: ScriptCommand, _ result: ScriptRunner.Result, run: Int) {
+    let failed = result.status != 0
+    let line =
+      failed
+      ? "“\(script.title)” failed (exit \(result.status)): "
+        + (ScriptCommand.lastLine(of: result.errors) ?? ScriptCommand.lastLine(of: result.output)
+          ?? "no output")
+      : ScriptCommand.lastLine(of: result.output)
+    guard let line else { return }
+    // Compact shows it in the panel while it's still open there; otherwise over the screen.
+    guard script.mode == .compact, panel.isVisible else { return HUD.show(line, failed: failed) }
+    model.toast = (line, failed)
+    DispatchQueue.main.asyncAfter(deadline: .now() + (failed ? 4 : 2.5)) { [weak self] in
+      MainActor.assumeIsolated {
+        if self?.scriptRun == run { self?.model.toast = nil }
+      }
+    }
   }
 
   /// Whether anything is typed in Create Snippet's form.
@@ -1001,6 +1059,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
       do { try emojiHistory.setSkinTone(tone) } catch { onError(error.localizedDescription) }
       return refreshRows(selecting: model.selected?.id)
     }
+    if case .runScript(let path) = action {
+      return runScript(path)
+    }
     if case .openDraft(let form) = action {
       return perform(.run(form == .snippet ? .createSnippet : .addBookmark))
     }
@@ -1182,7 +1243,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       .run(.cleanKeyboard), .run(.searchBookmarks), .run(.addBookmark), .deleteBookmark,
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,
-      .openDraft, .discardDraft,
+      .openDraft, .discardDraft, .runScript,
       .moveFavorite,
       .deleteColor,
       .run(.createSnippet), .clip, .snippet, .system, .window:

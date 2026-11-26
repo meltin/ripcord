@@ -214,6 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.repositorySettings = config.repositories
       launcher.colorFormat = config.colorFormat
       launcher.favorites = config.favorites
+      launcher.scriptFolders = config.scriptFolders
       applyLaunchAtLogin(config.launchAtLogin)
       // Saving mid-recording must not bring back the hotkeys the recorder turned off.
       if !isRecording { applyHotkeys(config) }

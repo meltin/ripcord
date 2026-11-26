@@ -88,6 +88,21 @@ struct SearchView: View {
         resultList
       }
     }
+    // A compact Script Command's last line, above the footer, as Raycast's toast sits.
+    .overlay(alignment: .bottom) {
+      if let toast = model.toast {
+        HStack(spacing: 8) {
+          if toast.failed {
+            Glyph("exclamationmark.triangle.fill", pointSize: 12).foregroundStyle(.red)
+          }
+          Text(toast.text).lineLimit(1).font(.system(size: 13))
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 32)
+        .glassEffect(.regular, in: Capsule())
+        .padding(.bottom, LauncherController.footerHeight + 6)
+      }
+    }
     // Floats over the list like Raycast's footer, so rows scroll on underneath it.
     .overlay(alignment: .bottom) {
       Footer(
@@ -348,6 +363,12 @@ private struct ResultIcon: View {
       tile("bookmark.fill", .yellow)
     case .toggleFavorite, .moveFavorite:
       tile("star", .yellow)
+    case .runScript:
+      if let emoji = result.symbol {
+        Text(emoji).font(.system(size: 17)).frame(width: 24, height: 24)
+      } else {
+        tile("terminal", .gray)
+      }
     case .openDraft(let form), .discardDraft(let form):
       tile(
         (form == .snippet ? BuiltinCommand.createSnippet : .addBookmark).symbol,
@@ -1752,6 +1773,7 @@ extension SearchResult.Kind {
     case .bookmark: "Bookmark"
     case .emoji: "Emoji"
     case .draft: "Draft"
+    case .script: "Script Command"
     }
   }
 }
