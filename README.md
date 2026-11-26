@@ -14,9 +14,10 @@
 - Settings (⌘,): Launch at Login, the hotkey and Quicklinks, kept in sync with the config file
 - Shortcuts: give any app, Quicklink or command an alias, a hotkey that runs it from anywhere, or
   turn it off so it never shows up in search
-- Clipboard History: copied text and images, searchable; Return pastes into the app you were in,
-  ⇧⌘P pins an item to the top, ⌃X deletes it. Copies a password manager marks as concealed are never recorded, and
-  switching the command off on the Shortcuts page stops recording
+- Clipboard History: copied text and images, including a copied image file such as a CleanShot X
+  capture, with a preview and details of the selected one. Return pastes into the app you were in,
+  ⇧⌘P pins an item to the top and ⌃X deletes it. Copies a password manager marks as concealed are
+  never recorded, and switching the command off on the Shortcuts page stops recording
 - Drag the panel anywhere; it remembers the spot, and Reset Ripcord Window Position brings it back
 
 ## Quick start
