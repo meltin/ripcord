@@ -591,61 +591,39 @@ private let placeholderPattern = try? NSRegularExpression(
   pattern: #"\{(clipboard|date|time|datetime|day|uuid|cursor)\}"#)
 
 /// Colors the placeholders in Create Snippet's text box in the accent color, so a mistyped one
-/// shows. Only the drawing changes: the text belongs to SwiftUI, which would overwrite an edit
-/// made to the NSTextView under it.
-@MainActor final class PlaceholderHighlighter {
-  private weak var textView: NSTextView?
-  private var observer: NSObjectProtocol?
+/// shows. As the text storage's delegate, it colors within each edit, typed or set by SwiftUI,
+/// so a placeholder is never drawn uncolored. Only attributes change: SwiftUI binds the
+/// characters, which stay as they are.
+final class PlaceholderHighlighter: NSObject, NSTextStorageDelegate {
+  private weak var storage: NSTextStorage?
 
-  /// Finds the text box and recolors on every change to its text, typed or set by SwiftUI.
-  func attach() {
-    guard textView == nil,
+  /// SwiftUI's TextEditor leaves its text storage's delegate unset, so this takes it.
+  @MainActor func attach() {
+    guard storage == nil,
       let panel = NSApp.windows.first(where: { $0 is LauncherPanel && $0.isVisible }),
-      let content = panel.contentView, let textView = snippetTextView(in: content)
+      let content = panel.contentView, let storage = snippetTextView(in: content)?.textStorage,
+      storage.delegate == nil
     else { return }
-    self.textView = textView
-    observer = NotificationCenter.default.addObserver(
-      forName: NSTextStorage.didProcessEditingNotification, object: textView.textStorage,
-      queue: nil
-    ) { [weak self] _ in
-      // Not inside the notification: the layout manager clears rendering attributes around
-      // the edit after it, which uncolored placeholders touching it. The main queue is drained
-      // in this run loop pass, before the change is drawn, so nothing shows uncolored either.
-      DispatchQueue.main.async { self?.highlight() }
-    }
-    highlight()
+    self.storage = storage
+    storage.delegate = self
+    // One edit, so the delegate call it sets off colors once and doesn't recurse.
+    storage.beginEditing()
+    Self.color(storage)
+    storage.endEditing()
   }
 
-  isolated deinit {
-    if let observer { NotificationCenter.default.removeObserver(observer) }
+  func textStorage(
+    _ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions,
+    range editedRange: NSRange, changeInLength delta: Int
+  ) {
+    Self.color(textStorage)
   }
 
-  private func highlight() {
-    guard let textView else { return }
-    let ranges =
-      placeholderPattern?.matches(
-        in: textView.string,
-        range: NSRange(location: 0, length: (textView.string as NSString).length)
-      ).map(\.range) ?? []
-    if let layout = textView.textLayoutManager, let storage = layout.textContentManager {
-      let document = storage.documentRange
-      layout.removeRenderingAttribute(.foregroundColor, for: document)
-      for range in ranges {
-        guard let start = storage.location(document.location, offsetBy: range.location),
-          let end = storage.location(start, offsetBy: range.length),
-          let textRange = NSTextRange(location: start, end: end)
-        else { continue }
-        layout.addRenderingAttribute(
-          .foregroundColor, value: NSColor.controlAccentColor, for: textRange)
-      }
-    } else if let layout = textView.layoutManager {
-      // TextKit 1, should SwiftUI hand over that kind of text view.
-      let all = NSRange(location: 0, length: (textView.string as NSString).length)
-      layout.removeTemporaryAttribute(.foregroundColor, forCharacterRange: all)
-      for range in ranges {
-        layout.addTemporaryAttribute(
-          .foregroundColor, value: NSColor.controlAccentColor, forCharacterRange: range)
-      }
+  private static func color(_ storage: NSTextStorage) {
+    let all = NSRange(location: 0, length: storage.length)
+    storage.addAttribute(.foregroundColor, value: NSColor.textColor, range: all)
+    for match in placeholderPattern?.matches(in: storage.string, range: all) ?? [] {
+      storage.addAttribute(.foregroundColor, value: NSColor.controlAccentColor, range: match.range)
     }
   }
 }
