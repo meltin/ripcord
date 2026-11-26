@@ -53,9 +53,9 @@
 - Notes: Ripcord Notes opens a window floating over your apps, without taking them out of front,
   on one note at a time, formatting its Markdown as you type (headings, emphasis, code, quotes,
   lists, checkboxes, links); ⌘N starts another and ⌘P searches them. Each note is a Markdown file in
-  `~/.config/ripcord/notes`, titled by its first line and saved as you type; one changed outside
-  Ripcord is never saved over. Search Notes finds notes by their text, and ⌃X moves one to the
-  Trash
+  `~/.config/ripcord/notes`, titled by its first line and saved as you type. Edits another editor
+  saves show up in the open note, and a note changed outside Ripcord is never saved over. Search
+  Notes finds notes by their text, and ⌃X moves one to the Trash
 - Emoji & Symbols: Search Emoji & Symbols shows emoji and symbols (→ ° ⌘ and the like) in a grid by
   category, Frequently Used first; search in English or Japanese (`cat`, `ねこ`), Return pastes,
   ⌘↵ copies, and ⌘K picks a skin tone that's remembered

@@ -28,6 +28,10 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   /// Search Notes, in the launcher, for ⌘P.
   var onBrowse: () -> Void = {}
   private var pendingSave: DispatchWorkItem?
+  /// Reads the note again while the window shows, to pick up edits made in another editor.
+  private var watch: Timer?
+  /// What the last tick read, so a file read halfway through being written isn't taken.
+  private var lastSeen: String?
   private static let lastNoteKey = "lastNote"
   private static let saveDelay = 0.6
 
@@ -87,6 +91,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
       guard model.note.url == url else { return }
       // Its text is in the Trash now; nothing is left to save. The launcher keeps the keys.
       pendingSave?.cancel()
+      pendingSave = nil
       show(store.list().first ?? store.newNote(), focusing: false)
     }
   }
@@ -142,6 +147,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   private func bringForward() {
     window.orderFrontRegardless()
     window.makeKey()
+    startWatching()
     // Once it's key, so the editor can take the focus.
     DispatchQueue.main.async { [model] in model.focusRequest += 1 }
   }
@@ -149,6 +155,42 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   private func hide() {
     flush()
     window.orderOut(nil)
+    stopWatching()
+  }
+
+  private func startWatching() {
+    guard watch == nil else { return }
+    let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+      MainActor.assumeIsolated { self?.pickUpOutsideEdit() }
+    }
+    timer.tolerance = 0.5
+    // Also while scrolling or resizing, which run the loop in another mode.
+    RunLoop.main.add(timer, forMode: .common)
+    watch = timer
+  }
+
+  private func stopWatching() {
+    watch?.invalidate()
+    watch = nil
+  }
+
+  /// Shows what another editor saved to this note, while nothing typed here is waiting to be
+  /// saved; with something typed, saving refuses to write over it and says so instead.
+  private func pickUpOutsideEdit() {
+    guard window.isVisible, pendingSave == nil, model.problem == nil, model.note.isSaved,
+      model.text == model.note.text,
+      // Not over Japanese still being composed, which isn't in the text yet.
+      (window.firstResponder as? NSTextView)?.hasMarkedText() != true,
+      let fresh = store.read(model.note.url), fresh.text != model.note.text
+    else {
+      lastSeen = nil
+      return
+    }
+    // Taken once two reads agree: an editor writing in place may be halfway through.
+    defer { lastSeen = fresh.text }
+    guard fresh.text == lastSeen else { return }
+    model.note = fresh
+    model.text = fresh.text
   }
 
   private func scheduleSave() {
@@ -177,6 +219,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
 
   func windowWillClose(_ notification: Notification) {
     flush()
+    stopWatching()
   }
 }
 
@@ -242,9 +285,12 @@ private struct NotesView: View {
         .padding(.vertical, 8)
         .background(.orange.opacity(0.15))
       }
-      MarkdownEditor(text: $model.text, focusRequest: model.focusRequest, onChange: onTextChange)
-        .padding(.horizontal, 4)
-        .padding(.bottom, 4)
+      MarkdownEditor(
+        text: $model.text, noteURL: model.note.url, focusRequest: model.focusRequest,
+        onChange: onTextChange
+      )
+      .padding(.horizontal, 4)
+      .padding(.bottom, 4)
     }
     .background(.regularMaterial)
   }
@@ -266,6 +312,8 @@ private struct NotesView: View {
 /// text, dimmed. Formatting waits while an input method is composing.
 private struct MarkdownEditor: NSViewRepresentable {
   @Binding var text: String
+  /// Which note the text is: the same one changed elsewhere keeps the caret and scroll.
+  let noteURL: URL
   /// Bumped to put the caret in the editor.
   let focusRequest: Int
   let onChange: () -> Void
@@ -306,13 +354,24 @@ private struct MarkdownEditor: NSViewRepresentable {
     // Another note shown, or reloaded: what was being composed for the old one is dropped, and
     // so is its undo history, which would replay its edits on this text.
     if textView.string != text {
+      let sameNote = context.coordinator.noteURL == noteURL
+      let selection = textView.selectedRange()
+      let scroll = scrollView.contentView.bounds.origin
       context.coordinator.isReplacing = true
       if textView.hasMarkedText() { textView.inputContext?.discardMarkedText() }
       textView.string = text
       textView.undoManager?.removeAllActions()
       Self.format(textView)
       context.coordinator.isReplacing = false
+      if sameNote {
+        let length = (text as NSString).length
+        textView.setSelectedRange(
+          NSRange(location: min(selection.location, length), length: 0))
+        scrollView.contentView.scroll(to: scroll)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+      }
     }
+    context.coordinator.noteURL = noteURL
     if context.coordinator.focusRequest != focusRequest {
       context.coordinator.focusRequest = focusRequest
       textView.window?.makeFirstResponder(textView)
@@ -326,6 +385,7 @@ private struct MarkdownEditor: NSViewRepresentable {
     var focusRequest: Int
     /// The editor is being given another note's text: no change of the user's to pass on.
     var isReplacing = false
+    var noteURL: URL?
     var scrollerObserver: NSObjectProtocol?
 
     deinit {
@@ -335,6 +395,7 @@ private struct MarkdownEditor: NSViewRepresentable {
     init(parent: MarkdownEditor) {
       self.parent = parent
       focusRequest = parent.focusRequest
+      noteURL = parent.noteURL
     }
 
     func textDidChange(_ notification: Notification) {
