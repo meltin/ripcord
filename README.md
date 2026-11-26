@@ -24,6 +24,9 @@
   `{datetime}`, `{day}` and `{uuid}` are filled in, and `{cursor}` is where the caret lands.
   ⇧⌘C copies, ⌘E edits, ⌘D duplicates and ⌃X deletes; the tag menu filters the list. Export
   Snippets and Import Snippets read and write the JSON Raycast uses
+- System Actions: lock the screen, log out, restart, shut down, sleep, control music and volume,
+  hide, unhide or quit apps, restart the frontmost app, open or empty the Trash, eject disks, show
+  the desktop, and toggle Dark Mode or Finder's hidden files. Ones that lose work ask first
 - Drag the panel anywhere; it remembers the spot, and Reset Ripcord Window Position brings it back
 
 ## Quick start
@@ -68,6 +71,11 @@ be allowed under System Settings › Privacy & Security › Accessibility; Ripco
 launch, on the first paste. Until then, Return only copies the item and beeps. Ripcord is ad-hoc signed, so macOS forgets the
 permission whenever a new build replaces the app: after an update, remove Ripcord from that list
 and add it again, or run `tccutil reset Accessibility io.github.meltin.ripcord`.
+
+System Actions use Accessibility for the music and volume keys too. Empty Trash, Toggle System
+Appearance and Log Out, Restart and Shut Down ask macOS to let Ripcord control Finder, System
+Events and the login window; allow it in the prompt, or later under System Settings › Privacy &
+Security › Automation.
 
 ## Configuration
 

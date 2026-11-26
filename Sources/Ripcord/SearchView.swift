@@ -96,7 +96,7 @@ struct SearchView: View {
     .overlay {
       if let confirmation = model.confirmation {
         ConfirmationCard(
-          confirmation: confirmation, command: model.mode.command, onCommand: onCommand)
+          confirmation: confirmation, onCommand: onCommand)
       }
     }
   }
@@ -231,6 +231,8 @@ private struct ResultIcon: View {
       tile("link", .blue)
     case .run(let command):
       tile(command.symbol, command.color)
+    case .system(let action, _):
+      tile(action.symbol, .gray)
     case .reveal:
       tile("folder", .gray)
     case .snippet:
@@ -257,6 +259,36 @@ private struct ResultIcon: View {
       .foregroundStyle(.white)
       .frame(width: 24, height: 24)
       .background(color.gradient, in: RoundedRectangle(cornerRadius: 6))
+  }
+}
+
+extension SystemAction {
+  /// Its icon, a white SF Symbol on a gray tile, as Raycast draws System Actions.
+  fileprivate var symbol: String {
+    switch self {
+    case .lockScreen: "lock.fill"
+    case .logOut: "rectangle.portrait.and.arrow.right"
+    case .restart: "restart"
+    case .shutDown: "power"
+    case .sleep: "moon.fill"
+    case .sleepDisplays: "display"
+    case .playPause: "playpause.fill"
+    case .nextTrack: "forward.fill"
+    case .previousTrack: "backward.fill"
+    case .toggleMute: "speaker.slash.fill"
+    case .volumeUp: "speaker.wave.3.fill"
+    case .volumeDown: "speaker.wave.1.fill"
+    case .hideOtherApps: "eye.slash.fill"
+    case .unhideAllApps: "eye.fill"
+    case .quitAllApps, .quitOtherApps: "xmark.app.fill"
+    case .restartFrontmostApp: "arrow.clockwise"
+    case .openTrash: "trash"
+    case .emptyTrash: "trash.fill"
+    case .ejectAllDisks: "eject.fill"
+    case .showDesktop: "menubar.dock.rectangle"
+    case .toggleAppearance: "circle.lefthalf.filled"
+    case .toggleHiddenFiles: "eye.trianglebadge.exclamationmark"
+    }
   }
 }
 
@@ -997,8 +1029,14 @@ private struct Footer: View {
 /// Delete of equal width, each showing its key.
 private struct ConfirmationCard: View {
   let confirmation: Confirmation
-  let command: BuiltinCommand?
   let onCommand: (SearchCommand) -> Void
+
+  private var icon: (symbol: String, color: Color) {
+    switch confirmation.icon {
+    case .command(let command): (command.symbol, command.color)
+    case .system(let action): (action.symbol, .gray)
+    }
+  }
 
   var body: some View {
     ZStack {
@@ -1008,13 +1046,11 @@ private struct ConfirmationCard: View {
         .onTapGesture { onCommand(.cancel) }
       VStack(alignment: .leading, spacing: 22) {
         HStack(alignment: .top, spacing: 14) {
-          if let command {
-            Image(systemName: command.symbol)
-              .font(.system(size: 18, weight: .semibold))
-              .foregroundStyle(.white)
-              .frame(width: 42, height: 42)
-              .background(command.color.gradient, in: RoundedRectangle(cornerRadius: 11))
-          }
+          Image(systemName: icon.symbol)
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 42, height: 42)
+            .background(icon.color.gradient, in: RoundedRectangle(cornerRadius: 11))
           VStack(alignment: .leading, spacing: 5) {
             Text(confirmation.title).font(.system(size: 15, weight: .semibold))
             Text(confirmation.message)

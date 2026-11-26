@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     NSApp.mainMenu = makeMainMenu()
     statusItem = makeStatusItem()
     launcher.onOpenSettings = { [weak self] in self?.openSettings() }
+    launcher.onError = { [weak self] in self?.showError($0) }
     launcher.editSnippets = { [weak self] change in self?.editSnippets(change) ?? false }
     launcher.onExportSnippets = { [weak self] in self?.exportSnippets() }
     launcher.onImportSnippets = { [weak self] in self?.importSnippets() }
@@ -194,6 +195,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Read now, as opening the panel does, so a snippet added to the file is listed.
         if !launcher.isVisible { applyConfig() }
         launcher.perform(.run(command))
+      } else if let action = SystemAction.allCases.first(where: { $0.settingsKey == key }) {
+        launcher.perform(.system(action))
       } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: key)
         ?? (key.hasPrefix("/") ? URL(fileURLWithPath: key) : nil)
       {

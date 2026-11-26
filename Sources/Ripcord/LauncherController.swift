@@ -5,6 +5,13 @@ import SwiftUI
 
 /// Raycast's in-panel alert: Return runs `action`, Esc cancels.
 struct Confirmation {
+  /// Whose icon the card shows.
+  enum Icon {
+    case command(BuiltinCommand)
+    case system(SystemAction)
+  }
+
+  let icon: Icon
   let title: String
   let message: String
   let confirmTitle: String
@@ -136,6 +143,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// What the panel switched away from, put back when it closes.
   private var previousInputSource: TISInputSource?
   var onOpenSettings: () -> Void = {}
+  /// Shows why something couldn't be done, as a System Action that lacks a permission.
+  var onError: (String) -> Void = { _ in NSSound.beep() }
   /// Export Snippets and Import Snippets, which need file dialogs and the config.
   var onExportSnippets: () -> Void = {}
   var onImportSnippets: () -> Void = {}
@@ -208,6 +217,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Search, whose default is 90 seconds.
   private var leftOpen: (mode: LauncherMode, at: Date)?
   private static let popToRootAfter: TimeInterval = 90
+  /// The panel was opened by a hotkey just to ask a System Action's question.
+  private var openedForQuestion = false
 
   func toggle() {
     panel.isVisible ? hide(keepingMode: true) : show(resuming: true)
@@ -302,6 +313,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// `keepingMode` leaves a command's list or form as it is, to come back to (`leftOpen`).
   private func hide(keepingMode: Bool = false) {
     panel.orderOut(nil)
+    openedForQuestion = false
     model.menu = nil
     model.confirmation = nil
     restoreInputSource()
@@ -387,6 +399,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
         perform(confirmation.action)
       case .cancel, .back:
         model.confirmation = nil
+        // A panel opened only to ask goes away with the question.
+        if openedForQuestion { hide() }
       default: break
       }
       return
@@ -506,6 +520,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if case .snippet(let index, let snippetAction) = action {
       return perform(snippetAction, on: index)
     }
+    if case .system(let system, let confirmed) = action {
+      return perform(system, confirmed: confirmed)
+    }
     // Open Settings while the panel still holds the key press, so macOS treats it as the
     // user's request to bring Ripcord forward.
     if action == .run(.settings) { onOpenSettings() }
@@ -528,10 +545,35 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .run(.importSnippets):
       onImportSnippets()
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
-      .run(.createSnippet), .clip, .snippet:
+      .run(.createSnippet), .clip, .snippet, .system:
       break  // Handled above, without hiding the panel.
     case .run(.quit):
       NSApp.terminate(nil)
+    }
+  }
+
+  /// Asks first for one with a warning, over the panel (opened for it when a hotkey ran it);
+  /// otherwise hides the panel and runs it in the app the user was in.
+  private func perform(_ action: SystemAction, confirmed: Bool) {
+    if let warning = action.warning, !confirmed {
+      if !panel.isVisible {
+        show()
+        openedForQuestion = true
+      }
+      model.menu = nil
+      model.confirmation = Confirmation(
+        icon: .system(action), title: "\(action.title)?", message: warning,
+        confirmTitle: action.title, action: .system(action, confirmed: true))
+      return
+    }
+    // The app in front now: the panel never activates Ripcord, so it's still the user's.
+    let frontmost = NSWorkspace.shared.frontmostApplication
+    // From a hotkey with the panel hidden, whatever was left open there stays to come back to.
+    if panel.isVisible { hide() }
+    if let message = SystemActions.run(
+      action, frontmost: frontmost, report: { [weak self] in self?.onError($0) })
+    {
+      onError(message)
     }
   }
 
@@ -629,7 +671,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       // Asked first, as Raycast does by default: a deleted snippet has no undo.
       model.menu = nil
       model.confirmation = Confirmation(
-        title: "Delete “\(snippets[index].name)”?",
+        icon: .command(.searchSnippets), title: "Delete “\(snippets[index].name)”?",
         message: "Warning: this can't be undone.",
         confirmTitle: "Delete", action: .snippet(index, .confirmDelete))
     case .confirmDelete:
