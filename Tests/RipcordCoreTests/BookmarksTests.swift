@@ -313,6 +313,11 @@ import Testing
         .text == "- [N](https://n.example)\nNotes\n```\ncode\n")
     let front = BookmarkFile(text: "---\n# generated\ntitle: x\n---\n# Dev\n")
     #expect(front.headings.map(\.title) == ["Dev"])
+    // A rule at the top that never closes is just a rule.
+    #expect(
+      BookmarkFile(text: "---\n# Docs\n- [A](https://a.example)\n").bookmarks.map(\.group) == [
+        "Docs"
+      ])
   }
 
   @Test func keepsTrailingSpacesOnAnEditedLine() throws {

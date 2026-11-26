@@ -101,7 +101,9 @@ public struct BookmarkFile: Equatable, Sendable {
     for (index, line) in lines.enumerated() {
       let trimmed = line.text.trimmingCharacters(in: Self.blank)
       // YAML front matter at the top is the file's settings, its `#` lines comments.
-      if index == 0, trimmed == "---" {
+      if index == 0, trimmed == "---",
+        lines.dropFirst().contains(where: { $0.text.trimmingCharacters(in: Self.blank) == "---" })
+      {
         fence = "---"
         continue
       }
