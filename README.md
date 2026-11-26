@@ -33,6 +33,8 @@
   terminal; ⌘K adds Open on GitHub, Show in Finder and Copy Path
 - Coffee: Caffeinate keeps the Mac and its display awake until Decaffeinate; type a time after
   it, as in `caffeinate 1h 30m`, to stop on its own. A cup with the time left shows in the menu bar
+- Sleep Timer: type a time after it, as in `sleep timer 30m`, then pick Sleep or Turn Off Display;
+  a moon with the time left shows in the menu bar until it fires or Stop Sleep Timer
 - HTTP Status Codes: look a code up by number or name, grouped by hundred; Return opens its MDN
   page and ⌘K copies the code or its name
 - CleanShot X: Capture Area, Window, Fullscreen and Previous Area, Scrolling Capture, Record

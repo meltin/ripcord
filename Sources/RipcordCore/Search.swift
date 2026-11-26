@@ -5,6 +5,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case clipboardHistory, searchSnippets, createSnippet, exportSnippets, importSnippets
   case searchRepositories, httpStatusCodes, settings
   case caffeinate, decaffeinate
+  case sleepTimer, stopSleepTimer
   case resetWindowPosition, quit
 
   public var title: String {
@@ -19,6 +20,8 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .settings: "Ripcord Settings"
     case .caffeinate: "Caffeinate"
     case .decaffeinate: "Decaffeinate"
+    case .sleepTimer: "Sleep Timer"
+    case .stopSleepTimer: "Stop Sleep Timer"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .quit: "Quit Ripcord"
     }
@@ -28,6 +31,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   public var group: String {
     switch self {
     case .caffeinate, .decaffeinate: "Coffee"
+    case .sleepTimer, .stopSleepTimer: "Sleep Timer"
     default: "Ripcord"
     }
   }
@@ -45,6 +49,8 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .settings: "command:settings"
     case .caffeinate: "command:caffeinate"
     case .decaffeinate: "command:decaffeinate"
+    case .sleepTimer: "command:sleep-timer"
+    case .stopSleepTimer: "command:stop-sleep-timer"
     case .resetWindowPosition: "command:reset-window-position"
     case .quit: "command:quit"
     }
@@ -145,6 +151,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case deleteAlias(String)
     /// Keeps the Mac awake for this many seconds; nil until Decaffeinate.
     case caffeinate(TimeInterval?)
+    /// Sleeps the Mac, or only turns its display off, after this many seconds.
+    case sleepTimer(TimeInterval, displayOnly: Bool)
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -344,20 +352,25 @@ public enum Search {
         keyword: keyword, kind: .quicklink, action: .open(url))
     }
 
-    // "caffeinate 1h 30m", or its alias and the time, as a Quicklink takes its query.
-    let caffeinateSettings = items[BuiltinCommand.caffeinate.settingsKey] ?? ItemSettings()
-    let caffeinateFor = [BuiltinCommand.caffeinate.title, caffeinateSettings.alias]
-      .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
-      .filter { !$0.isEmpty && caffeinateSettings.isEnabled }
-      .compactMap { name -> SearchResult? in
-        guard trimmed.lowercased().hasPrefix(name.lowercased() + " "),
-          let seconds = Coffee.duration(from: String(trimmed.dropFirst(name.count + 1)))
-        else { return nil }
-        return SearchResult(
-          id: "caffeinate-for", title: "Caffeinate for \(Coffee.format(seconds))",
-          subtitle: "Coffee", keyword: nil, kind: .command, action: .caffeinate(seconds))
-      }
-      .prefix(1)
+    // "caffeinate 1h 30m" or "sleep timer 30m", or an alias and the time, as a Quicklink takes
+    // its query.
+    let caffeinateFor = typedDuration(after: .caffeinate, in: trimmed, items: items).map {
+      SearchResult(
+        id: "caffeinate-for", title: "Caffeinate for \(Coffee.format($0))",
+        subtitle: "Coffee", keyword: nil, kind: .command, action: .caffeinate($0))
+    }
+    let sleepIn =
+      typedDuration(after: .sleepTimer, in: trimmed, items: items).map { seconds in
+        [
+          SearchResult(
+            id: "sleep-in", title: "Sleep in \(Coffee.format(seconds))", subtitle: "Sleep Timer",
+            keyword: nil, kind: .command, action: .sleepTimer(seconds, displayOnly: false)),
+          SearchResult(
+            id: "display-off-in", title: "Turn Off Display in \(Coffee.format(seconds))",
+            subtitle: "Sleep Timer", keyword: nil, kind: .command,
+            action: .sleepTimer(seconds, displayOnly: true)),
+        ]
+      } ?? []
 
     typealias Candidate = (names: [String], alias: String?, result: SearchResult)
     let appCandidates: [Candidate] = apps.compactMap { app in
@@ -411,7 +424,22 @@ public enum Search {
       .prefix(30)
       .map(\.result)
 
-    return [calculation].compactMap { $0 } + expanded + caffeinateFor + ranked
+    return [calculation].compactMap { $0 } + expanded + [caffeinateFor].compactMap { $0 } + sleepIn
+      + ranked
+  }
+
+  /// The time typed after `command`'s title or alias, as in "caffeinate 1h 30m"; nil when it's
+  /// switched off or what follows isn't a time.
+  private static func typedDuration(
+    after command: BuiltinCommand, in query: String, items: [String: ItemSettings]
+  ) -> TimeInterval? {
+    let settings = items[command.settingsKey] ?? ItemSettings()
+    guard settings.isEnabled else { return nil }
+    return [command.title, settings.alias]
+      .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
+      .filter { !$0.isEmpty && query.lowercased().hasPrefix($0.lowercased() + " ") }
+      .lazy.compactMap { Coffee.duration(from: String(query.dropFirst($0.count + 1))) }
+      .first
   }
 
   /// Clipboard History's list: pinned items, then the rest by the day they were last copied,
