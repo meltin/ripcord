@@ -163,11 +163,17 @@ final class ClipboardMonitor {
       event?.post(tap: .cghidEventTap)
     }
     // Queued after ⌘V, so the app moves the caret back once the text is in.
-    for _ in 0..<left {
+    // shortcut: counts the snippet's characters, so an app that reformats a paste (re-indents,
+    // turns tabs into spaces) ends off by that much, and ← doesn't cross lines in a terminal;
+    // set the caret through Accessibility (kAXSelectedTextRange) if that bites.
+    for _ in 0..<min(left, 2_000) {
       for isDown in [true, false] {
-        CGEvent(
-          keyboardEventSource: source, virtualKey: CGKeyCode(kVK_LeftArrow), keyDown: isDown)?
-          .post(tap: .cghidEventTap)
+        let event = CGEvent(
+          keyboardEventSource: source, virtualKey: CGKeyCode(kVK_LeftArrow), keyDown: isDown)
+        // Set outright, as a real arrow key sends them, so a ⌘ or ⇧ still held can't turn ←
+        // into ⌘← or ⇧←.
+        event?.flags = [.maskNumericPad, .maskSecondaryFn]
+        event?.post(tap: .cghidEventTap)
       }
     }
     return true

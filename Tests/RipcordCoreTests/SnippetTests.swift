@@ -47,6 +47,9 @@ import Testing
     #expect(first.snippets.map(\.name) == ["Thanks", "Address"])
     #expect(first.snippets[1].keyword == "addr")
     #expect(try Snippet.merging(raycast, into: first.snippets).added == 0)
+    let taken = try Snippet.merging(
+      raycast, into: [Snippet(name: "Home", text: "x", keyword: "addr")])
+    #expect(taken.snippets.first { $0.name == "Address" }?.keyword == nil)
   }
 
   @Test func exportsWhatImportReads() throws {
@@ -58,6 +61,7 @@ import Testing
   @Test func readsTagsAsTyped() {
     #expect(Snippet.tags(from: " work, mail ,,work ") == ["work", "mail"])
     #expect(Snippet.tags(from: " , ") == nil)
+    #expect(Snippet.tags(from: "仕事、メール，work") == ["仕事", "メール", "work"])
   }
 
   @Test func readsConfigsWrittenBeforeSnippetsExisted() throws {

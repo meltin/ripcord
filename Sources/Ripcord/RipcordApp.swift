@@ -94,7 +94,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     panel.allowedContentTypes = [.json]
     guard panel.runModal() == .OK, let url = panel.url else { return }
     do {
-      let snippets = (try? Config.load(from: configURL))?.snippets ?? config.snippets
+      // From the file as it is now; a file that doesn't read is reported, not covered up with
+      // an older list.
+      let snippets = try Config.load(from: configURL).snippets
       try Snippet.exportData(snippets).write(to: url, options: .atomic)
     } catch {
       showError("Couldn't export the snippets: \(error.localizedDescription)")

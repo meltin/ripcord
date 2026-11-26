@@ -270,6 +270,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private func hide() {
     panel.orderOut(nil)
     model.isPickingIcon = false
+    // A filter left on would hide snippets the next time, unasked.
+    model.snippetTag = nil
     restoreInputSource()
     model.mode = .root
     update("")
@@ -306,7 +308,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     if model.mode == .snippets {
       // A tag no snippet carries any more lists nothing; drop it.
-      if let tag = model.snippetTag, !snippets.contains(where: { $0.tags?.contains(tag) == true }) {
+      if let tag = model.snippetTag,
+        !snippets.contains(where: { !$0.text.isEmpty && $0.tags?.contains(tag) == true })
+      {
         model.snippetTag = nil
       }
       return Search.snippetSections(for: query, snippets: snippets, tag: model.snippetTag)
@@ -482,6 +486,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// An edit goes back to Search Snippets, where it started; anything else to the root search.
   private func goBack() {
+    model.isPickingIcon = false
     let source = model.mode == .snippetForm ? model.formSource : nil
     model.mode = source == nil ? .root : .snippets
     update("")
@@ -492,6 +497,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// A new snippet's draft survives the panel closing, as when clicking another app to copy
   /// something into it; it's cleared once saved.
   private func edit(_ index: Int?, duplicate: Bool = false) {
+    model.isPickingIcon = false
     let draftIsNew = model.formSource == nil
     let source = index.flatMap { snippets.indices.contains($0) ? $0 : nil }
     model.formSource = source
@@ -499,8 +505,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if let source {
       let snippet = snippets[source]
       model.draft = snippet
-      // A copy gets its own name, so the two can be told apart in the list.
-      if duplicate { model.draft.name = "\(snippet.name) Copy" }
+      // A copy gets its own name, and no keyword, which belongs to the original alone.
+      if duplicate {
+        model.draft.name = "\(snippet.name) Copy"
+        model.draft.keyword = nil
+      }
       model.tagsText = (snippet.tags ?? []).joined(separator: ", ")
     } else if !draftIsNew {
       model.draft = Snippet(name: "", text: "")
@@ -541,6 +550,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.tagsText = ""
     model.editing = nil
     model.formSource = nil
+    model.isPickingIcon = false
     // A filter that would hide the saved snippet is dropped.
     if let tag = model.snippetTag, draft.tags?.contains(tag) != true { model.snippetTag = nil }
     model.mode = .snippets

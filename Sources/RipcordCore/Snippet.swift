@@ -22,10 +22,13 @@ public struct Snippet: Codable, Equatable, Sendable {
     self.tags = tags
   }
 
-  /// Tags typed as "work, mail": trimmed, blanks and repeats dropped, nil when none are left.
+  /// Tags typed as "work, mail" (or with 、 and ，, as a Japanese input method types commas):
+  /// trimmed, blanks and repeats dropped, nil when none are left.
   public static func tags(from text: String) -> [String]? {
-    let tags = text.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-      .filter { !$0.isEmpty }
+    let tags = text.split(whereSeparator: { ",、，".contains($0) }).map {
+      $0.trimmingCharacters(in: .whitespaces)
+    }
+    .filter { !$0.isEmpty }
     let unique = tags.enumerated().filter { tags.prefix($0.offset).contains($0.element) == false }
       .map(\.element)
     return unique.isEmpty ? nil : unique
@@ -76,7 +79,8 @@ public struct Snippet: Codable, Equatable, Sendable {
     ]
   }
 
-  /// Snippets as a JSON file, in the shape Raycast exports and imports (name, text, keyword).
+  /// Snippets as a JSON file in Raycast's shape: name, text and keyword, which Raycast reads,
+  /// plus Ripcord's icon and tags.
   public static func exportData(_ snippets: [Snippet]) throws -> Data {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
@@ -90,8 +94,16 @@ public struct Snippet: Codable, Equatable, Sendable {
   ) {
     let imported = try JSONDecoder().decode([Snippet].self, from: data)
     let new = imported.reduce(into: [Snippet]()) { kept, snippet in
-      let seen = (current + kept).contains { $0.name == snippet.name && $0.text == snippet.text }
-      if !seen, !snippet.text.isEmpty { kept += [snippet] }
+      let all = current + kept
+      guard !snippet.text.isEmpty,
+        !all.contains(where: { $0.name == snippet.name && $0.text == snippet.text })
+      else { return }
+      // A keyword already in use stays with the snippet that had it.
+      var added = snippet
+      if let keyword = snippet.keyword, all.contains(where: { $0.keyword == keyword }) {
+        added.keyword = nil
+      }
+      kept += [added]
     }
     return (current + new, new.count)
   }

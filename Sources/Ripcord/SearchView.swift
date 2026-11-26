@@ -33,10 +33,12 @@ struct SearchView: View {
             placeholder: model.mode.placeholder,
             onChange: onQueryChange, onCommand: onCommand)
           if model.mode == .snippets {
+            // Only tags of listed snippets: one on a snippet without text would list nothing.
             TagFilter(
-              tags: Set(model.snippets.flatMap { $0.tags ?? [] }).sorted {
-                $0.localizedStandardCompare($1) == .orderedAscending
-              },
+              tags: Set(model.snippets.filter { !$0.text.isEmpty }.flatMap { $0.tags ?? [] })
+                .sorted {
+                  $0.localizedStandardCompare($1) == .orderedAscending
+                },
               selection: model.snippetTag
             ) { onCommand(.filterTag($0)) }
           }
@@ -447,6 +449,8 @@ private struct SnippetForm: View {
     .padding(.top, 12)
     .frame(maxHeight: .infinity, alignment: .top)
     .onAppear { focus = .text }
+    // Back to the name once the icon list closes, however it closed.
+    .onChange(of: model.isPickingIcon) { if !model.isPickingIcon { focus = .name } }
   }
 
   private func label(_ text: String) -> some View {
@@ -505,7 +509,6 @@ private struct IconPicker: View {
   let onClose: () -> Void
   @State private var query = ""
   @State private var highlighted = 0
-  @FocusState private var isSearchFocused: Bool
 
   private var matches: [(name: String, symbol: String)] {
     query.isEmpty ? snippetIcons : snippetIcons.filter { $0.name.localizedStandardContains(query) }
@@ -513,22 +516,26 @@ private struct IconPicker: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      TextField("Search…", text: $query)
-        .textFieldStyle(.plain)
-        .font(.system(size: 14))
-        .padding(.horizontal, 14)
-        .frame(height: 40)
-        .focused($isSearchFocused)
-        .onChange(of: query) { highlighted = 0 }
-        .onKeyPress(.downArrow) {
-          highlighted = min(highlighted + 1, max(matches.count - 1, 0))
-          return .handled
+      // The panel's own field, which leaves arrows and Return to the input method while it's
+      // composing, and takes focus as it appears.
+      SearchField(
+        text: query, placeholder: "Search…", fontSize: 14,
+        onChange: {
+          query = $0
+          highlighted = 0
+        },
+        onCommand: { command in
+          switch command {
+          case .down: highlighted = min(highlighted + 1, max(matches.count - 1, 0))
+          case .up: highlighted = max(highlighted - 1, 0)
+          case .submit: pick(highlighted)
+          case .cancel: onClose()
+          default: break
+          }
         }
-        .onKeyPress(.upArrow) {
-          highlighted = max(highlighted - 1, 0)
-          return .handled
-        }
-        .onSubmit { pick(highlighted) }
+      )
+      .padding(.horizontal, 14)
+      .frame(height: 40)
       Divider().opacity(0.5)
       ScrollViewReader { proxy in
         ScrollView {
@@ -561,7 +568,6 @@ private struct IconPicker: View {
     .frame(width: 240, height: 300)
     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
     .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
-    .onAppear { isSearchFocused = true }
   }
 
   private func pick(_ index: Int) {
@@ -927,6 +933,7 @@ extension SearchResult.Kind {
 private struct SearchField: NSViewRepresentable {
   let text: String
   let placeholder: String
+  var fontSize: CGFloat = 18
   let onChange: (String) -> Void
   let onCommand: (SearchCommand) -> Void
 
@@ -935,7 +942,7 @@ private struct SearchField: NSViewRepresentable {
     field.isBordered = false
     field.drawsBackground = false
     field.focusRingType = .none
-    field.font = .systemFont(ofSize: 18)
+    field.font = .systemFont(ofSize: fontSize)
     field.cell?.isScrollable = true
     field.delegate = context.coordinator
     return field
