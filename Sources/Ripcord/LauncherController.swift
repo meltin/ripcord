@@ -72,11 +72,17 @@ struct BookmarkDraft {
   var headings: [BookmarkFile.Heading] = []
   /// The bookmark being edited, its line as read; nil for a new one.
   var original: (line: Int, text: String)?
+  /// What the browser's tab filled in, which alone doesn't make a draft.
+  var prefilledTitle = ""
+  var prefilledURL = ""
 
   /// Whether anything has been typed or picked, so it's worth keeping.
   var isStarted: Bool {
     // A group picked other than No group counts; a new one only once it has a name.
-    !(title + url + description + newGroup).isEmpty || (heading.map { $0.line != -1 } ?? false)
+    let typedTitle = title == prefilledTitle ? "" : title
+    let typedURL = url == prefilledURL ? "" : url
+    return !(typedTitle + typedURL + description + newGroup).isEmpty
+      || (heading.map { $0.line != -1 } ?? false)
   }
 }
 
@@ -678,6 +684,55 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
   }
 
+  /// Fills a fresh Add Bookmark from the browser that was in front, as Raycast's does: the
+  /// script runs off the main thread, as the first run waits on macOS's Automation question, and
+  /// its answer goes in only while the form is still empty.
+  private func fillFromBrowser() {
+    // In front now: the panel doesn't activate Ripcord, and its hotkey may open the form
+    // before the panel shows.
+    guard let id = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+      let script = BrowserTab.script(forBundleID: id)
+    else { return }
+    tabRequest += 1
+    let request = tabRequest
+    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+      let output = Self.runAppleScript(script)
+      DispatchQueue.main.async {
+        MainActor.assumeIsolated { self?.fill(fromTab: output, request: request) }
+      }
+    }
+  }
+
+  /// Which browser question is the latest; an answer to an older one is dropped.
+  private var tabRequest = 0
+
+  private func fill(fromTab output: String, request: Int) {
+    let draft = model.bookmarkDraft
+    guard request == tabRequest, model.mode == .bookmarkForm, draft.original == nil,
+      draft.title.isEmpty, draft.url.isEmpty, let tab = BrowserTab.parse(output)
+    else { return }
+    model.bookmarkDraft.url = tab.url
+    model.bookmarkDraft.title = tab.title
+    model.bookmarkDraft.prefilledURL = tab.url
+    model.bookmarkDraft.prefilledTitle = tab.title
+  }
+
+  /// Runs `script` with osascript, which macOS asks about as Ripcord's; its output, or "" when
+  /// it fails, as when Automation is refused.
+  private nonisolated static func runAppleScript(_ script: String) -> String {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+    process.arguments = ["-e", script]
+    let output = Pipe()
+    process.standardOutput = output
+    // Not read, so it must not fill a pipe and stall the script.
+    process.standardError = FileHandle.nullDevice
+    do { try process.run() } catch { return "" }
+    let data = output.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    return process.terminationStatus == 0 ? String(decoding: data, as: UTF8.self) : ""
+  }
+
   /// Whether anything is typed in Create Snippet's form.
   private var snippetStarted: Bool {
     !(model.draft.name + model.draft.text + (model.draft.keyword ?? "") + model.tagsText).isEmpty
@@ -992,6 +1047,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
         // Raycast's starts on No group: the top of the file, above the first heading.
         let choices = groupChoices()
         model.bookmarkDraft = BookmarkDraft(heading: choices.first, headings: choices)
+        // Not when this closes the form, as its hotkey does over an open one.
+        if !(panel.isVisible && model.mode == .bookmarkForm) { fillFromBrowser() }
       }
       // From an edit, a new form rather than closing the panel, as its hotkey closes its own.
       if panel.isVisible, model.mode == .bookmarkForm, draft.original != nil {
