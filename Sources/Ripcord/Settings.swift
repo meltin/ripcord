@@ -34,10 +34,19 @@ final class SettingsModel {
   /// The Applications page's rows, worked out once per scan rather than on every redraw.
   private(set) var appEntries: [CatalogEntry] = []
 
+  /// Counts finished app scans, so a request can wait for one that started after it.
+  private(set) var appScans = 0
+  private var isScanningApps = false
+
+  /// Scans the apps in the background, unless a scan is already running.
   func loadApps() {
+    guard !isScanningApps else { return }
+    isScanningApps = true
     Task {
       apps = await Task.detached(priority: .userInitiated) { AppIndex.scan() }.value
       appEntries = Search.catalog(apps: apps, quicklinks: []).first?.entries ?? []
+      isScanningApps = false
+      appScans += 1
     }
   }
 
@@ -266,6 +275,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
   /// accessory app ask to come forward, and the request loses to the app the user was in.
   /// `configuring` turns to the page of the command or app with that settings key.
   func show(configuring key: String? = nil) {
+    // Each opening: apps installed since the last one show up, and Configure Command finds them.
+    model.loadApps()
     if let key { model.requestedKey = key }
     // On the screen the panel was on, the pointer's: `center()` alone uses the screen macOS
     // counts as main, which can be another display, and a closed window keeps its old place.
@@ -899,9 +910,9 @@ private struct ApplicationsPage: View {
   @State private var filter = ""
   /// The one app shown, by settings key, until the search is edited; the field shows its name.
   @State private var onlyApp: String?
-  /// An app asked for, until the scan has listed the apps. Kept here, not on the model, so
-  /// leaving the page drops it.
-  @State private var pendingApp: String?
+  /// An app asked for, and the scans finished when it was, so it waits for a fresh list. Kept
+  /// here, not on the model, so leaving the page drops it.
+  @State private var pendingApp: (key: String, scansBefore: Int)?
 
   private var entries: [CatalogEntry] {
     if let onlyApp { return model.appEntries.filter { $0.target == .item(onlyApp) } }
@@ -947,11 +958,13 @@ private struct ApplicationsPage: View {
     .onChange(of: model.requestedApp, initial: true) {
       guard let key = model.requestedApp else { return }
       model.requestedApp = nil
-      pendingApp = key
+      pendingApp = (key, model.appScans)
       showRequestedApp()
     }
-    .onChange(of: model.appEntries) { showRequestedApp() }
+    .onChange(of: model.appScans) { showRequestedApp() }
     .onChange(of: filter) {
+      // Typed while the list was coming: the user's search wins over the request.
+      if pendingApp != nil { pendingApp = nil }
       // Typing in the search ends the one-app view.
       if let onlyApp,
         model.appEntries.first(where: { $0.target == .item(onlyApp) })?.title != filter
@@ -963,13 +976,15 @@ private struct ApplicationsPage: View {
 
   /// Shows the app Configure Command asked for alone, once the scan has listed it.
   private func showRequestedApp() {
-    guard let key = pendingApp, !model.appEntries.isEmpty else { return }
+    guard let (key, scansBefore) = pendingApp, model.appScans > scansBefore else { return }
     pendingApp = nil
-    // One the scan doesn't list (run from Downloads, or installed since): the whole list,
-    // not an empty one nor the app asked for before.
+    // One the scan doesn't list, as an app run from Downloads: the whole list rather than an
+    // empty one or the app asked for before; a search the user typed stays.
     guard let entry = model.appEntries.first(where: { $0.target == .item(key) }) else {
-      onlyApp = nil
-      filter = ""
+      if onlyApp != nil {
+        onlyApp = nil
+        filter = ""
+      }
       return
     }
     // An edit on a row about to be hidden would go on unseen, a recording swallowing keys.
