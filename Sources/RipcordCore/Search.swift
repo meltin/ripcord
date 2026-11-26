@@ -3,7 +3,7 @@ import Foundation
 /// Commands Ripcord runs itself, listed alongside apps.
 public enum BuiltinCommand: CaseIterable, Sendable {
   case clipboardHistory, searchSnippets, createSnippet, exportSnippets, importSnippets
-  case searchRepositories, settings
+  case searchRepositories, httpStatusCodes, settings
   case caffeinate, decaffeinate
   case resetWindowPosition, quit
 
@@ -12,6 +12,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .clipboardHistory: "Clipboard History"
     case .searchSnippets: "Search Snippets"
     case .searchRepositories: "Search Repositories"
+    case .httpStatusCodes: "HTTP Status Codes"
     case .createSnippet: "Create Snippet"
     case .exportSnippets: "Export Snippets"
     case .importSnippets: "Import Snippets"
@@ -37,6 +38,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .clipboardHistory: "command:clipboard-history"
     case .searchSnippets: "command:search-snippets"
     case .searchRepositories: "command:search-repositories"
+    case .httpStatusCodes: "command:http-status-codes"
     case .createSnippet: "command:create-snippet"
     case .exportSnippets: "command:export-snippets"
     case .importSnippets: "command:import-snippets"
@@ -153,7 +155,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   }
 
   public enum Kind: Equatable, Sendable {
-    case application, calculator, quicklink, command, text, image, snippet, repository
+    case application, calculator, quicklink, command, text, image, snippet, repository, statusCode
 
     public var primaryAction: String {
       switch self {
@@ -161,6 +163,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
       case .text, .image, .snippet: "Paste to App"
       case .application, .quicklink, .command: "Open Command"
       case .repository: "Open"
+      case .statusCode: "Open in Browser"
       }
     }
   }
