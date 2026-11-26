@@ -89,6 +89,27 @@ private func temporaryDirectory() -> URL {
     }
   }
 
+  @Test func keepsACopiedImageFileAsThatImage() throws {
+    // CleanShot X copies a capture as its file plus PNG data; Finder copies a file the same way.
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let file = directory.appending(path: "CleanShot.png")
+    let data = try png(width: 5, height: 4)
+    try data.write(to: file)
+    withPasteboard { pasteboard in
+      pasteboard.writeObjects([file as NSURL])
+      #expect(
+        ClipCapture.read(pasteboard) == .image(data, fileExtension: "png", width: 5, height: 4))
+    }
+    let notes = directory.appending(path: "notes.txt")
+    try Data("hi".utf8).write(to: notes)
+    withPasteboard { pasteboard in
+      pasteboard.writeObjects([file as NSURL, notes as NSURL])
+      #expect(ClipCapture.read(pasteboard) == nil)
+    }
+  }
+
   @Test func keepsASpreadsheetCellAsText() throws {
     let data = try png(width: 3, height: 2)
     withPasteboard { pasteboard in
@@ -148,6 +169,39 @@ private func temporaryDirectory() -> URL {
     #expect(!FileManager.default.fileExists(atPath: imageURL.path))
   }
 
+  @Test func countsCopiesAndKeepsWhereAndWhenItWasFirstCopied() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var history = ClipboardHistory(directory: directory)
+    try history.add(.text("a"), at: Date(timeIntervalSince1970: 1), from: "com.apple.Safari")
+    try history.add(.text("b"), at: Date(timeIntervalSince1970: 2))
+    try history.add(.text("a"), at: Date(timeIntervalSince1970: 3), from: "com.apple.Notes")
+    let item = history.items[0]
+    #expect(item.content == .text("a"))
+    #expect(item.copies == 2)
+    #expect(item.source == "com.apple.Safari")
+    #expect(item.firstDate == Date(timeIntervalSince1970: 1))
+    #expect(item.date == Date(timeIntervalSince1970: 3))
+    try history.touch(history.items[1].id, at: Date(timeIntervalSince1970: 4))
+    #expect(history.items.map(\.content) == [.text("b"), .text("a")])
+    #expect(history.items[0].copies == 2)
+  }
+
+  @Test func readsAHistoryWrittenBeforeCopyDetailsExisted() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let id = UUID()
+    let json = """
+      [{"id":"\(id.uuidString)","content":{"text":{"_0":"old"}},"digest":"x","date":0,\
+      "isPinned":true}]
+      """
+    try Data(json.utf8).write(to: directory.appending(path: "history.json"))
+    let item = try #require(ClipboardHistory(directory: directory).items.first)
+    #expect(item.id == id && item.isPinned && item.copies == 1 && item.source == nil)
+    #expect(item.firstDate == item.date)
+  }
+
   @Test func survivesARelaunch() throws {
     let directory = temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -178,7 +232,7 @@ private func temporaryDirectory() -> URL {
     try history.add(.text("pin me"))
     try history.togglePin(history.items[0].id)
     let sections = Search.clipboardSections(for: "", history: history)
-    #expect(sections.map(\.title) == ["Pinned", "Recent"])
+    #expect(sections.map(\.title) == ["Pinned", "Today"])
     #expect(sections[0].results.map(\.title) == ["pin me"])
     #expect(sections[1].results.map(\.title) == ["first line second line"])
   }
@@ -190,12 +244,28 @@ private func temporaryDirectory() -> URL {
     try history.add(.text("Hello World"))
     try history.add(.image(try png(width: 2, height: 2), fileExtension: "png", width: 2, height: 2))
     let found = Search.clipboardSections(for: "world", history: history)
-    #expect(found.map(\.title) == ["Results"])
+    #expect(found.map(\.title) == ["Today"])
     #expect(found[0].results.map(\.title) == ["Hello World"])
     let image = try #require(Search.clipboardSections(for: "image", history: history).first)
     #expect(image.results.map(\.subtitle) == ["2×2"])
     #expect(image.results[0].thumbnail != nil)
     #expect(Search.clipboardSections(for: "zzz", history: history).isEmpty)
+  }
+
+  @Test func groupsByTheDayItWasLastCopied() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
+    let now = Date(timeIntervalSince1970: 10 * 86_400 + 3_600)
+    var history = ClipboardHistory(directory: directory)
+    try history.add(.text("last week"), at: now.addingTimeInterval(-7 * 86_400))
+    try history.add(.text("yesterday"), at: now.addingTimeInterval(-86_400))
+    try history.add(.text("today"), at: now)
+    let sections = Search.clipboardSections(
+      for: "", history: history, now: now, calendar: calendar)
+    #expect(sections.map(\.title) == ["Today", "Yesterday", "Earlier"])
+    #expect(sections.map { $0.results.map(\.title) } == [["today"], ["yesterday"], ["last week"]])
   }
 
   @Test func offersPasteCopyPinAndDelete() throws {

@@ -19,6 +19,8 @@ enum LauncherMode {
 @Observable
 final class LauncherModel {
   var mode = LauncherMode.root
+  /// The history the clipboard rows were built from, for the preview of the selected one.
+  var clipboard: ClipboardHistory?
   var query = ""
   var sections: [SearchSection] = []
   var selection = 0
@@ -30,7 +32,7 @@ final class LauncherModel {
 }
 
 enum SearchCommand {
-  case up, down, submit, cancel
+  case up, down, submit, cancel, back
   case activate(String)
   case toggleMenu(root: Bool)
   case runMenuItem(Int)
@@ -200,6 +202,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   private func sections(for query: String) -> [SearchSection] {
     if model.mode == .clipboard {
+      model.clipboard = clipboard.history
       return Search.clipboardSections(for: query, history: clipboard.history)
     }
     let running = NSWorkspace.shared.runningApplications
@@ -241,6 +244,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .cancel:
       // Like Raycast: Esc leaves a command's list for the root search first.
       guard model.mode != .root, !closesOnCancel else { return hide() }
+      model.mode = .root
+      update("")
+    case .back:
       model.mode = .root
       update("")
     case .activate(let id): model.results.first { $0.id == id }.map { perform($0.action) }

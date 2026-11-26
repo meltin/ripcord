@@ -38,7 +38,8 @@ final class ClipboardMonitor {
     guard isEnabled, pasteboard.changeCount != changeCount else { return }
     changeCount = pasteboard.changeCount
     guard let capture = ClipCapture.read(pasteboard) else { return }
-    update { try $0.add(capture) }
+    let source = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+    update { try $0.add(capture, from: source) }
   }
 
   func togglePin(_ id: UUID) { update { try $0.togglePin(id) } }
@@ -54,21 +55,31 @@ final class ClipboardMonitor {
     onChange()
   }
 
-  /// Puts `id` on the pasteboard; the next poll moves it to the top of the history.
+  /// Puts `id` on the pasteboard and moves it to the top of the history.
   func copy(_ id: UUID) -> Bool {
     guard let item = history.item(id) else { return false }
+    let written: Bool
     switch item.content {
     case .text(let text):
       pasteboard.clearContents()
-      return pasteboard.setString(text, forType: .string)
+      written = pasteboard.setString(text, forType: .string)
     case .image:
       // Read before clearing, so a missing file leaves what the user has copied alone.
       guard let url = history.imageURL(of: item), let data = try? Data(contentsOf: url) else {
         return false
       }
       pasteboard.clearContents()
-      return pasteboard.setData(data, forType: url.pathExtension == "png" ? .png : .tiff)
+      switch url.pathExtension {
+      case "png": written = pasteboard.setData(data, forType: .png)
+      case "tiff": written = pasteboard.setData(data, forType: .tiff)
+      // A JPEG or HEIC from a copied file goes back as an image every app can paste.
+      default: written = NSImage(data: data).map { pasteboard.writeObjects([$0]) } ?? false
+      }
     }
+    // Ripcord's own write isn't a new copy; count it here instead of on the next poll.
+    changeCount = pasteboard.changeCount
+    if written { update { try $0.touch(id) } }
+    return written
   }
 
   /// Asked for once per launch, so a dismissed request doesn't come back on every Return.

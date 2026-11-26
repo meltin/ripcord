@@ -13,7 +13,14 @@ struct SearchView: View {
     VStack(spacing: 0) {
       HStack(spacing: 12) {
         if model.mode == .clipboard {
-          Image(systemName: "list.clipboard").font(.system(size: 16)).foregroundStyle(.secondary)
+          HoverButton {
+            onCommand(.back)
+          } label: {
+            Image(systemName: "chevron.left")
+              .font(.system(size: 15, weight: .medium))
+              .frame(width: 28, height: 28)
+          }
+          .accessibilityLabel("Back")
         } else if let logo = Bundle.main.image(forResource: "MenuBarIcon") {
           Image(nsImage: logo).renderingMode(.template).foregroundStyle(.secondary)
         }
@@ -29,12 +36,27 @@ struct SearchView: View {
       Divider().opacity(0.5)
       if model.sections.isEmpty {
         EmptyState(query: model.query, mode: model.mode)
+      } else if model.mode == .clipboard {
+        // Raycast's layout: the list on the left, the selected item and its details on the right.
+        HStack(spacing: 0) {
+          resultList.frame(width: 300)
+          Divider().opacity(0.5)
+          if case .clip(let id, _) = model.selected?.action, let history = model.clipboard,
+            let item = history.item(id)
+          {
+            ClipPreview(item: item, imageURL: history.imageURL(of: item))
+          } else {
+            Spacer()
+          }
+        }
       } else {
         resultList
       }
     }
     // Floats over the list like Raycast's footer, so rows scroll on underneath it.
-    .overlay(alignment: .bottom) { Footer(selected: model.selected, onCommand: onCommand) }
+    .overlay(alignment: .bottom) {
+      Footer(selected: model.selected, mode: model.mode, onCommand: onCommand)
+    }
     .overlay {
       if let menu = model.menu {
         ZStack(alignment: menu.isRoot ? .bottomLeading : .bottomTrailing) {
@@ -60,9 +82,12 @@ struct SearchView: View {
               .padding(.top, 10)
               .padding(.bottom, 4)
             ForEach(section.results) { result in
-              ResultRow(result: result, isSelected: result.id == selectedID)
-                .id(result.id)
-                .onTapGesture { onCommand(.activate(result.id)) }
+              ResultRow(
+                result: result, isSelected: result.id == selectedID,
+                showsKind: model.mode == .root
+              )
+              .id(result.id)
+              .onTapGesture { onCommand(.activate(result.id)) }
             }
           }
         }
@@ -111,6 +136,8 @@ private struct EmptyState: View {
 private struct ResultRow: View {
   let result: SearchResult
   let isSelected: Bool
+  /// Off in Clipboard History, whose narrow list has no room for it.
+  var showsKind = true
 
   var body: some View {
     HStack(spacing: 12) {
@@ -128,7 +155,9 @@ private struct ResultRow: View {
           .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
       }
       Spacer(minLength: 12)
-      Text(result.kind.label).font(.system(size: 13)).foregroundStyle(.secondary)
+      if showsKind {
+        Text(result.kind.label).font(.system(size: 13)).foregroundStyle(.secondary)
+      }
     }
     .padding(.horizontal, 12)
     .frame(height: LauncherController.rowHeight)
@@ -166,9 +195,9 @@ private struct ResultIcon: View {
       tile("list.clipboard.fill", .red)
     case .clip:
       if let thumbnail = result.thumbnail {
-        Thumbnail(url: thumbnail)
+        Thumbnail(url: thumbnail, maxPixelSize: 64).frame(width: 24, height: 24)
       } else {
-        tile("text.alignleft", .gray)
+        tile("doc.text", .gray)
       }
     }
   }
@@ -182,13 +211,107 @@ private struct ResultIcon: View {
   }
 }
 
-/// A clipboard image drawn small. Decoded off the main thread at icon size and cached, so a
-/// screenshot in the history never sits in memory at full size.
+/// The selected clip in full, then its details, as Raycast's Clipboard History shows them.
+private struct ClipPreview: View {
+  let item: ClipItem
+  let imageURL: URL?
+
+  private var details: [(label: String, value: String)] {
+    var rows = [(label: String, value: String)]()
+    switch item.content {
+    case .text(let text):
+      rows.append(("Type", "Text"))
+      rows.append(("Characters", "\(text.count)"))
+      rows.append(("Words", "\(text.split(whereSeparator: \.isWhitespace).count)"))
+    case .image(_, let width, let height):
+      rows.append(("Type", "Image"))
+      rows.append(("Dimensions", "\(width)×\(height)"))
+    }
+    rows.append(("Times copied", "\(item.copies)"))
+    rows.append(("Last copied", item.date.formatted(date: .abbreviated, time: .shortened)))
+    rows.append(("First copied", item.firstDate.formatted(date: .abbreviated, time: .shortened)))
+    return rows
+  }
+
+  private var sourceApp: URL? {
+    item.source.flatMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Group {
+        switch item.content {
+        case .text(let text):
+          ScrollView {
+            // A 1 MB clip would stall layout; the start is what anyone reads here.
+            Text(String(text.prefix(20_000)))
+              .font(.system(size: 12))
+              .textSelection(.enabled)
+              .frame(maxWidth: .infinity, alignment: .topLeading)
+              .padding(16)
+          }
+        case .image:
+          if let imageURL {
+            Thumbnail(url: imageURL, maxPixelSize: 800)
+              .padding(16)
+              .frame(maxWidth: .infinity, maxHeight: .infinity)
+          }
+        }
+      }
+      .frame(maxHeight: .infinity)
+      Divider().opacity(0.5)
+      VStack(alignment: .leading, spacing: 2) {
+        Text("Information")
+          .font(.system(size: 12, weight: .medium))
+          .foregroundStyle(.secondary)
+          .padding(.horizontal, 8)
+          .padding(.bottom, 4)
+        if let sourceApp {
+          detailRow("Source", index: 0) {
+            HStack(spacing: 6) {
+              Image(nsImage: NSWorkspace.shared.icon(forFile: sourceApp.path)).resizable()
+                .frame(width: 16, height: 16)
+              Text(FileManager.default.displayName(atPath: sourceApp.path))
+            }
+          }
+        }
+        ForEach(Array(details.enumerated()), id: \.offset) { index, row in
+          detailRow(row.label, index: index + (sourceApp == nil ? 0 : 1)) { Text(row.value) }
+        }
+      }
+      .font(.system(size: 12))
+      .padding(.horizontal, 8)
+      .padding(.top, 10)
+      // Clear of the floating footer.
+      .padding(.bottom, LauncherController.footerHeight)
+    }
+  }
+
+  private func detailRow<Value: View>(
+    _ label: String, index: Int, @ViewBuilder value: () -> Value
+  ) -> some View {
+    HStack {
+      Text(label).foregroundStyle(.secondary)
+      Spacer()
+      value()
+    }
+    .padding(.horizontal, 8)
+    .frame(height: 24)
+    .background(
+      index.isMultiple(of: 2) ? Color.primary.opacity(0.05) : .clear,
+      in: RoundedRectangle(cornerRadius: 6))
+  }
+}
+
+/// A clipboard image, decoded off the main thread at `maxPixelSize` and cached, so a screenshot
+/// in the history never sits in memory at full size.
 private struct Thumbnail: View {
   let url: URL
+  let maxPixelSize: Int
   @State private var image: NSImage?
 
-  private static let cache = NSCache<NSURL, NSImage>()
+  private static let cache = NSCache<NSString, NSImage>()
+  private var key: NSString { "\(maxPixelSize)/\(url.path)" as NSString }
 
   var body: some View {
     Group {
@@ -198,24 +321,24 @@ private struct Thumbnail: View {
         Color.clear
       }
     }
-    .frame(width: 24, height: 24)
-    .task(id: url) {
-      if let cached = Self.cache.object(forKey: url as NSURL) {
+    .task(id: key) {
+      if let cached = Self.cache.object(forKey: key) {
         image = cached
         return
       }
-      let made = await Task.detached(priority: .userInitiated) { [url] () -> CGImage? in
+      let made = await Task.detached(priority: .userInitiated) {
+        [url, maxPixelSize] () -> CGImage? in
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         let options: [CFString: Any] = [
           kCGImageSourceCreateThumbnailFromImageAlways: true,
-          kCGImageSourceThumbnailMaxPixelSize: 64,
+          kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
           kCGImageSourceCreateThumbnailWithTransform: true,
         ]
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
       }.value
       guard let made else { return }
       let thumbnail = NSImage(cgImage: made, size: .zero)
-      Self.cache.setObject(thumbnail, forKey: url as NSURL)
+      Self.cache.setObject(thumbnail, forKey: key)
       image = thumbnail
     }
   }
@@ -223,19 +346,35 @@ private struct Thumbnail: View {
 
 private struct Footer: View {
   let selected: SearchResult?
+  let mode: LauncherMode
   let onCommand: (SearchCommand) -> Void
 
   var body: some View {
     HStack {
-      HoverButton {
-        onCommand(.toggleMenu(root: true))
-      } label: {
-        Image(systemName: "equal")
-          .font(.system(size: 15, weight: .medium))
-          .frame(width: 32, height: 32)
+      if mode == .clipboard {
+        // Names the command the panel is in, as Raycast's footer does.
+        HStack(spacing: 8) {
+          Image(systemName: "list.clipboard.fill")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 18, height: 18)
+            .background(Color.red.gradient, in: RoundedRectangle(cornerRadius: 5))
+          Text("Clipboard History")
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 32)
+        .glassEffect(.regular, in: Capsule())
+      } else {
+        HoverButton {
+          onCommand(.toggleMenu(root: true))
+        } label: {
+          Image(systemName: "equal")
+            .font(.system(size: 15, weight: .medium))
+            .frame(width: 32, height: 32)
+        }
+        .glassEffect(.regular.interactive(), in: Circle())
+        .accessibilityLabel("Ripcord menu")
       }
-      .glassEffect(.regular.interactive(), in: Circle())
-      .accessibilityLabel("Ripcord menu")
       Spacer()
       HStack(spacing: 2) {
         if let selected {
@@ -316,7 +455,9 @@ private struct MenuCard: View {
           onCommand(.runMenuItem(index))
         } label: {
           HStack(spacing: 10) {
-            Image(systemName: item.symbol).frame(width: 18)
+            Image(systemName: item.symbol)
+              .font(.system(size: 13, weight: .light))
+              .frame(width: 18)
             Text(item.title)
             Spacer(minLength: 16)
             HStack(spacing: 3) {
@@ -351,12 +492,14 @@ struct Keycap: View {
   init(_ label: String) { self.label = label }
 
   var body: some View {
+    // Filled and softly edged, like Raycast's keycaps.
     Text(label)
-      .font(.system(size: 10))
+      .font(.system(size: 10, weight: .medium))
       .foregroundStyle(.secondary)
       .padding(.horizontal, 4)
       .frame(minWidth: 18, minHeight: 18)
-      .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.secondary.opacity(0.45)))
+      .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 4))
+      .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.12)))
   }
 }
 

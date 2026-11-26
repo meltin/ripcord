@@ -218,13 +218,14 @@ public enum Search {
     return [calculation].compactMap { $0 } + expanded + ranked
   }
 
-  /// Clipboard History's list: pinned items, then the rest, newest first, each kept to items
-  /// whose text contains the query. Images match "image".
-  public static func clipboardSections(for query: String, history: ClipboardHistory)
-    -> [SearchSection]
-  {
+  /// Clipboard History's list: pinned items, then the rest by the day they were last copied,
+  /// newest first, each kept to items whose text contains the query. Images match "image".
+  public static func clipboardSections(
+    for query: String, history: ClipboardHistory, now: Date = .now,
+    calendar: Calendar = .current
+  ) -> [SearchSection] {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
-    let results = history.items.compactMap { item -> SearchResult? in
+    let matches = history.items.compactMap { item -> (item: ClipItem, result: SearchResult)? in
       let id = "clip:\(item.id)"
       let action = SearchResult.Action.clip(item.id, .paste)
       switch item.content {
@@ -232,21 +233,34 @@ public enum Search {
         guard trimmed.isEmpty || text.localizedStandardContains(trimmed) else { return nil }
         // All of it on one line, as Raycast shows it, so a second line isn't hidden.
         let line = text.prefix(1000).split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        return SearchResult(
-          id: id, title: String(line.prefix(200)), subtitle: "", keyword: nil, kind: .text,
-          action: action, isPinned: item.isPinned)
+        return (
+          item,
+          SearchResult(
+            id: id, title: String(line.prefix(200)), subtitle: "", keyword: nil, kind: .text,
+            action: action, isPinned: item.isPinned)
+        )
       case .image(_, let width, let height):
         guard trimmed.isEmpty || "image".localizedStandardContains(trimmed) else { return nil }
-        return SearchResult(
-          id: id, title: "Image", subtitle: "\(width)×\(height)", keyword: nil, kind: .image,
-          action: action, thumbnail: history.imageURL(of: item), isPinned: item.isPinned)
+        return (
+          item,
+          SearchResult(
+            id: id, title: "Image", subtitle: "\(width)×\(height)", keyword: nil, kind: .image,
+            action: action, thumbnail: history.imageURL(of: item), isPinned: item.isPinned)
+        )
       }
     }
-    return [
-      SearchSection(title: "Pinned", results: results.filter(\.isPinned)),
+    let yesterday = calendar.date(byAdding: .day, value: -1, to: now) ?? now
+    func day(of item: ClipItem) -> String {
+      if calendar.isDate(item.date, inSameDayAs: now) { return "Today" }
+      return calendar.isDate(item.date, inSameDayAs: yesterday) ? "Yesterday" : "Earlier"
+    }
+    let pinned = matches.filter(\.item.isPinned).map(\.result)
+    let unpinned = matches.filter { !$0.item.isPinned }
+    let days = ["Today", "Yesterday", "Earlier"].map { title in
       SearchSection(
-        title: trimmed.isEmpty ? "Recent" : "Results", results: results.filter { !$0.isPinned }),
-    ].filter { !$0.results.isEmpty }
+        title: title, results: unpinned.filter { day(of: $0.item) == title }.map(\.result))
+    }
+    return ([SearchSection(title: "Pinned", results: pinned)] + days).filter { !$0.results.isEmpty }
   }
 
   /// Every app, Quicklink and command the Shortcuts page lists, in its three sections. Disabled
