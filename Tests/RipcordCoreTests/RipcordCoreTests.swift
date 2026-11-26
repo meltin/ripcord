@@ -169,6 +169,20 @@ import Testing
     #expect(config.launchAtLogin == false)
   }
 
+  @Test func savesTheInputSourceOnlyWhenOneIsChosen() throws {
+    let url = FileManager.default.temporaryDirectory
+      .appending(path: UUID().uuidString).appending(path: "config.json")
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    try Config.default.save(to: url)
+    // Off writes no key, so a config saved before this setting existed stays byte-identical.
+    #expect(try !String(contentsOf: url, encoding: .utf8).contains("inputSource"))
+    #expect(try Config.load(from: url).inputSource == nil)
+    var config = Config.default
+    config.inputSource = "com.apple.keylayout.ABC"
+    try config.save(to: url)
+    #expect(try Config.load(from: url).inputSource == "com.apple.keylayout.ABC")
+  }
+
   @Test func savesEditsAndReadsThemBack() throws {
     let url = FileManager.default.temporaryDirectory
       .appending(path: UUID().uuidString).appending(path: "config.json")

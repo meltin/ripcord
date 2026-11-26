@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import RipcordCore
 import SwiftUI
 
@@ -70,6 +71,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
       update(model.query)
     }
   }
+  /// The input source selected while the panel is open, by TIS ID; nil leaves it alone.
+  var inputSource: String?
+  /// What the panel switched away from, put back when it closes.
+  private var previousInputSource: TISInputSource?
   var onOpenSettings: () -> Void = {}
   var isVisible: Bool { panel.isVisible }
 
@@ -140,7 +145,25 @@ final class LauncherController: NSObject, NSWindowDelegate {
     isPlacing = true
     panel.setFrameTopLeftPoint(savedTopLeft() ?? defaultTopLeft())
     isPlacing = false
+    switchInputSource()
     panel.makeKeyAndOrderFront(nil)
+  }
+
+  private func switchInputSource() {
+    // Already switched when show() runs again on a visible panel (a command's hotkey).
+    guard previousInputSource == nil, let id = inputSource, let target = InputSource.enabled(id)
+    else { return }
+    let current = InputSource.current()
+    guard InputSource.id(of: current) != id else { return }
+    previousInputSource = current
+    InputSource.select(target)
+  }
+
+  /// Taken and cleared: hide() runs again when hiding resigns the panel's key status.
+  private func restoreInputSource() {
+    guard let previous = previousInputSource else { return }
+    previousInputSource = nil
+    InputSource.select(previous)
   }
 
   /// Saves where the user dragged the panel; moves made by `show()` itself don't count.
@@ -185,6 +208,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   private func hide() {
     panel.orderOut(nil)
+    restoreInputSource()
     model.mode = .root
     update("")
   }
