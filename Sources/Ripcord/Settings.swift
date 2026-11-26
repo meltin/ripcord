@@ -16,8 +16,9 @@ final class SettingsModel {
   var onRecordingChange: (Bool) -> Void = { _ in }
   /// A command's settings key whose page the window should turn to, from Configure Command.
   var requestedKey: String?
-  /// An app's name to filter the Applications page by, from Open Command Settings on its row.
-  var requestedAppFilter: String?
+  /// The app whose row the Applications page shows alone, by settings key: set through
+  /// `requestedKey` by Configure Command and Open Command Settings on an app's row.
+  var requestedApp: String?
   /// Hotkeys macOS refused at the last registration, shown on their rows.
   var failedHotkeys: Set<HotkeyTarget> = []
   /// Scanned when the Applications page first appears, so the window costs nothing until then.
@@ -529,8 +530,8 @@ struct SettingsView: View {
       }) {
         page = commandPage
       } else {
-        // A key no page lists as a command is an app's: its page, filtered down to it.
-        model.requestedAppFilter = model.name(of: .item(key))
+        // A key no page lists as a command is an app's: its page, showing its row alone.
+        model.requestedApp = key
         page = .applications
       }
       model.requestedKey = nil
@@ -896,9 +897,12 @@ private struct ShortcutsHeading: View {
 private struct ApplicationsPage: View {
   @Bindable var model: SettingsModel
   @State private var filter = ""
+  /// The one app shown, by settings key, until the search is edited; the field shows its name.
+  @State private var onlyApp: String?
 
   private var entries: [CatalogEntry] {
-    filter.isEmpty
+    if let onlyApp { return model.appEntries.filter { $0.target == .item(onlyApp) } }
+    return filter.isEmpty
       ? model.appEntries
       : model.appEntries.filter {
         $0.title.localizedCaseInsensitiveContains(filter)
@@ -935,11 +939,28 @@ private struct ApplicationsPage: View {
     .padding(.top, 44)
     .padding(.bottom, 20)
     .onAppear { if model.apps.isEmpty { model.loadApps() } }
-    .onChange(of: model.requestedAppFilter, initial: true) {
-      guard let name = model.requestedAppFilter else { return }
-      filter = name
-      model.requestedAppFilter = nil
+    // Waits for the scan: an app it didn't list (one run from Downloads, say) leaves the whole
+    // list showing rather than an empty one.
+    .onChange(of: model.requestedApp, initial: true) { showRequestedApp() }
+    .onChange(of: model.appEntries) { showRequestedApp() }
+    .onChange(of: filter) {
+      // Typing in the search ends the one-app view.
+      if let onlyApp,
+        model.appEntries.first(where: { $0.target == .item(onlyApp) })?.title != filter
+      {
+        self.onlyApp = nil
+      }
     }
+  }
+
+  /// Shows the app Configure Command asked for alone, once the scan has listed it.
+  private func showRequestedApp() {
+    guard let key = model.requestedApp, !model.appEntries.isEmpty else { return }
+    model.requestedApp = nil
+    // Not in the scanned list: the whole list stays, rather than an empty one.
+    guard let entry = model.appEntries.first(where: { $0.target == .item(key) }) else { return }
+    onlyApp = key
+    filter = entry.title
   }
 }
 
