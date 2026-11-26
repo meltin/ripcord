@@ -607,6 +607,7 @@ private struct GeneralPage: View {
         .fixedSize()
         // Read on each visit, so a source enabled meanwhile shows up.
         .onAppear { inputSources = InputSource.selectable() }
+    .thinScroller()
       }
     }
     Card {
@@ -872,6 +873,7 @@ private struct AliasField: View {
 
   private var isEditing: Bool { model.editingAlias == target }
 
+        .thinScroller()
   var body: some View {
     let alias = model.alias(of: target)
     Group {
@@ -1149,9 +1151,6 @@ private struct AppPicker: View {
   /// macOS's popover corner is about 20pt; rows inset 8pt round at 12pt to sit inside it evenly.
   private static let inset: CGFloat = 8
   private static let rowRadius: CGFloat = 12
-  @State private var scroll: ScrollGeometry?
-  /// Shown only while scrolling and briefly after, as Raycast's scroll bar is.
-  @State private var isScrolling = false
   @FocusState private var isSearchFocused: Bool
 
   /// nil stands for the "none" row.
@@ -1182,24 +1181,7 @@ private struct AppPicker: View {
           // The popover's corner radius less this inset is the rows', so the corners nest.
           .padding(Self.inset)
         }
-        // .never, not .hidden: with scroll bars set to always show, .hidden still draws the
-        // system scroller beside the thumb below.
-        .scrollIndicators(.never)
-        .onScrollGeometryChange(for: ScrollGeometry.self) {
-          $0
-        } action: {
-          scroll = $1
-        }
-        .onScrollPhaseChange { _, phase in
-          if phase.isScrolling {
-            withAnimation(.easeOut(duration: 0.15)) { isScrolling = true }
-          } else {
-            withAnimation(.easeOut(duration: 0.4).delay(0.6)) { isScrolling = false }
-          }
-        }
-        .overlay(alignment: .topTrailing) {
-          ScrollThumb(geometry: scroll).opacity(isScrolling ? 1 : 0)
-        }
+        .thinScroller()
         .onChange(of: highlighted) { proxy.scrollTo(highlighted) }
       }
       // At the bottom, as Raycast's: the list's top and bottom corners stay clear for the thumb.
@@ -1210,6 +1192,8 @@ private struct AppPicker: View {
         .padding(.horizontal, 14)
         .frame(height: 40)
         .onChange(of: query) { highlighted = 0 }
+        // Frosted, between the default glass that let what's behind wash out the names and opaque.
+        .presentationBackground(.regularMaterial)
         .onKeyPress(.downArrow) {
           highlighted = min(highlighted + 1, max(rows.count - 1, 0))
           return .handled
@@ -1253,30 +1237,6 @@ private struct AppPicker: View {
         .fill(Color.primary.opacity(isHighlighted ? 0.08 : 0))
     )
     .contentShape(RoundedRectangle(cornerRadius: Self.rowRadius))
-  }
-}
-
-/// A thin, always-shown scroll thumb in the list's margin, as Raycast draws its own, so it's
-/// plain from the start that the list goes on.
-private struct ScrollThumb: View {
-  let geometry: ScrollGeometry?
-
-  var body: some View {
-    if let geometry, geometry.contentSize.height > geometry.containerSize.height + 1 {
-      // Clear of the popover's rounded top corner and the divider below.
-      let inset: CGFloat = 12
-      let track = geometry.containerSize.height - inset * 2
-      let visible = geometry.containerSize.height / geometry.contentSize.height
-      let height = max(24, track * visible)
-      let scrollable = geometry.contentSize.height - geometry.containerSize.height
-      let progress = min(max(geometry.contentOffset.y / scrollable, 0), 1)
-      Capsule()
-        .fill(Color.primary.opacity(0.25))
-        .frame(width: 4, height: height)
-        .offset(y: inset + (track - height) * progress)
-        .padding(.trailing, 4)
-        .allowsHitTesting(false)
-    }
   }
 }
 

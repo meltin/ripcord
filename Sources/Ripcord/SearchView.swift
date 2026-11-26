@@ -409,6 +409,7 @@ private struct ClipPreview: View {
               .frame(maxWidth: .infinity, alignment: .topLeading)
               .padding(16)
           }
+          .thinScroller()
         case .image:
           if let imageURL {
             Thumbnail(url: imageURL, maxPixelSize: 800, cornerRadius: 10)
@@ -865,6 +866,7 @@ private struct SnippetPreview: View {
           .frame(maxWidth: .infinity, alignment: .topLeading)
           .padding(16)
       }
+      .thinScroller()
       .frame(height: 210)
       Divider().opacity(0.5)
       Information {
