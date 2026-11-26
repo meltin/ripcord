@@ -323,7 +323,7 @@ private struct ClipPreview: View {
     .padding(.horizontal, 8)
     .frame(height: 24)
     .background(
-      index.isMultiple(of: 2) ? Color.primary.opacity(0.05) : .clear,
+      index.isMultiple(of: 2) ? Color.primary.opacity(0.025) : .clear,
       in: RoundedRectangle(cornerRadius: 6))
   }
 }
