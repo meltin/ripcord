@@ -378,7 +378,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
     panel.isMovableByWindowBackground = true
     panel.delegate = self
     panel.keyEquivalentHandler = { [weak self] in self?.handleKeyEquivalent($0) ?? false }
-    panel.typingHandler = { [weak self] in self?.typeIntoMenu($0) ?? false }
+    panel.typingHandler = { [weak self] event in
+      guard let self else { return false }
+      guard model.confirmation == nil else { return answerQuestion(event) }
+      return typeIntoMenu(event)
+    }
     panel.escapeHandler = { [weak self] in
       // Only the form: the search field turns Esc into .cancel itself.
       // The output view has no field either, and an argument field acts as the search field.
@@ -950,10 +954,29 @@ final class LauncherController: NSObject, NSWindowDelegate {
     do { try draftStore.save(drafts) } catch { onError(error.localizedDescription) }
   }
 
+  /// A question takes every key while it's up, answering Return and Esc itself: nothing reaches
+  /// the field behind it, a form's text or an argument about to run, nor an input method
+  /// still composing there.
+  private func answerQuestion(_ event: NSEvent) -> Bool {
+    let modified = !event.modifierFlags.intersection([.option, .control, .command]).isEmpty
+    switch Int(event.keyCode) {
+    // ⌥↵ and the like are dropped too: in a field they'd add a line to it.
+    case kVK_Return, kVK_ANSI_KeypadEnter:
+      guard !modified else { break }
+      NSTextInputContext.current?.discardMarkedText()
+      handle(.submit)
+    case kVK_Escape:
+      NSTextInputContext.current?.discardMarkedText()
+      handle(.cancel)
+    default: break
+    }
+    return true
+  }
+
   /// Letters typed while a menu is open go to its "Search for actions…", and Delete takes the
   /// last one back; arrows, Return and Esc still reach the field, and shortcuts still fire.
   private func typeIntoMenu(_ event: NSEvent) -> Bool {
-    guard model.menu != nil, model.configureEditor == nil, model.confirmation == nil else {
+    guard model.menu != nil, model.configureEditor == nil else {
       return false
     }
     // Read first: reading the menu while writing it in one statement traps.
