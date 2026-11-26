@@ -513,7 +513,7 @@ extension BuiltinCommand {
     case .sleepTimer, .stopSleepTimer: .sleepTimer
     case .pickColor, .colorHistory: .colorPicker
     case .cleanKeyboard: .cleanKeyboard
-    case .searchBookmarks: .bookmarks
+    case .searchBookmarks, .addBookmark: .bookmarks
     case .httpStatusCodes: .httpStatusCodes
     case .settings, .resetWindowPosition, .quit: .ripcord
     }
