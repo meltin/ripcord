@@ -10,6 +10,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case cleanKeyboard
   case searchBookmarks, addBookmark
   case searchEmoji
+  case ripcordNotes, createNote, searchNotes
   case resetWindowPosition, quit
 
   public var title: String {
@@ -32,6 +33,9 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .searchBookmarks: "Search Bookmarks"
     case .addBookmark: "Add Bookmark"
     case .searchEmoji: "Search Emoji & Symbols"
+    case .ripcordNotes: "Ripcord Notes"
+    case .createNote: "Create Note"
+    case .searchNotes: "Search Notes"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .quit: "Quit Ripcord"
     }
@@ -46,6 +50,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .cleanKeyboard: "Clean Keyboard"
     case .searchBookmarks, .addBookmark: "Bookmarks"
     case .searchEmoji: "Emoji & Symbols"
+    case .ripcordNotes, .createNote, .searchNotes: "Notes"
     default: "Ripcord"
     }
   }
@@ -71,6 +76,9 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .searchBookmarks: "command:search-bookmarks"
     case .addBookmark: "command:add-bookmark"
     case .searchEmoji: "command:search-emoji"
+    case .ripcordNotes: "command:ripcord-notes"
+    case .createNote: "command:create-note"
+    case .searchNotes: "command:search-notes"
     case .resetWindowPosition: "command:reset-window-position"
     case .quit: "command:quit"
     }
@@ -201,6 +209,10 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case discardDraft(SavedDrafts.Form)
     /// Moves a favorite past the one shown next to it, up or down.
     case moveFavorite(String, swappingWith: String)
+    /// Opens the note in this file in the notes window.
+    case openNote(URL)
+    /// Moves the note in this file to the Trash.
+    case deleteNote(URL)
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -218,7 +230,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
 
   public enum Kind: Equatable, Sendable {
     case application, calculator, quicklink, command, text, image, snippet, repository, statusCode
-    case color, bookmark, emoji, draft, script
+    case color, bookmark, emoji, draft, script, note
 
     public var primaryAction: String {
       switch self {
@@ -232,6 +244,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
       case .emoji: "Paste"
       case .draft: "Open Draft"
       case .script: "Run Script"
+      case .note: "Open Note"
       }
     }
   }
