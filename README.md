@@ -11,7 +11,8 @@
 - Calculator: `1+2*3`, `(1.5+2)^2`, full-width input too; Return copies the result
 - Quicklinks: `g swift testing` opens a search; with no match, the query goes to each Quicklink
 - ⌘K lists the selected row's actions (Open Command ↵, Show in Finder ⇧⌘F, Copy Path or URL ⇧⌘C)
-- Settings (⌘,): Launch at Login, the hotkey and Quicklinks, kept in sync with the config file
+- Settings (⌘,): Launch at Login, the hotkey, the input source to type in and Quicklinks, kept
+  in sync with the config file
 - Shortcuts: give any app, Quicklink or command an alias, a hotkey that runs it from anywhere, or
   turn it off so it never shows up in search
 - Clipboard History: copied text and images, including a copied image file such as a CleanShot X
@@ -72,6 +73,7 @@ the settings window opens. The settings window writes every change back to it.
 {
   "hotkey": "cmd+space",
   "launchAtLogin": false,
+  "inputSource": "com.apple.keylayout.ABC",
   "quicklinks": [
     { "name": "Google Search", "keyword": "g", "url": "https://www.google.com/search?q={query}" }
   ],
@@ -91,6 +93,10 @@ Clipboard History keeps its last 300 unpinned items (plus every pinned one) in
 
 `items` holds the Shortcuts page's settings for apps (by bundle ID) and Ripcord's commands; a
 Quicklink keeps its own `hotkey` and `disabled`, and its `keyword` is its alias.
+
+`inputSource` is the keyboard input source the panel switches to while it's open, so a Japanese
+input method left on doesn't turn the query into kana; the previous one comes back when it closes.
+Leave it out to keep whatever is on. Pick it under Settings > General.
 
 ## Roadmap
 
