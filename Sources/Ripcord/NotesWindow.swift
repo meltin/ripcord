@@ -217,7 +217,6 @@ private struct NotesView: View {
   let onTextChange: () -> Void
   let onReload: () -> Void
   let onSaveAsNew: () -> Void
-  @FocusState private var isEditing: Bool
 
   var body: some View {
     VStack(spacing: 0) {
@@ -243,15 +242,9 @@ private struct NotesView: View {
         .padding(.vertical, 8)
         .background(.orange.opacity(0.15))
       }
-      TextEditor(text: $model.text)
-        .font(.system(size: 14))
-        .scrollContentBackground(.hidden)
-        .thinScroller()
-        .focused($isEditing)
-        .onChange(of: model.focusRequest) { isEditing = true }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
-        .onChange(of: model.text) { onTextChange() }
+      MarkdownEditor(text: $model.text, focusRequest: model.focusRequest, onChange: onTextChange)
+        .padding(.horizontal, 4)
+        .padding(.bottom, 4)
     }
     .background(.regularMaterial)
   }
@@ -266,5 +259,138 @@ private struct NotesView: View {
     .foregroundStyle(.secondary)
     .help(help)
     .keyboardShortcut(key, modifiers: .command)
+  }
+}
+
+/// The note's editor: an NSTextView that formats Markdown as you type, keeping its marks in the
+/// text, dimmed. Formatting waits while an input method is composing.
+private struct MarkdownEditor: NSViewRepresentable {
+  @Binding var text: String
+  /// Bumped to put the caret in the editor.
+  let focusRequest: Int
+  let onChange: () -> Void
+
+  static let fontSize: CGFloat = 14
+
+  func makeNSView(context: Context) -> NSScrollView {
+    let scrollView = NSTextView.scrollableTextView()
+    scrollView.drawsBackground = false
+    scrollView.hasVerticalScroller = true
+    // A thin scroller shown while scrolling, as the rest of Ripcord draws them.
+    scrollView.scrollerStyle = .overlay
+    scrollView.autohidesScrollers = true
+    // macOS puts its own style back when the scroll bar setting changes.
+    context.coordinator.scrollerObserver = NotificationCenter.default.addObserver(
+      forName: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil, queue: .main
+    ) { [weak scrollView] _ in
+      MainActor.assumeIsolated { scrollView?.scrollerStyle = .overlay }
+    }
+    guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
+    textView.delegate = context.coordinator
+    textView.drawsBackground = false
+    textView.isRichText = false
+    textView.allowsUndo = true
+    textView.isAutomaticQuoteSubstitutionEnabled = false
+    textView.isAutomaticDashSubstitutionEnabled = false
+    textView.textContainerInset = NSSize(width: 8, height: 6)
+    textView.font = .systemFont(ofSize: Self.fontSize)
+    textView.typingAttributes = Self.base
+    textView.string = text
+    Self.format(textView)
+    return scrollView
+  }
+
+  func updateNSView(_ scrollView: NSScrollView, context: Context) {
+    context.coordinator.parent = self
+    guard let textView = scrollView.documentView as? NSTextView else { return }
+    // Another note shown, or reloaded: what was being composed for the old one is dropped, and
+    // so is its undo history, which would replay its edits on this text.
+    if textView.string != text {
+      context.coordinator.isReplacing = true
+      if textView.hasMarkedText() { textView.inputContext?.discardMarkedText() }
+      textView.string = text
+      textView.undoManager?.removeAllActions()
+      Self.format(textView)
+      context.coordinator.isReplacing = false
+    }
+    if context.coordinator.focusRequest != focusRequest {
+      context.coordinator.focusRequest = focusRequest
+      textView.window?.makeFirstResponder(textView)
+    }
+  }
+
+  func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+  final class Coordinator: NSObject, NSTextViewDelegate {
+    var parent: MarkdownEditor
+    var focusRequest: Int
+    /// The editor is being given another note's text: no change of the user's to pass on.
+    var isReplacing = false
+    var scrollerObserver: NSObjectProtocol?
+
+    deinit {
+      if let scrollerObserver { NotificationCenter.default.removeObserver(scrollerObserver) }
+    }
+
+    init(parent: MarkdownEditor) {
+      self.parent = parent
+      focusRequest = parent.focusRequest
+    }
+
+    func textDidChange(_ notification: Notification) {
+      guard !isReplacing, let textView = notification.object as? NSTextView else { return }
+      parent.text = textView.string
+      parent.onChange()
+      if !textView.hasMarkedText() { MarkdownEditor.format(textView) }
+    }
+  }
+
+  private static var base: [NSAttributedString.Key: Any] {
+    [.font: NSFont.systemFont(ofSize: fontSize), .foregroundColor: NSColor.labelColor]
+  }
+
+  /// Sets every character's look from the Markdown; the text itself is left as it is.
+  static func format(_ textView: NSTextView) {
+    guard let storage = textView.textStorage else { return }
+    let whole = NSRange(location: 0, length: storage.length)
+    storage.beginEditing()
+    storage.setAttributes(base, range: whole)
+    for span in MarkdownSpan.spans(in: storage.string)
+    where NSMaxRange(span.range) <= storage.length {
+      storage.addAttributes(
+        attributes(for: span.style, at: span.range, in: storage), range: span.range)
+    }
+    storage.endEditing()
+    textView.typingAttributes = base
+  }
+
+  private static func attributes(
+    for style: MarkdownSpan.Style, at range: NSRange, in storage: NSTextStorage
+  ) -> [NSAttributedString.Key: Any] {
+    let font =
+      storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont
+      ?? .systemFont(ofSize: fontSize)
+    switch style {
+    case .heading(let level):
+      let size: CGFloat = [22, 18, 16][min(level, 3) - 1]
+      return [.font: NSFont.systemFont(ofSize: size, weight: .bold)]
+    case .bold:
+      return [.font: NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)]
+    case .italic:
+      return [.font: NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)]
+    case .code, .codeBlock:
+      return [
+        .font: NSFont.monospacedSystemFont(ofSize: fontSize - 1, weight: .regular),
+        .backgroundColor: NSColor.quaternaryLabelColor.withAlphaComponent(0.12),
+      ]
+    case .quote: return [.foregroundColor: NSColor.secondaryLabelColor]
+    case .link: return [.foregroundColor: NSColor.linkColor]
+    case .done:
+      return [
+        .foregroundColor: NSColor.secondaryLabelColor,
+        .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+      ]
+    case .mark: return [.foregroundColor: NSColor.tertiaryLabelColor]
+    }
   }
 }
