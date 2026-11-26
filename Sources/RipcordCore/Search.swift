@@ -2,13 +2,15 @@ import Foundation
 
 /// Commands Ripcord runs itself, listed alongside apps.
 public enum BuiltinCommand: CaseIterable, Sendable {
-  case clipboardHistory, searchSnippets, createSnippet, exportSnippets, importSnippets, settings
+  case clipboardHistory, searchSnippets, createSnippet, exportSnippets, importSnippets
+  case searchRepositories, settings
   case resetWindowPosition, quit
 
   public var title: String {
     switch self {
     case .clipboardHistory: "Clipboard History"
     case .searchSnippets: "Search Snippets"
+    case .searchRepositories: "Search Repositories"
     case .createSnippet: "Create Snippet"
     case .exportSnippets: "Export Snippets"
     case .importSnippets: "Import Snippets"
@@ -23,6 +25,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     switch self {
     case .clipboardHistory: "command:clipboard-history"
     case .searchSnippets: "command:search-snippets"
+    case .searchRepositories: "command:search-repositories"
     case .createSnippet: "command:create-snippet"
     case .exportSnippets: "command:export-snippets"
     case .importSnippets: "command:import-snippets"
@@ -69,6 +72,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     /// `confirmed` once its warning has been answered, or for one with none.
     case system(SystemAction, confirmed: Bool = false)
     case window(WindowLayout)
+    /// A folder opened in a chosen app, as a repository is.
+    case openWith(URL, app: URL)
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -81,19 +86,21 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   }
 
   public enum Kind: Equatable, Sendable {
-    case application, calculator, quicklink, command, text, image, snippet
+    case application, calculator, quicklink, command, text, image, snippet, repository
 
     public var primaryAction: String {
       switch self {
       case .calculator: "Copy Answer"
       case .text, .image, .snippet: "Paste to App"
       case .application, .quicklink, .command: "Open Command"
+      case .repository: "Open"
       }
     }
   }
 
   /// What ⌘K lists for this row, the primary action first.
   public var actions: [MenuAction] {
+    if let menu { return menu }
     let primary = MenuAction(
       title: kind.primaryAction, symbol: "return", shortcut: "↵", action: action)
     switch action {
@@ -158,6 +165,9 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   public var symbol: String? = nil
   /// A snippet's tags, shown at the end of its row.
   public var tags: [String] = []
+  /// Its ⌘K actions when they depend on settings, as a repository's apps do; nil works them out
+  /// from `action`.
+  public var menu: [MenuAction]? = nil
   public var isPinned = false
 }
 
@@ -364,6 +374,69 @@ public enum Search {
         action: .snippet(index, .paste), symbol: snippet.icon ?? "doc", tags: snippet.tags ?? [])
     }
     return results.isEmpty ? [] : [SearchSection(title: "Snippets", results: results)]
+  }
+
+  /// Search Repositories' list: repositories whose name or path holds the query, best first.
+  /// Each opens in the app its settings give the Return pressed, or in Finder.
+  public static func repositorySections(
+    for query: String, repositories: [Repository], settings: RepositorySettings,
+    home: String = NSHomeDirectory()
+  ) -> [SearchSection] {
+    let trimmed = query.trimmingCharacters(in: .whitespaces)
+    // A pasted absolute path is matched in its `~` form, as the paths are.
+    let pathQuery = tildePath(trimmed, home: home)
+    let ranked = repositories.compactMap { repository -> (score: Int, repository: Repository)? in
+      guard !trimmed.isEmpty else { return (0, repository) }
+      let score = [
+        Fuzzy.score(trimmed, in: repository.name),
+        // From `~`, so the home folder's own path doesn't match every repository.
+        tildePath(repository.url.path, home: home).localizedStandardContains(pathQuery) ? 0 : nil,
+      ].compactMap { $0 }.max()
+      return score.map { ($0, repository) }
+    }
+    .sorted {
+      ($0.score, $1.repository.name.lowercased()) > ($1.score, $0.repository.name.lowercased())
+    }
+    let results = ranked.map(\.repository).map { repository in
+      let url = repository.url
+      let opens = RepositorySettings.OpenKey.allCases.compactMap { key -> MenuAction? in
+        guard let app = settings.openWith[key.rawValue] else {
+          return key == .plain
+            ? MenuAction(
+              title: "Open in Finder", symbol: "folder", shortcut: "↵", action: .open(url))
+            : nil
+        }
+        let appURL = URL(fileURLWithPath: app)
+        return MenuAction(
+          title: "Open in \(appURL.deletingPathExtension().lastPathComponent)",
+          symbol: "arrow.up.forward.app", shortcut: key.shortcut,
+          action: .openWith(url, app: appURL))
+      }
+      let remote = repository.remote.map { page in
+        MenuAction(
+          title: page.host() == "github.com" ? "Open on GitHub" : "Open Remote", symbol: "globe",
+          shortcut: "⌘O", action: .open(page))
+      }
+      let menu =
+        opens + [remote].compactMap { $0 } + [
+          MenuAction(
+            title: "Show in Finder", symbol: "folder", shortcut: "⇧⌘F", action: .reveal(url)),
+          MenuAction(
+            title: "Copy Path", symbol: "doc.on.doc", shortcut: "⇧⌘C", action: .copy(url.path)),
+        ]
+      return SearchResult(
+        id: "repo:\(url.path)", title: repository.name,
+        subtitle: tildePath(url.path, home: home), keyword: nil,
+        kind: .repository, action: menu[0].action, menu: menu)
+    }
+    // Untitled: the list is all repositories, as Raycast's shows it.
+    return results.isEmpty ? [] : [SearchSection(title: "", results: results)]
+  }
+
+  /// `path` with the home folder written `~`; a sibling such as /Users/alex for /Users/al is
+  /// left alone.
+  public static func tildePath(_ path: String, home: String) -> String {
+    path == home || path.hasPrefix(home + "/") ? "~" + path.dropFirst(home.count) : path
   }
 
   /// Every app, Quicklink, command and system action the Shortcuts page lists, by section. Disabled

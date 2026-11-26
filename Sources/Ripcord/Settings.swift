@@ -246,7 +246,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     DispatchQueue.main.async { NSApp.activate() }
   }
 
-  /// Closes the window on Esc while it's open, as Raycast's settings do.
+  /// Closes the window on Esc and steps through the pages on ↑ and ↓ while it's open, as
+  /// Raycast's settings do. An AppKit monitor, since SwiftUI's key handlers missed held keys.
   private var escMonitor: Any?
 
   init(model: SettingsModel) { self.model = model }
@@ -254,6 +255,17 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
   /// Becomes a regular app while the window is open, as Raycast does: macOS 14 only lets an
   /// accessory app ask to come forward, and the request loses to the app the user was in.
   func show() {
+    // On the screen the panel was on, the pointer's: `center()` alone uses the screen macOS
+    // counts as main, which can be another display, and a closed window keeps its old place.
+    if !window.isVisible,
+      let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
+    {
+      let area = screen.visibleFrame
+      let size = window.frame.size
+      window.setFrameOrigin(
+        NSPoint(
+          x: (area.midX - size.width / 2).rounded(), y: (area.midY - size.height / 2).rounded()))
+    }
     isSettingsOpen = true
     NSApp.setActivationPolicy(.regular)
     // On top of other apps' windows even if macOS turns the activation request down.
@@ -261,7 +273,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     window.makeKey()
     if escMonitor == nil {
       escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-        guard let self, event.keyCode == UInt16(kVK_Escape), event.window === window,
+        guard let self else { return event }
+        if let step = pageStep(event) {
+          NotificationCenter.default.post(
+            name: step > 0 ? Self.nextPage : Self.previousPage, object: nil)
+          return nil
+        }
+        guard event.keyCode == UInt16(kVK_Escape), event.window === window,
           // Esc stops a recording, and cancels Japanese input that's still being composed.
           model.recordingTarget == nil,
           // Esc in an alias being typed ends the edit instead.
@@ -272,9 +290,39 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         return nil
       }
     }
-    // The policy change lands on the next run loop pass; asking before it is asking as an
-    // accessory app.
-    DispatchQueue.main.async { NSApp.activate() }
+    bringForward(attempt: 1)
+  }
+
+  /// Asks to become the active app until macOS agrees, a few times: the policy change lands a
+  /// run loop pass later, and a request made before it, or lost to the app the user was in,
+  /// leaves the window behind that app's with the keys going to it.
+  private func bringForward(attempt: Int) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + (attempt == 1 ? 0 : 0.1)) { [self] in
+      guard window.isVisible, !NSApp.isActive || !window.isKeyWindow else { return }
+      NSApp.activate()
+      window.orderFrontRegardless()
+      window.makeKey()
+      if attempt < 4 { bringForward(attempt: attempt + 1) }
+    }
+  }
+
+  /// Posted for the sidebar to move to the next or previous page.
+  static let nextPage = Notification.Name("RipcordSettingsNextPage")
+  static let previousPage = Notification.Name("RipcordSettingsPreviousPage")
+
+  /// +1 for ↓ and -1 for ↑, held down too, unless a field, an alias or a hotkey recording has
+  /// the keys.
+  private func pageStep(_ event: NSEvent) -> Int? {
+    guard event.window === window,
+      event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
+      model.recordingTarget == nil, model.editingAlias == nil,
+      !(window.firstResponder is NSText)
+    else { return nil }
+    switch Int(event.keyCode) {
+    case kVK_DownArrow: return 1
+    case kVK_UpArrow: return -1
+    default: return nil
+    }
   }
 
   func windowWillClose(_ notification: Notification) {
@@ -288,7 +336,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
       escMonitor = nil
     }
     // An accessory again once neither window is open.
-    if !isSettingsOpen, welcomeWindow == nil { NSApp.setActivationPolicy(.accessory) }
+    if !isSettingsOpen, welcomeWindow == nil {
+      NSApp.setActivationPolicy(.accessory)
+      // Switchers such as AltTab note the policy only as apps activate and deactivate; without
+      // this, Ripcord stays listed with no windows after Settings closes.
+      NSApp.deactivate()
+    }
   }
 
   /// Picks up edits made to the file in an editor while the window was in the background.
@@ -311,6 +364,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case snippets = "Snippets"
   case systemActions = "System Actions"
   case windowManagement = "Window Management"
+  case repositories = "Git Repositories"
   case ripcord = "Ripcord"
 
   var id: Self { self }
@@ -325,6 +379,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .snippets: "doc.plaintext.fill"
     case .systemActions: "gearshape.fill"
     case .windowManagement: "rectangle.split.2x1.fill"
+    case .repositories: "arrow.triangle.branch"
     case .ripcord: "command"
     }
   }
@@ -336,6 +391,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .applications, .quicklinks, .snippets: .blue
     case .clipboardHistory: .red
     case .windowManagement: .indigo
+    case .repositories: .orange
     }
   }
 
@@ -356,6 +412,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       "Lock, sleep, control music and volume, and manage apps, the Trash and disks."
     case .windowManagement:
       "Put the frontmost window in a half, quarter or third, or on another display."
+    case .repositories:
+      "Find the Git repositories in your folders and open each in the app you pick for its Return."
     case .ripcord: "Ripcord's own commands."
     }
   }
@@ -363,7 +421,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   /// The commands a page lists, by settings key; nil for pages built another way.
   var commandKeys: Set<String>? {
     switch self {
-    case .clipboardHistory, .snippets, .ripcord:
+    case .clipboardHistory, .snippets, .repositories, .ripcord:
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
@@ -378,6 +436,7 @@ extension BuiltinCommand {
     switch self {
     case .clipboardHistory: .clipboardHistory
     case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .snippets
+    case .searchRepositories: .repositories
     case .settings, .resetWindowPosition, .quit: .ripcord
     }
   }
@@ -408,6 +467,12 @@ struct SettingsView: View {
             PageHeader(page: .quicklinks)
             QuicklinksPage(model: model)
           }
+        case .repositories:
+          PageScroll(model: model) {
+            PageHeader(page: .repositories)
+            RepositoriesSettings(model: model)
+            CommandsList(model: model, page: .repositories)
+          }
         default:
           PageScroll(model: model) {
             PageHeader(page: page)
@@ -430,6 +495,7 @@ struct SettingsView: View {
 }
 
 /// The pages, on the translucent sidebar material: General, then a gap, then the extensions.
+/// ↑ and ↓ step through the pages, as in Raycast's settings.
 private struct Sidebar: View {
   @Binding var page: SettingsPage
 
@@ -448,11 +514,25 @@ private struct Sidebar: View {
     }
     .scrollIndicators(.never)
     .background(SidebarMaterial())
+    .onReceive(NotificationCenter.default.publisher(for: SettingsWindowController.nextPage)) { _ in
+      step(1)
+    }
+    .onReceive(NotificationCenter.default.publisher(for: SettingsWindowController.previousPage)) {
+      _ in step(-1)
+    }
+  }
+
+  private func step(_ offset: Int) {
+    let pages = SettingsPage.allCases
+    guard let index = pages.firstIndex(of: page) else { return }
+    page = pages[min(max(index + offset, 0), pages.count - 1)]
   }
 
   private func row(_ item: SettingsPage) -> some View {
     Button {
       page = item
+      // Out of a field on the page, so the arrows step through pages again.
+      NSApp.keyWindow?.makeFirstResponder(nil)
     } label: {
       HStack(spacing: 10) {
         PageIcon(page: item, size: 22)
@@ -532,6 +612,7 @@ private struct PageScroll<Content: View>: View {
       .padding(.bottom, 28)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
+    .thinScroller()
   }
 }
 
@@ -796,6 +877,7 @@ private struct ApplicationsPage: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .thinScroller()
       }
       .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
       .clipShape(RoundedRectangle(cornerRadius: 14))
@@ -812,9 +894,6 @@ private struct ShortcutRow: View {
   @Bindable var model: SettingsModel
   let page: SettingsPage
   var showsAlias = true
-
-  /// App icons, read from disk once each: a row's redraw would otherwise ask Launch Services again.
-  private static let icons = NSCache<NSString, NSImage>()
 
   var body: some View {
     HStack(spacing: 10) {
@@ -842,18 +921,12 @@ private struct ShortcutRow: View {
 
   @ViewBuilder private var icon: some View {
     if let appURL = entry.appURL {
-      Image(nsImage: Self.icon(for: appURL)).resizable()
+      Image(nsImage: appIcon(appURL)).resizable()
     } else {
       PageIcon(page: page, size: 20)
     }
   }
 
-  private static func icon(for app: URL) -> NSImage {
-    if let cached = icons.object(forKey: app.path as NSString) { return cached }
-    let icon = NSWorkspace.shared.icon(forFile: app.path)
-    icons.setObject(icon, forKey: app.path as NSString)
-    return icon
-  }
 }
 
 /// An alias shown as text, turning into a field when clicked. Saved as typed: switching pages
@@ -988,6 +1061,244 @@ private struct HotkeyRecorder: View {
         Text(message.text).font(.system(size: 11)).foregroundStyle(.orange)
       }
     }
+  }
+}
+
+/// Git Repositories' folders, scan depth and the app each Return opens a repository in.
+private struct RepositoriesSettings: View {
+  @Bindable var model: SettingsModel
+
+  private var settings: RepositorySettings { model.config.repositories }
+
+  var body: some View {
+    Card {
+      SettingRow(
+        title: "Folders", description: "Where to look for repositories, and how many folders down."
+      ) {
+        Stepper(
+          "Depth \(settings.depth)", value: $model.config.repositories.depth, in: 1...6)
+      }
+      ForEach(Array(settings.folders.enumerated()), id: \.offset) { index, folder in
+        Divider()
+        HStack {
+          Image(systemName: "folder").foregroundStyle(.secondary)
+          Text(folder).font(.system(size: 13, design: .monospaced))
+          Spacer()
+          Button {
+            model.config.repositories.folders = settings.folders.enumerated()
+              .filter { $0.offset != index }.map(\.element)
+          } label: {
+            Image(systemName: "minus.circle")
+          }
+          .buttonStyle(.borderless)
+          .foregroundStyle(.secondary)
+          .accessibilityLabel("Remove \(folder)")
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 8)
+      }
+      Divider()
+      HStack {
+        Spacer()
+        Button("Add Folder…", action: addFolder)
+      }
+      .padding(.horizontal, 18)
+      .padding(.vertical, 10)
+    }
+    Card {
+      SettingRow(
+        title: "Open With",
+        description: "The app each Return opens a repository in; ↵ without one shows it in Finder."
+      ) { EmptyView() }
+      ForEach(RepositorySettings.OpenKey.allCases, id: \.self) { key in
+        Divider()
+        OpenWithRow(key: key, model: model)
+      }
+    }
+  }
+
+  private func addFolder() {
+    let panel = NSOpenPanel()
+    panel.canChooseDirectories = true
+    panel.canChooseFiles = false
+    panel.prompt = "Add"
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    let home = NSHomeDirectory()
+    // Kept with ~, so the config reads the same on another account.
+    let path = Search.tildePath(url.path, home: home)
+    if !settings.folders.contains(path) {
+      model.config.repositories.folders = settings.folders + [path]
+    }
+  }
+}
+
+/// App icons at 20pt, drawn once each from the full icon (up to 1024px), so a list of them
+/// scrolls without scaling a big image per row. NSCache is thread-safe, and the icons are
+/// rendered off the main thread before a list needs them.
+nonisolated(unsafe) private let appIcons = NSCache<NSString, NSImage>()
+
+nonisolated func appIcon(_ app: URL) -> NSImage {
+  if let cached = appIcons.object(forKey: app.path as NSString) { return cached }
+  let full = NSWorkspace.shared.icon(forFile: app.path)
+  // 2× for Retina.
+  let side = 40
+  let small = NSImage(size: NSSize(width: 20, height: 20))
+  if let bitmap = NSBitmapImageRep(
+    bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side, bitsPerSample: 8,
+    samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+    bytesPerRow: 0, bitsPerPixel: 0)
+  {
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+    full.draw(in: NSRect(x: 0, y: 0, width: side, height: side))
+    NSGraphicsContext.restoreGraphicsState()
+    small.addRepresentation(bitmap)
+  }
+  appIcons.setObject(small, forKey: app.path as NSString)
+  return small
+}
+
+/// One Return's app, picked from a dropdown of the installed apps as Raycast's settings do.
+private struct OpenWithRow: View {
+  let key: RepositorySettings.OpenKey
+  @Bindable var model: SettingsModel
+  @State private var isPicking = false
+
+  private var app: URL? {
+    model.config.repositories.openWith[key.rawValue].map { URL(fileURLWithPath: $0) }
+  }
+
+  var body: some View {
+    HStack(spacing: 10) {
+      Text("Shortcut").foregroundStyle(.secondary)
+      Keycap(key.shortcut)
+      Spacer()
+      Button {
+        isPicking.toggle()
+      } label: {
+        HStack(spacing: 6) {
+          if let app {
+            Image(nsImage: appIcon(app)).resizable().frame(width: 18, height: 18)
+            Text(app.deletingPathExtension().lastPathComponent)
+          } else {
+            Text(key == .plain ? "Finder" : "–").foregroundStyle(.secondary)
+          }
+          Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 28)
+        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
+        .contentShape(RoundedRectangle(cornerRadius: 7))
+      }
+      .buttonStyle(.plain)
+      .popover(isPresented: $isPicking, arrowEdge: .bottom) {
+        AppPicker(model: model, noneLabel: key == .plain ? "Finder" : "–") { picked in
+          model.config.repositories.openWith[key.rawValue] = picked?.path
+          isPicking = false
+        }
+        // Frosted, between the default glass that let what's behind wash out the names and opaque.
+        .presentationBackground(.regularMaterial)
+      }
+    }
+    .font(.system(size: 13))
+    .padding(.horizontal, 18)
+    .padding(.vertical, 8)
+  }
+}
+
+/// The installed apps, laid out like Raycast's dropdown: rounded rows with a soft highlight that
+/// follows the pointer and the arrows, and the search field at the bottom, focused as it opens.
+private struct AppPicker: View {
+  @Bindable var model: SettingsModel
+  let noneLabel: String
+  let onPick: (URL?) -> Void
+  @State private var query = ""
+  @State private var highlighted = 0
+  /// macOS's popover corner is about 20pt; rows inset 8pt round at 12pt to sit inside it evenly.
+  private static let inset: CGFloat = 8
+  private static let rowRadius: CGFloat = 12
+  @FocusState private var isSearchFocused: Bool
+
+  /// nil stands for the "none" row.
+  private var rows: [AppEntry?] {
+    let unique = Dictionary(model.apps.map { ($0.settingsKey, $0) }) { first, _ in first }.values
+    let apps =
+      unique
+      .filter { query.isEmpty || $0.names.contains { $0.localizedStandardContains(query) } }
+      .sorted { $0.names[0].localizedStandardCompare($1.names[0]) == .orderedAscending }
+    return (query.isEmpty ? [nil] : []) + apps.map(Optional.some)
+  }
+
+  var body: some View {
+    let rows = rows
+    VStack(spacing: 0) {
+      // A lazy stack with icons rendered ahead scrolls smoothly; a List brought the system
+      // scroller, thick and in its own gutter when scroll bars are set to always show.
+      ScrollViewReader { proxy in
+        ScrollView {
+          LazyVStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, app in
+              row(app, isHighlighted: index == highlighted)
+                .id(index)
+                .onHover { if $0 { highlighted = index } }
+                .onTapGesture { onPick(app?.url) }
+            }
+          }
+          // The popover's corner radius less this inset is the rows', so the corners nest.
+          .padding(Self.inset)
+        }
+        .thinScroller()
+        .onChange(of: highlighted) { proxy.scrollTo(highlighted) }
+      }
+      // At the bottom, as Raycast's: the list's top and bottom corners stay clear for the thumb.
+      Divider().opacity(0.5)
+      TextField("Search…", text: $query)
+        .textFieldStyle(.plain)
+        .focused($isSearchFocused)
+        .padding(.horizontal, 14)
+        .frame(height: 40)
+        .onChange(of: query) { highlighted = 0 }
+        .onKeyPress(keys: [.downArrow, .upArrow], phases: [.down, .repeat]) { press in
+          let next = highlighted + (press.key == .downArrow ? 1 : -1)
+          highlighted = min(max(next, 0), max(rows.count - 1, 0))
+          return .handled
+        }
+        .onSubmit { if rows.indices.contains(highlighted) { onPick(rows[highlighted]?.url) } }
+    }
+    .font(.system(size: 13))
+    .frame(width: 280, height: 320)
+    .onAppear {
+      if model.apps.isEmpty { model.loadApps() }
+      DispatchQueue.main.async { isSearchFocused = true }
+      prerenderIcons()
+    }
+    .onChange(of: model.apps) { prerenderIcons() }
+  }
+
+  /// Every icon drawn before the list asks for it, so scrolling never waits on one.
+  private func prerenderIcons() {
+    let urls = model.apps.map(\.url)
+    Task.detached(priority: .userInitiated) { for url in urls { _ = appIcon(url) } }
+  }
+
+  private func row(_ app: AppEntry?, isHighlighted: Bool) -> some View {
+    HStack(spacing: 10) {
+      if let app {
+        Image(nsImage: appIcon(app.url)).frame(width: 20, height: 20)
+        Text(app.names[0]).lineLimit(1)
+      } else {
+        Text(noneLabel).foregroundStyle(.secondary)
+      }
+      Spacer(minLength: 0)
+    }
+    .padding(.horizontal, 10)
+    .frame(height: 34)
+    .background(
+      RoundedRectangle(cornerRadius: Self.rowRadius)
+        .fill(Color.primary.opacity(isHighlighted ? 0.08 : 0))
+    )
+    .contentShape(RoundedRectangle(cornerRadius: Self.rowRadius))
   }
 }
 

@@ -55,6 +55,8 @@ struct SearchView: View {
         SnippetForm(model: model)
       } else if model.sections.isEmpty {
         EmptyState(query: model.query, mode: model.mode)
+      } else if model.mode == .repositories {
+        resultList
       } else if model.mode != .root {
         // Raycast's layout: the list on the left, the selected item and its details on the right.
         HStack(spacing: 0) {
@@ -106,12 +108,14 @@ struct SearchView: View {
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 0) {
           ForEach(model.sections) { section in
-            Text(section.title)
-              .font(.system(size: 12, weight: .medium))
-              .foregroundStyle(.secondary)
-              .padding(.horizontal, 12)
-              .padding(.top, 10)
-              .padding(.bottom, 4)
+            if !section.title.isEmpty {
+              Text(section.title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
+            }
             ForEach(section.results) { result in
               ResultRow(
                 result: result, isSelected: result.id == selectedID,
@@ -151,6 +155,10 @@ private struct EmptyState: View {
       "No snippet contains “\(query)”."
     case .snippetForm:
       ""
+    case .repositories where query.trimmingCharacters(in: .whitespaces).isEmpty:
+      "Repositories in the folders set under Settings › Git Repositories show up here."
+    case .repositories:
+      "No repository matches “\(query)”."
     }
   }
 
@@ -179,8 +187,10 @@ private struct ResultRow: View {
   var body: some View {
     HStack(spacing: 12) {
       ResultIcon(result: result)
-      Text(result.title).font(.system(size: 14)).lineLimit(1)
-      if !result.subtitle.isEmpty {
+      // Ahead of a long path on the right, which shrinks first.
+      Text(result.title).font(.system(size: 14)).lineLimit(1).layoutPriority(1)
+      // A repository's path goes on the right, as Raycast lines them up.
+      if !result.subtitle.isEmpty, result.kind != .repository {
         Text(result.subtitle).font(.system(size: 14)).foregroundStyle(.secondary).lineLimit(1)
       }
       if let keyword = result.keyword {
@@ -200,7 +210,10 @@ private struct ResultRow: View {
           .padding(.vertical, 2)
           .background(.quaternary, in: Capsule())
       }
-      if showsKind {
+      if result.kind == .repository {
+        Text(result.subtitle).font(.system(size: 13)).foregroundStyle(.secondary)
+          .lineLimit(1).truncationMode(.head)
+      } else if showsKind {
         Text(result.kind.label).font(.system(size: 13)).foregroundStyle(.secondary)
       }
     }
@@ -220,6 +233,21 @@ private struct ResultIcon: View {
 
   var body: some View {
     switch result.action {
+    case _ where result.kind == .repository:
+      // Whichever app it opens in, a repository looks like one: a diamond in Git's red-orange,
+      // as Raycast shows Git's logo.
+      ZStack {
+        RoundedRectangle(cornerRadius: 4)
+          .fill(Color(red: 0.94, green: 0.31, blue: 0.2).gradient)
+          .frame(width: 18, height: 18)
+          .rotationEffect(.degrees(45))
+        Image(systemName: "arrow.triangle.branch")
+          .font(.system(size: 10, weight: .bold))
+          .foregroundStyle(.white)
+      }
+      .frame(width: 24, height: 24)
+    case .openWith:
+      tile("arrow.up.forward.app", .gray)
     case .open(let url) where url.isFileURL:
       // App icons carry a transparent margin, so draw them larger than the 24pt slot to match.
       Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable()
@@ -324,6 +352,7 @@ extension BuiltinCommand {
     switch self {
     case .clipboardHistory: "list.clipboard.fill"
     case .searchSnippets: "doc.plaintext.fill"
+    case .searchRepositories: "arrow.triangle.branch"
     case .createSnippet: "doc.badge.plus"
     case .exportSnippets: "square.and.arrow.up"
     case .importSnippets: "square.and.arrow.down"
@@ -337,6 +366,7 @@ extension BuiltinCommand {
     switch self {
     case .clipboardHistory, .quit: .red
     case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .blue
+    case .searchRepositories: .orange
     case .settings, .resetWindowPosition: .gray
     }
   }
@@ -396,6 +426,7 @@ private struct ClipPreview: View {
               .frame(maxWidth: .infinity, alignment: .topLeading)
               .padding(16)
           }
+          .thinScroller()
         case .image:
           if let imageURL {
             Thumbnail(url: imageURL, maxPixelSize: 800, cornerRadius: 10)
@@ -852,6 +883,7 @@ private struct SnippetPreview: View {
           .frame(maxWidth: .infinity, alignment: .topLeading)
           .padding(16)
       }
+      .thinScroller()
       .frame(height: 210)
       Divider().opacity(0.5)
       Information {
@@ -1013,7 +1045,9 @@ private struct Footer: View {
             onCommand(.submit)
           } label: {
             HStack(spacing: 6) {
-              Text(title(of: selected.action, else: selected.kind.primaryAction, pasteTarget))
+              Text(
+                title(
+                  of: selected.action, else: selected.actions.first?.title ?? "", pasteTarget))
               Keycap("↵")
             }
             .padding(.horizontal, 10)
@@ -1158,10 +1192,15 @@ private struct MenuCard: View {
           onCommand(.runMenuItem(index))
         } label: {
           HStack(spacing: 10) {
-            Image(systemName: item.symbol)
-              .font(.system(size: 13, weight: .light))
-              .frame(width: 18)
+            if let icon = menuIcon(item) {
+              Image(nsImage: icon).resizable().frame(width: 18, height: 18)
+            } else {
+              Image(systemName: item.symbol)
+                .font(.system(size: 13, weight: .light))
+                .frame(width: 18)
+            }
             Text(title(of: item.action, else: item.title, pasteTarget))
+              .lineLimit(1)
             Spacer(minLength: 16)
             HStack(spacing: 3) {
               ForEach(Array(item.shortcut.map(String.init).enumerated()), id: \.offset) {
@@ -1184,8 +1223,22 @@ private struct MenuCard: View {
       }
     }
     .padding(6)
-    .frame(width: 300)
+    // Room for "Open in Visual Studio Code" and its keys on one line.
+    .frame(width: 340)
     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+  }
+}
+
+/// The picture for a menu item that has one, as Raycast shows them: the app it opens in, Finder
+/// for the Finder items, GitHub's mark for a page there; nil keeps its SF Symbol.
+private func menuIcon(_ item: MenuAction) -> NSImage? {
+  switch item.action {
+  case .openWith(_, let app): return appIcon(app)
+  case .open(let url) where url.host() == "github.com":
+    return Bundle.main.image(forResource: "GitHub")
+  case _ where item.symbol == "folder":
+    return appIcon(URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app"))
+  default: return nil
   }
 }
 
@@ -1202,9 +1255,20 @@ struct Keycap: View {
 
   init(_ label: String) { self.label = label }
 
+  /// ↵ drawn as SF Symbols' return: the font's ↵ sits above ⌘ and the other modifiers.
+  private var text: Text {
+    label.reduce(Text("")) { text, character in
+      let piece =
+        character == "↵"
+        ? Text(Image(systemName: "return")).font(.system(size: 9, weight: .semibold))
+        : Text(String(character))
+      return Text("\(text)\(piece)")
+    }
+  }
+
   var body: some View {
     // Filled and softly edged, like Raycast's keycaps.
-    Text(label)
+    text
       .font(.system(size: 10, weight: .medium))
       .foregroundStyle(.secondary)
       .padding(.horizontal, 4)
@@ -1224,6 +1288,7 @@ extension SearchResult.Kind {
     case .text: "Text"
     case .image: "Image"
     case .snippet: "Snippet"
+    case .repository: "Repository"
     }
   }
 }
@@ -1281,7 +1346,10 @@ struct SearchField: NSViewRepresentable {
         switch selector {
         case #selector(NSResponder.moveUp(_:)): .up
         case #selector(NSResponder.moveDown(_:)): .down
-        case #selector(NSResponder.insertNewline(_:)): .submit
+        // ⌥↵ arrives as the second, so it reaches the Return variants too.
+        case #selector(NSResponder.insertNewline(_:)),
+          #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
+          .submit
         case #selector(NSResponder.cancelOperation(_:)): .cancel
         default: nil
         }
@@ -1327,6 +1395,7 @@ extension LauncherMode {
     case .root: "Search apps, calculate, open Quicklinks…"
     case .clipboard: "Search Clipboard History…"
     case .snippets: "Search Snippets…"
+    case .repositories: "Search Repositories…"
     case .snippetForm: ""
     }
   }

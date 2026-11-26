@@ -27,5 +27,9 @@ iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
 # 18pt tall, the menu bar's icon height.
 sips -s format png -z 18 23 Resources/MenuBarIcon.svg --out "$app/Contents/Resources/MenuBarIcon.png" >/dev/null
 sips -s format png -z 36 46 Resources/MenuBarIcon.svg --out "$app/Contents/Resources/MenuBarIcon@2x.png" >/dev/null
+# 18pt, the size of an icon in the panel's ⌘K menu.
+sips -s format png -z 18 18 Resources/ThirdParty/GitHub.svg --out "$app/Contents/Resources/GitHub.png" >/dev/null
+sips -s format png -z 36 36 Resources/ThirdParty/GitHub.svg --out "$app/Contents/Resources/GitHub@2x.png" >/dev/null
+cp Resources/ThirdParty/GitHub-LICENSE.txt "$app/Contents/Resources/"
 codesign --force --sign - "$app"
 echo "$app"
