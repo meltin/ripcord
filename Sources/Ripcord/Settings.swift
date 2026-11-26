@@ -15,7 +15,7 @@ final class SettingsModel {
   var onRecordingChange: (Bool) -> Void = { _ in }
   /// Hotkeys macOS refused at the last registration, shown on their rows.
   var failedHotkeys: Set<HotkeyTarget> = []
-  /// Scanned when the Shortcuts page first appears, so the window costs nothing until then.
+  /// Scanned when the Applications page first appears, so the window costs nothing until then.
   var apps: [AppEntry] = []
   /// The one row recording a hotkey; starting another row stops it.
   private(set) var recordingTarget: HotkeyTarget?
@@ -58,8 +58,12 @@ final class SettingsModel {
 
   // MARK: Hotkey recording
 
+  /// The one row whose alias is being typed; starting a recording ends it, and the reverse.
+  var editingAlias: HotkeyTarget?
+
   func startRecording(for target: HotkeyTarget) {
     stopRecording()
+    editingAlias = nil
     recordingTarget = target
     recorderMessage = nil
     onRecordingChange(true)
@@ -116,7 +120,7 @@ final class SettingsModel {
         ?? SystemAction.allCases.first { $0.settingsKey == key }?.title
         ?? WindowLayout.allCases.first { $0.settingsKey == key }?.title
         ?? apps.first { $0.settingsKey == key }?.names[0]
-        // Before the Shortcuts page has scanned the apps, ask Launch Services.
+        // Before the Applications page has scanned the apps, ask Launch Services.
         ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: key).map {
           FileManager.default.displayName(atPath: $0.path)
         } ?? key
@@ -231,6 +235,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         guard let self, event.keyCode == UInt16(kVK_Escape), event.window === window,
           // Esc stops a recording, and cancels Japanese input that's still being composed.
           model.recordingTarget == nil,
+          // Esc in an alias being typed ends the edit instead.
+          model.editingAlias == nil,
           (window.firstResponder as? NSTextView)?.hasMarkedText() != true
         else { return event }
         window.performClose(nil)
@@ -315,15 +321,22 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   /// The commands a page lists, by settings key; nil for pages built another way.
   var commandKeys: Set<String>? {
     switch self {
-    case .clipboardHistory: [BuiltinCommand.clipboardHistory.settingsKey]
-    case .snippets:
-      Set(
-        [BuiltinCommand.searchSnippets, .createSnippet, .exportSnippets, .importSnippets].map(
-          \.settingsKey))
+    case .clipboardHistory, .snippets, .ripcord:
+      Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
-    case .ripcord: Set([BuiltinCommand.settings, .resetWindowPosition, .quit].map(\.settingsKey))
     case .general, .applications, .quicklinks: nil
+    }
+  }
+}
+
+extension BuiltinCommand {
+  /// The settings page that lists it; exhaustive, so a new command can't go missing there.
+  fileprivate var settingsPage: SettingsPage {
+    switch self {
+    case .clipboardHistory: .clipboardHistory
+    case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .snippets
+    case .settings, .resetWindowPosition, .quit: .ripcord
     }
   }
 }
@@ -362,7 +375,10 @@ struct SettingsView: View {
     .frame(minWidth: 760, minHeight: 520)
     .onChange(of: model.config) { model.saveIfChanged() }
     // A recording left running on a page no longer shown would swallow every key typed.
-    .onChange(of: page) { model.stopRecording() }
+    .onChange(of: page) {
+      model.stopRecording()
+      model.editingAlias = nil
+    }
   }
 }
 
@@ -404,6 +420,7 @@ private struct Sidebar: View {
       .contentShape(RoundedRectangle(cornerRadius: 8))
     }
     .buttonStyle(.plain)
+    .accessibilityAddTraits(item == page ? .isSelected : [])
   }
 }
 
@@ -588,12 +605,13 @@ private struct QuicklinksPage: View {
         }
       }
     }
-    // Their hotkeys and on/off switches; the keyword above is the alias.
+    // Their hotkeys and on/off switches; the Keyword above is their alias, so no Alias column.
     let shortcuts =
       Search.catalog(apps: [], quicklinks: model.config.quicklinks)
       .first { $0.title == "Quicklinks" }?.entries ?? []
     if !shortcuts.isEmpty {
-      ShortcutsCard(title: "Shortcuts", entries: shortcuts, model: model, page: .quicklinks)
+      ShortcutsCard(
+        title: "Shortcuts", entries: shortcuts, model: model, page: .quicklinks, showsAlias: false)
     }
   }
 
@@ -664,13 +682,14 @@ private struct ShortcutsCard: View {
   let entries: [CatalogEntry]
   @Bindable var model: SettingsModel
   let page: SettingsPage
+  var showsAlias = true
 
   var body: some View {
     Card {
-      ShortcutsHeading(title: title)
+      ShortcutsHeading(title: title, showsAlias: showsAlias)
       ForEach(entries) { entry in
         Divider()
-        ShortcutRow(entry: entry, model: model, page: page)
+        ShortcutRow(entry: entry, model: model, page: page, showsAlias: showsAlias)
       }
     }
   }
@@ -678,11 +697,12 @@ private struct ShortcutsCard: View {
 
 private struct ShortcutsHeading: View {
   let title: String
+  var showsAlias = true
 
   var body: some View {
     HStack(spacing: 10) {
       Text(title).frame(maxWidth: .infinity, alignment: .leading)
-      Text("Alias").frame(width: 110, alignment: .leading)
+      if showsAlias { Text("Alias").frame(width: 110, alignment: .leading) }
       Text("Hotkey").frame(width: 170, alignment: .leading)
       Text("On").frame(width: 24)
     }
@@ -743,6 +763,7 @@ private struct ShortcutRow: View {
   let entry: CatalogEntry
   @Bindable var model: SettingsModel
   let page: SettingsPage
+  var showsAlias = true
 
   /// App icons, read from disk once each: a row's redraw would otherwise ask Launch Services again.
   private static let icons = NSCache<NSString, NSImage>()
@@ -755,8 +776,10 @@ private struct ShortcutRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
       // Drawn by SwiftUI until clicked: an AppKit text field, button and checkbox in every row
       // made scrolling a few hundred apps stutter.
-      AliasField(alias: model.alias(of: entry.target)) { model.setAlias($0, for: entry.target) }
-        .frame(width: 110)
+      if showsAlias {
+        AliasField(target: entry.target, model: model)
+          .frame(width: 110)
+      }
       HotkeyRecorder(target: entry.target, model: model)
         .frame(width: 170, alignment: .leading)
       Checkbox(isOn: model.isEnabled(entry.target)) {
@@ -785,45 +808,65 @@ private struct ShortcutRow: View {
   }
 }
 
-/// An alias shown as text, turning into a field when clicked; Return or clicking away keeps it.
+/// An alias shown as text, turning into a field when clicked. Saved as typed: switching pages
+/// or closing the window doesn't take focus, so waiting for focus to leave could drop the edit.
 private struct AliasField: View {
-  let alias: String
-  let onCommit: (String) -> Void
-  @State private var isEditing = false
-  @State private var text = ""
-  @FocusState private var isFocused: Bool
+  let target: HotkeyTarget
+  @Bindable var model: SettingsModel
+
+  private var isEditing: Bool { model.editingAlias == target }
 
   var body: some View {
+    let alias = model.alias(of: target)
     Group {
       if isEditing {
-        TextField("Alias", text: $text)
-          .textFieldStyle(.plain)
-          .focused($isFocused)
-          .onSubmit { isFocused = false }
-          .onChange(of: isFocused) {
-            guard !isFocused else { return }
-            isEditing = false
-            if text != alias { onCommit(text) }
-          }
-          .onAppear {
-            text = alias
-            isFocused = true
-          }
+        // The panel's bare AppKit field: no white well, and it takes focus as it appears.
+        SearchField(
+          text: alias, placeholder: "Alias", fontSize: 13,
+          onChange: { model.setAlias($0, for: target) },
+          onCommand: { command in
+            switch command {
+            case .submit, .cancel: model.editingAlias = nil
+            default: break
+            }
+          },
+          onEnd: { if model.editingAlias == target { model.editingAlias = nil } })
       } else {
-        Text(alias.isEmpty ? "Alias" : alias)
-          .foregroundStyle(alias.isEmpty ? .tertiary : .primary)
-          .lineLimit(1)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .contentShape(Rectangle())
-          .onTapGesture { isEditing = true }
-          .accessibilityAddTraits(.isButton)
-          .accessibilityLabel(alias.isEmpty ? "Add alias" : "Alias \(alias)")
+        // A plain button: drawn by SwiftUI, yet reachable with Tab and Full Keyboard Access.
+        Button {
+          model.stopRecording()
+          model.editingAlias = target
+        } label: {
+          Text(alias.isEmpty ? "Alias" : alias)
+            .foregroundStyle(alias.isEmpty ? .tertiary : .primary)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .accessibilityLabel(alias.isEmpty ? "Add alias" : "Alias \(alias)")
       }
     }
-    .padding(.horizontal, 8)
-    .frame(height: 24)
-    .background(
-      Color.primary.opacity(isEditing ? 0.06 : 0), in: RoundedRectangle(cornerRadius: 6))
+    .settingsCell(isActive: isEditing)
+  }
+}
+
+extension View {
+  /// The alias and hotkey cells' shared shape: bare until active, then an outlined pill, as
+  /// Raycast draws a field being edited.
+  fileprivate func settingsCell(isActive: Bool) -> some View {
+    padding(.horizontal, 9)
+      .frame(height: 28)
+      .background(
+        Color.primary.opacity(isActive ? 0.04 : 0), in: RoundedRectangle(cornerRadius: 8)
+      )
+      .overlay {
+        if isActive {
+          RoundedRectangle(cornerRadius: 8).strokeBorder(
+            Color.primary.opacity(0.28), lineWidth: 1.5)
+        }
+      }
   }
 }
 
@@ -833,14 +876,15 @@ private struct Checkbox: View {
   let onToggle: () -> Void
 
   var body: some View {
-    Image(systemName: isOn ? "checkmark.square.fill" : "square")
-      .font(.system(size: 15))
-      .foregroundStyle(isOn ? Color.accentColor : .secondary)
-      .contentShape(Rectangle())
-      .onTapGesture(perform: onToggle)
-      .accessibilityAddTraits(.isButton)
-      .accessibilityLabel("Enabled")
-      .accessibilityValue(isOn ? "On" : "Off")
+    Button(action: onToggle) {
+      Image(systemName: isOn ? "checkmark.square.fill" : "square")
+        .font(.system(size: 15))
+        .foregroundStyle(isOn ? Color.accentColor : .secondary)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("Enabled")
+    .accessibilityValue(isOn ? "On" : "Off")
   }
 }
 
@@ -860,27 +904,19 @@ private struct HotkeyRecorder: View {
         } label: {
           HStack(spacing: 4) {
             if isRecording {
-              Text("Press keys…").foregroundStyle(Color.accentColor)
+              Text("Press keys…").foregroundStyle(.secondary)
             } else if let keycaps = spec.flatMap(Hotkey.init)?.keycaps {
               ForEach(keycaps, id: \.self) { Keycap($0) }
             } else {
-              Text(spec ?? "Add Hotkey").foregroundStyle(.secondary)
+              Text(spec ?? "Add Hotkey").foregroundStyle(.tertiary)
             }
           }
-          .frame(minWidth: 80, minHeight: 22)
+          .contentShape(Rectangle())
         }
-        // Tinted and ringed like a focused field, so waiting for keys can't pass for idle.
-        .background(
-          isRecording ? Color.accentColor.opacity(0.15) : .clear,
-          in: RoundedRectangle(cornerRadius: 6)
-        )
-        .overlay {
-          if isRecording {
-            RoundedRectangle(cornerRadius: 6).strokeBorder(Color.accentColor, lineWidth: 2)
-          }
-        }
-        // Plain, so it's SwiftUI-drawn rather than an AppKit button in each row.
+        // Plain and SwiftUI-drawn, like the alias beside it; recording shows as its soft fill.
         .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .settingsCell(isActive: isRecording)
         .accessibilityLabel(
           isRecording ? "Recording hotkey" : "Record hotkey, currently \(spec ?? "none")")
         if clearable, spec != nil, !isRecording {
@@ -890,7 +926,7 @@ private struct HotkeyRecorder: View {
             Image(systemName: "xmark.circle.fill")
           }
           .buttonStyle(.borderless)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(.tertiary)
           .accessibilityLabel("Remove hotkey")
         }
         if model.failedHotkeys.contains(target) {

@@ -1229,13 +1229,16 @@ extension SearchResult.Kind {
 }
 
 /// An AppKit text field, because only `doCommandBy` hands over arrows and Return after the input
-/// method has had them, so Japanese IME composition keeps working.
-private struct SearchField: NSViewRepresentable {
+/// method has had them, so Japanese IME composition keeps working. Settings' alias cells use it
+/// too, for its bare look and its taking focus as it appears.
+struct SearchField: NSViewRepresentable {
   let text: String
   let placeholder: String
   var fontSize: CGFloat = 18
   let onChange: (String) -> Void
   let onCommand: (SearchCommand) -> Void
+  /// When the field stops being edited, as when another control is clicked.
+  var onEnd: () -> Void = {}
 
   func makeNSView(context: Context) -> FocusingTextField {
     let field = FocusingTextField()
@@ -1267,6 +1270,10 @@ private struct SearchField: NSViewRepresentable {
       parent.onChange(field.stringValue)
     }
 
+    func controlTextDidEndEditing(_ notification: Notification) {
+      parent.onEnd()
+    }
+
     func control(
       _ control: NSControl, textView: NSTextView, doCommandBy selector: Selector
     ) -> Bool {
@@ -1294,8 +1301,13 @@ final class FocusingTextField: NSTextField {
   /// The orange caret from the app icon.
   override func becomeFirstResponder() -> Bool {
     let became = super.becomeFirstResponder()
-    (currentEditor() as? NSTextView)?.insertionPointColor = NSColor(
-      red: 1, green: 0.353, blue: 0.122, alpha: 1)
+    if let editor = currentEditor() as? NSTextView {
+      editor.insertionPointColor = NSColor(red: 1, green: 0.353, blue: 0.122, alpha: 1)
+      // The window's shared field editor paints a white well behind the text; this field is
+      // bare, like the panel it sits in.
+      editor.drawsBackground = false
+      editor.backgroundColor = .clear
+    }
     return became
   }
 }
