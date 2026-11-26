@@ -2,11 +2,16 @@ import Foundation
 
 /// Commands Ripcord runs itself, listed alongside apps.
 public enum BuiltinCommand: CaseIterable, Sendable {
-  case clipboardHistory, settings, resetWindowPosition, quit
+  case clipboardHistory, searchSnippets, createSnippet, exportSnippets, importSnippets, settings
+  case resetWindowPosition, quit
 
   public var title: String {
     switch self {
     case .clipboardHistory: "Clipboard History"
+    case .searchSnippets: "Search Snippets"
+    case .createSnippet: "Create Snippet"
+    case .exportSnippets: "Export Snippets"
+    case .importSnippets: "Import Snippets"
     case .settings: "Ripcord Settings"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .quit: "Quit Ripcord"
@@ -17,6 +22,10 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   public var settingsKey: String {
     switch self {
     case .clipboardHistory: "command:clipboard-history"
+    case .searchSnippets: "command:search-snippets"
+    case .createSnippet: "command:create-snippet"
+    case .exportSnippets: "command:export-snippets"
+    case .importSnippets: "command:import-snippets"
     case .settings: "command:settings"
     case .resetWindowPosition: "command:reset-window-position"
     case .quit: "command:quit"
@@ -39,6 +48,13 @@ public struct MenuAction: Equatable, Sendable {
   /// Modifiers in ⌃⌥⇧⌘ order, then the key, e.g. "⇧⌘C"; "↵" for the primary action.
   public let shortcut: String
   public let action: SearchResult.Action
+
+  public init(title: String, symbol: String, shortcut: String, action: SearchResult.Action) {
+    self.title = title
+    self.symbol = symbol
+    self.shortcut = shortcut
+    self.action = action
+  }
 }
 
 public struct SearchResult: Identifiable, Equatable, Sendable {
@@ -48,6 +64,13 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case reveal(URL)
     case run(BuiltinCommand)
     case clip(UUID, ClipAction)
+    /// The snippet at this index in the config.
+    case snippet(Int, SnippetAction)
+  }
+
+  public enum SnippetAction: Equatable, Sendable {
+    /// `delete` asks; `confirmDelete` deletes.
+    case paste, copy, edit, duplicate, delete, confirmDelete
   }
 
   public enum ClipAction: Equatable, Sendable {
@@ -55,12 +78,12 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   }
 
   public enum Kind: Equatable, Sendable {
-    case application, calculator, quicklink, command, text, image
+    case application, calculator, quicklink, command, text, image, snippet
 
     public var primaryAction: String {
       switch self {
       case .calculator: "Copy Answer"
-      case .text, .image: "Paste to App"
+      case .text, .image, .snippet: "Paste to App"
       case .application, .quicklink, .command: "Open Command"
       }
     }
@@ -97,6 +120,23 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
           shortcut: "⇧⌘P", action: .clip(id, .togglePin)),
         MenuAction(title: "Delete", symbol: "trash", shortcut: "⌃X", action: .clip(id, .delete)),
       ]
+    case .snippet(let index, _):
+      return [
+        primary,
+        MenuAction(
+          title: "Copy to Clipboard", symbol: "doc.on.doc", shortcut: "⇧⌘C",
+          action: .snippet(index, .copy)),
+        MenuAction(
+          title: "Edit Snippet", symbol: "pencil", shortcut: "⌘E", action: .snippet(index, .edit)),
+        MenuAction(
+          title: "Duplicate Snippet", symbol: "plus.square.on.square", shortcut: "⌘D",
+          action: .snippet(index, .duplicate)),
+        MenuAction(
+          title: "Create Snippet", symbol: "plus", shortcut: "⌘N", action: .run(.createSnippet)),
+        MenuAction(
+          title: "Delete Snippet", symbol: "trash", shortcut: "⌃X", action: .snippet(index, .delete)
+        ),
+      ]
     default:
       return [primary]
     }
@@ -111,6 +151,10 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   public let action: Action
   /// A clipboard image's file, drawn as the row's icon.
   public var thumbnail: URL? = nil
+  /// An SF Symbols name drawn as the row's icon, as a snippet's chosen one.
+  public var symbol: String? = nil
+  /// A snippet's tags, shown at the end of its row.
+  public var tags: [String] = []
   public var isPinned = false
 }
 
@@ -271,6 +315,43 @@ public enum Search {
     return ([SearchSection(title: "Pinned", results: pinned)] + days).filter { !$0.results.isEmpty }
   }
 
+  /// Search Snippets' list: snippets whose name, keyword or text contains the query, by name; an
+  /// exactly typed keyword comes first. Snippets with no text yet are left out.
+  /// `tag`, when set, keeps only the snippets carrying it.
+  public static func snippetSections(
+    for query: String, snippets: [Snippet], tag: String? = nil
+  ) -> [SearchSection] {
+    let trimmed = query.trimmingCharacters(in: .whitespaces)
+    func title(_ snippet: Snippet) -> String {
+      snippet.name.isEmpty ? "Untitled Snippet" : snippet.name
+    }
+    func keyword(_ snippet: Snippet) -> String? {
+      snippet.keyword?.trimmingCharacters(in: .whitespaces).nilIfEmpty
+    }
+    let matches = snippets.enumerated().filter { _, snippet in
+      !snippet.text.isEmpty && (tag.map { snippet.tags?.contains($0) == true } ?? true)
+        && (trimmed.isEmpty
+          || ([snippet.name, snippet.text] + [keyword(snippet)].compactMap { $0 }
+            + (snippet.tags ?? []))
+            .contains { $0.localizedStandardContains(trimmed) })
+    }
+    let sorted = matches.sorted { a, b in
+      let exact = [a, b].map {
+        keyword($0.element)?.caseInsensitiveCompare(trimmed) == .orderedSame
+      }
+      if exact[0] != exact[1] { return exact[0] }
+      return title(a.element).localizedStandardCompare(title(b.element)) == .orderedAscending
+    }
+    let results = sorted.map { index, snippet in
+      SearchResult(
+        // By position: a new snippet's name is empty, and names may repeat.
+        id: "snippet:\(index)", title: title(snippet),
+        subtitle: "", keyword: keyword(snippet), kind: .snippet,
+        action: .snippet(index, .paste), symbol: snippet.icon ?? "doc", tags: snippet.tags ?? [])
+    }
+    return results.isEmpty ? [] : [SearchSection(title: "Snippets", results: results)]
+  }
+
   /// Every app, Quicklink and command the Shortcuts page lists, in its three sections. Disabled
   /// items are included so they can be turned back on; an app found twice is listed once.
   public static func catalog(apps: [AppEntry], quicklinks: [Quicklink]) -> [CatalogSection] {
@@ -316,4 +397,8 @@ public enum Search {
       id: "command:\(command)", title: command.title, subtitle: "Ripcord", keyword: alias,
       kind: .command, action: .run(command))
   }
+}
+
+extension String {
+  fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
 }

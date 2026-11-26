@@ -10,16 +10,18 @@ public struct Config: Codable, Equatable, Sendable {
   /// The keyboard input source (a TIS ID such as `com.apple.keylayout.ABC`) selected while the
   /// panel is open; nil leaves the input source alone.
   public var inputSource: String?
+  public var snippets: [Snippet]
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
-    items: [String: ItemSettings] = [:], inputSource: String? = nil
+    items: [String: ItemSettings] = [:], inputSource: String? = nil, snippets: [Snippet] = []
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
     self.quicklinks = quicklinks
     self.items = items
     self.inputSource = inputSource
+    self.snippets = snippets
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -30,6 +32,7 @@ public struct Config: Codable, Equatable, Sendable {
     quicklinks = try container.decodeIfPresent([Quicklink].self, forKey: .quicklinks) ?? []
     items = try container.decodeIfPresent([String: ItemSettings].self, forKey: .items) ?? [:]
     inputSource = try container.decodeIfPresent(String.self, forKey: .inputSource)
+    snippets = try container.decodeIfPresent([Snippet].self, forKey: .snippets) ?? []
   }
 
   public static let `default` = Config(

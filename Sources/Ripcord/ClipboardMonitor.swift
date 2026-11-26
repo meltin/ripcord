@@ -106,12 +106,50 @@ final class ClipboardMonitor {
     return written
   }
 
+  /// Puts a snippet's `text` on the pasteboard without recording it, as its {clipboard} may hold
+  /// what a password manager kept out of the history. The markers tell other clipboard managers
+  /// the same: `transient` for a paste that's undone right after, `concealed` for a password.
+  func write(_ text: String, transient: Bool, concealed: Bool) -> Bool {
+    pasteboard.clearContents()
+    let written = pasteboard.setString(text, forType: .string)
+    pasteboard.setString(
+      Bundle.main.bundleIdentifier ?? "", forType: .init("org.nspasteboard.source"))
+    if transient { pasteboard.setString("", forType: .init("org.nspasteboard.TransientType")) }
+    if concealed { pasteboard.setString("", forType: .init("org.nspasteboard.ConcealedType")) }
+    changeCount = pasteboard.changeCount
+    return written
+  }
+
+  /// Whether what's copied now is a password manager's, by the nspasteboard.org convention.
+  var isConcealed: Bool {
+    pasteboard.types?.contains(.init("org.nspasteboard.ConcealedType")) ?? false
+  }
+
+  /// Everything on the pasteboard, every type of every item, to put back after a paste.
+  func snapshot() -> [NSPasteboardItem] {
+    (pasteboard.pasteboardItems ?? []).map { item in
+      let copy = NSPasteboardItem()
+      for type in item.types {
+        if let data = item.data(forType: type) { copy.setData(data, forType: type) }
+      }
+      return copy
+    }
+  }
+
+  /// Puts back a `snapshot()`, again without recording it.
+  func restore(_ items: [NSPasteboardItem]) {
+    pasteboard.clearContents()
+    if !items.isEmpty { pasteboard.writeObjects(items) }
+    changeCount = pasteboard.changeCount
+  }
+
   /// Asked for once per launch, so a dismissed request doesn't come back on every Return.
   private var hasAskedForAccessibility = false
 
   /// Presses ⌘V in the frontmost app. Without the Accessibility permission, asks for it and
   /// returns false, leaving the item copied.
-  func pasteIntoFrontmostApp() -> Bool {
+  /// `left` presses ← that many times after, for a snippet's `{cursor}`.
+  func pasteIntoFrontmostApp(thenLeft left: Int = 0) -> Bool {
     // The key's name, spelled out: kAXTrustedCheckOptionPrompt is a global var Swift 6 rejects.
     let options = ["AXTrustedCheckOptionPrompt": !hasAskedForAccessibility] as CFDictionary
     hasAskedForAccessibility = true
@@ -123,6 +161,21 @@ final class ClipboardMonitor {
         keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: isDown)
       event?.flags = .maskCommand
       event?.post(tap: .cghidEventTap)
+    }
+    // Queued after ⌘V, so the app moves the caret back once the text is in.
+    // shortcut: counts the snippet's characters, so an app that reformats a paste (re-indents,
+    // turns tabs into spaces) ends off by that much, and ← doesn't cross lines in a terminal;
+    // set the caret through Accessibility (kAXSelectedTextRange) if that bites. Past 2,000
+    // characters after {cursor} it stops pressing, rather than flood the app with events.
+    for _ in 0..<min(left, 2_000) {
+      for isDown in [true, false] {
+        let event = CGEvent(
+          keyboardEventSource: source, virtualKey: CGKeyCode(kVK_LeftArrow), keyDown: isDown)
+        // Set outright, as a real arrow key sends them, so a ⌘ or ⇧ still held can't turn ←
+        // into ⌘← or ⇧←.
+        event?.flags = [.maskNumericPad, .maskSecondaryFn]
+        event?.post(tap: .cghidEventTap)
+      }
     }
     return true
   }

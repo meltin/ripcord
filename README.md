@@ -19,6 +19,11 @@
   capture, with a preview and details of the selected one. Return pastes into the app you were in,
   ⇧⌘P pins an item to the top and ⌃X deletes it. Copies a password manager marks as concealed are
   never recorded, and switching the command off on the Shortcuts page stops recording
+- Snippets: Create Snippet saves text with a name, keyword, icon and tags from the panel, and
+  Search Snippets pastes it into the app you were in. `{clipboard}`, `{date}`, `{time}`,
+  `{datetime}`, `{day}` and `{uuid}` are filled in, and `{cursor}` is where the caret lands.
+  ⇧⌘C copies, ⌘E edits, ⌘D duplicates and ⌃X deletes; the tag menu filters the list. Export
+  Snippets and Import Snippets read and write the JSON Raycast uses
 - Drag the panel anywhere; it remembers the spot, and Reset Ripcord Window Position brings it back
 
 ## Quick start
@@ -58,9 +63,9 @@ swift test
 
 ## Permissions
 
-Pasting from Clipboard History presses ⌘V for you, which needs Ripcord to be allowed under
-System Settings › Privacy & Security › Accessibility; Ripcord asks once per launch, on the first
-paste. Until then, Return only copies the item and beeps. Ripcord is ad-hoc signed, so macOS forgets the
+Pasting from Clipboard History or Search Snippets presses ⌘V for you, which needs Ripcord to
+be allowed under System Settings › Privacy & Security › Accessibility; Ripcord asks once per
+launch, on the first paste. Until then, Return only copies the item and beeps. Ripcord is ad-hoc signed, so macOS forgets the
 permission whenever a new build replaces the app: after an update, remove Ripcord from that list
 and add it again, or run `tccutil reset Accessibility io.github.meltin.ripcord`.
 
@@ -74,6 +79,10 @@ the settings window opens. The settings window writes every change back to it.
   "hotkey": "cmd+space",
   "launchAtLogin": false,
   "inputSource": "com.apple.keylayout.ABC",
+  "snippets": [
+    { "name": "Address", "keyword": "addr", "text": "1 Infinite Loop\nCupertino", "icon": "house",
+      "tags": ["home"] }
+  ],
   "quicklinks": [
     { "name": "Google Search", "keyword": "g", "url": "https://www.google.com/search?q={query}" }
   ],

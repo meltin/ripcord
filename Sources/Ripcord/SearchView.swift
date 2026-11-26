@@ -12,7 +12,7 @@ struct SearchView: View {
   var body: some View {
     VStack(spacing: 0) {
       HStack(spacing: 12) {
-        if model.mode == .clipboard {
+        if model.mode != .root {
           HoverButton {
             onCommand(.back)
           } label: {
@@ -24,19 +24,38 @@ struct SearchView: View {
         } else if let logo = Bundle.main.image(forResource: "MenuBarIcon") {
           Image(nsImage: logo).renderingMode(.template).foregroundStyle(.secondary)
         }
-        SearchField(
-          text: model.query,
-          placeholder: model.mode == .clipboard
-            ? "Search Clipboard History…" : "Search apps, calculate, open Quicklinks…",
-          onChange: onQueryChange, onCommand: onCommand)
+        if model.mode == .snippetForm {
+          // A form has no query, so the header names what it does instead.
+          Text(model.editing == nil ? "Create Snippet" : "Edit Snippet")
+            .font(.system(size: 15, weight: .semibold))
+          Spacer()
+        } else {
+          SearchField(
+            text: model.query,
+            placeholder: model.mode.placeholder,
+            onChange: onQueryChange, onCommand: onCommand)
+          if model.mode == .snippets {
+            // Only tags of listed snippets: one on a snippet without text would list nothing.
+            TagFilter(
+              tags: Set(model.snippets.filter { !$0.text.isEmpty }.flatMap { $0.tags ?? [] })
+                .sorted {
+                  $0.localizedStandardCompare($1) == .orderedAscending
+                },
+              selection: model.snippetTag
+            ) { onCommand(.filterTag($0)) }
+          }
+        }
       }
       .padding(.horizontal, 20)
       .frame(height: LauncherController.fieldHeight)
       .background(DragArea())
-      Divider().opacity(0.5)
-      if model.sections.isEmpty {
+      // Raycast's form has no rule under its header.
+      if model.mode != .snippetForm { Divider().opacity(0.5) }
+      if model.mode == .snippetForm {
+        SnippetForm(model: model)
+      } else if model.sections.isEmpty {
         EmptyState(query: model.query, mode: model.mode)
-      } else if model.mode == .clipboard {
+      } else if model.mode != .root {
         // Raycast's layout: the list on the left, the selected item and its details on the right.
         HStack(spacing: 0) {
           resultList.frame(width: 300)
@@ -45,6 +64,10 @@ struct SearchView: View {
             let item = history.item(id)
           {
             ClipPreview(item: item, imageURL: history.imageURL(of: item))
+          } else if let selected = model.selected, case .snippet(let index, _) = selected.action,
+            model.snippets.indices.contains(index)
+          {
+            SnippetPreview(result: selected, text: model.snippets[index].text)
           } else {
             Spacer()
           }
@@ -68,6 +91,12 @@ struct SearchView: View {
             // Covers the footer, as Raycast's action panel does.
             .padding(8)
         }
+      }
+    }
+    .overlay {
+      if let confirmation = model.confirmation {
+        ConfirmationCard(
+          confirmation: confirmation, command: model.mode.command, onCommand: onCommand)
       }
     }
   }
@@ -116,6 +145,12 @@ private struct EmptyState: View {
       "Text and images you copy show up here."
     case .clipboard:
       "Nothing copied contains “\(query)”."
+    case .snippets where query.trimmingCharacters(in: .whitespaces).isEmpty:
+      "Save text you type again and again with Create Snippet."
+    case .snippets:
+      "No snippet contains “\(query)”."
+    case .snippetForm:
+      ""
     }
   }
 
@@ -157,6 +192,14 @@ private struct ResultRow: View {
           .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
       }
       Spacer(minLength: 12)
+      ForEach(result.tags, id: \.self) { tag in
+        Text(tag)
+          .font(.system(size: 12))
+          .foregroundStyle(.secondary)
+          .padding(.horizontal, 7)
+          .padding(.vertical, 2)
+          .background(.quaternary, in: Capsule())
+      }
       if showsKind {
         Text(result.kind.label).font(.system(size: 13)).foregroundStyle(.secondary)
       }
@@ -186,16 +229,16 @@ private struct ResultIcon: View {
       tile("plus.forwardslash.minus", .orange)
     case .open:
       tile("link", .blue)
-    case .run(.settings):
-      tile("gearshape.fill", .gray)
-    case .run(.resetWindowPosition):
-      tile("macwindow", .gray)
-    case .run(.quit):
-      tile("power", .red)
+    case .run(let command):
+      tile(command.symbol, command.color)
     case .reveal:
       tile("folder", .gray)
-    case .run(.clipboardHistory):
-      tile("list.clipboard.fill", .red)
+    case .snippet:
+      // Plain, as Raycast draws a snippet's icon.
+      Image(systemName: result.symbol ?? "doc")
+        .font(.system(size: 15))
+        .foregroundStyle(.secondary)
+        .frame(width: 24, height: 24)
     case .clip:
       if let thumbnail = result.thumbnail {
         // Cropped to a rounded square, as Raycast draws them.
@@ -214,6 +257,30 @@ private struct ResultIcon: View {
       .foregroundStyle(.white)
       .frame(width: 24, height: 24)
       .background(color.gradient, in: RoundedRectangle(cornerRadius: 6))
+  }
+}
+
+extension BuiltinCommand {
+  /// Its icon: a white SF Symbol on a tile of this color.
+  fileprivate var symbol: String {
+    switch self {
+    case .clipboardHistory: "list.clipboard.fill"
+    case .searchSnippets: "doc.plaintext.fill"
+    case .createSnippet: "doc.badge.plus"
+    case .exportSnippets: "square.and.arrow.up"
+    case .importSnippets: "square.and.arrow.down"
+    case .settings: "gearshape.fill"
+    case .resetWindowPosition: "macwindow"
+    case .quit: "power"
+    }
+  }
+
+  fileprivate var color: Color {
+    switch self {
+    case .clipboardHistory, .quit: .red
+    case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .blue
+    case .settings, .resetWindowPosition: .gray
+    }
   }
 }
 
@@ -282,50 +349,506 @@ private struct ClipPreview: View {
       // A fixed share for the clip; the details scroll under the footer, as in Raycast.
       .frame(height: 210)
       Divider().opacity(0.5)
-      ScrollView {
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Information")
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.bottom, 4)
-          if let sourceApp {
-            detailRow("Source", index: 0) {
-              HStack(spacing: 6) {
-                Image(nsImage: NSWorkspace.shared.icon(forFile: sourceApp.path)).resizable()
-                  .frame(width: 16, height: 16)
-                Text(FileManager.default.displayName(atPath: sourceApp.path))
-              }
+      Information {
+        if let sourceApp {
+          detailRow("Source", index: 0) {
+            HStack(spacing: 6) {
+              Image(nsImage: NSWorkspace.shared.icon(forFile: sourceApp.path)).resizable()
+                .frame(width: 16, height: 16)
+              Text(FileManager.default.displayName(atPath: sourceApp.path))
             }
           }
-          ForEach(Array(details.enumerated()), id: \.offset) { index, row in
-            detailRow(row.label, index: index + (sourceApp == nil ? 0 : 1)) { Text(row.value) }
+        }
+        ForEach(Array(details.enumerated()), id: \.offset) { index, row in
+          detailRow(row.label, index: index + (sourceApp == nil ? 0 : 1)) { Text(row.value) }
+        }
+      }
+    }
+  }
+}
+
+/// Create Snippet's form, as Raycast lays it out: the text on the left, name and keyword on the
+/// right. ⌘↵ saves; Return types a new line.
+private struct SnippetForm: View {
+  @Bindable var model: LauncherModel
+  @FocusState private var focus: Field?
+
+  enum Field: CaseIterable { case text, name, keyword, tags }
+  /// The snippet's caret or selection, kept while another field has focus, so a placeholder
+  /// chip goes where the caret last was.
+  @State private var selection: TextSelection?
+  @State private var highlighter = PlaceholderHighlighter()
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 28) {
+      VStack(alignment: .leading, spacing: 8) {
+        label("Snippet")
+        TextEditor(text: $model.draft.text, selection: $selection)
+          .font(.system(size: 13))
+          .scrollContentBackground(.hidden)
+          .scrollIndicators(.never)
+          .padding(10)
+          // Down to the footer, level with the placeholders at the bottom of the right column.
+          .frame(maxHeight: .infinity)
+          .field(isFocused: focus == .text)
+          .focused($focus, equals: .text)
+          .tabs(from: .text, focus: $focus)
+      }
+      VStack(alignment: .leading, spacing: 8) {
+        label("Name & Icon")
+        HStack(spacing: 0) {
+          TextField("Snippet name", text: $model.draft.name)
+            .focused($focus, equals: .name)
+            .tabs(from: .name, focus: $focus)
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 12)
+          Divider().frame(height: 20)
+          Button {
+            model.isPickingIcon.toggle()
+          } label: {
+            HStack(spacing: 6) {
+              Image(systemName: model.draft.icon ?? "doc").font(.system(size: 14))
+              Image(systemName: model.isPickingIcon ? "chevron.up" : "chevron.down")
+                .font(.system(size: 9, weight: .semibold))
+            }
+            .padding(.horizontal, 12)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .accessibilityLabel("Choose an icon")
+        }
+        .frame(height: 36)
+        .field(isFocused: focus == .name)
+        // Raycast's picker drops down from the field, over what's below it.
+        .overlay(alignment: .topTrailing) {
+          if model.isPickingIcon {
+            IconPicker(selection: $model.draft.icon) { model.isPickingIcon = false }
+              .offset(y: 44)
           }
         }
-        .font(.system(size: 12))
-        .padding(.horizontal, 8)
-        .padding(.top, 10)
-        // Clear of the floating footer.
-        .padding(.bottom, LauncherController.footerHeight)
+        .zIndex(1)
+        label("Keyword").padding(.top, 14)
+        TextField(
+          "Keyword",
+          text: Binding {
+            model.draft.keyword ?? ""
+          } set: {
+            model.draft.keyword = $0.isEmpty ? nil : $0
+          }
+        )
+        .focused($focus, equals: .keyword)
+        .tabs(from: .keyword, focus: $focus)
+        .inputField(isFocused: focus == .keyword)
+        label("Tags").padding(.top, 14)
+        TextField("Tags, separated by commas", text: $model.tagsText)
+          .focused($focus, equals: .tags)
+          .tabs(from: .tags, focus: $focus)
+          .inputField(isFocused: focus == .tags)
+        Spacer(minLength: 16)
+        PlaceholderList { insert($0) }
       }
-      .scrollIndicators(.never)
+      .frame(width: 280)
+    }
+    .font(.system(size: 14))
+    .padding(.horizontal, 40)
+    .padding(.top, 4)
+    // Clear of the floating footer, with the same gap the sides have.
+    .padding(.bottom, LauncherController.footerHeight + 12)
+    .frame(maxHeight: .infinity, alignment: .top)
+    // On the next pass: as the form appears, the search field it replaces is still first
+    // responder, and a panel opened straight into the form isn't key yet.
+    .onAppear {
+      DispatchQueue.main.async {
+        focus = .text
+        highlighter.attach()
+      }
+    }
+    // Back to the name once the icon list closes, however it closed.
+    .onChange(of: model.isPickingIcon) { if !model.isPickingIcon { focus = .name } }
+  }
+
+  /// Replaces the selection (or puts at the caret, or at the end with no caret yet) with
+  /// `token`, and leaves the caret after it in the focused text box.
+  private func insert(_ token: String) {
+    let text = model.draft.text
+    let range: Range<String.Index> =
+      if case .selection(let range)? = selection?.indices, range.upperBound <= text.endIndex {
+        range
+      } else {
+        text.endIndex..<text.endIndex
+      }
+    let caret = text.distance(from: text.startIndex, to: range.lowerBound) + token.count
+    let filled = String(text[..<range.lowerBound]) + token + String(text[range.upperBound...])
+    model.draft.text = filled
+    selection = TextSelection(insertionPoint: filled.index(filled.startIndex, offsetBy: caret))
+    focus = .text
+  }
+
+  private func label(_ text: String) -> some View {
+    Text(text).font(.system(size: 12)).foregroundStyle(.secondary)
+  }
+}
+
+/// What a snippet can hold besides text, each with what it becomes on hover.
+private struct PlaceholderList: View {
+  let onInsert: (String) -> Void
+  private let rows: [[(token: String, help: String)]] = [
+    [
+      ("{clipboard}", "What's copied"), ("{date}", "Today's date"),
+      ("{time}", "The time now"),
+    ],
+    [
+      ("{datetime}", "Date and time"), ("{day}", "The weekday"), ("{uuid}", "A new UUID"),
+      ("{cursor}", "Where the caret lands"),
+    ],
+  ]
+
+  /// What the chip under the pointer becomes, shown beside the heading. Not `.help`: its
+  /// tooltip layer took the chips' clicks.
+  @State private var hovered: String?
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 6) {
+        Text("Placeholders").foregroundStyle(.secondary)
+        if let hovered {
+          Text("· \(hovered)").foregroundStyle(.tertiary)
+        }
+      }
+      .font(.system(size: 12))
+      ForEach(rows.indices, id: \.self) { row in
+        HStack(spacing: 6) {
+          ForEach(rows[row], id: \.token) { placeholder in
+            PlaceholderChip(token: placeholder.token, onInsert: onInsert) { isHovered in
+              hovered = isHovered ? placeholder.help : nil
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/// A placeholder that, clicked, goes into the snippet where its caret last was.
+private struct PlaceholderChip: View {
+  let token: String
+  let onInsert: (String) -> Void
+  let onHover: (Bool) -> Void
+  @State private var isHovered = false
+
+  var body: some View {
+    Button {
+      onInsert(token)
+    } label: {
+      Text(verbatim: token)
+        .font(.system(size: 11, design: .monospaced))
+        .foregroundStyle(.tint)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Color.accentColor.opacity(isHovered ? 0.22 : 0.12), in: Capsule())
+        .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .onHover {
+      isHovered = $0
+      onHover($0)
+    }
+    .accessibilityLabel("Insert \(token)")
+  }
+}
+
+extension View {
+  /// Tab and ⇧Tab move through the form's fields in order, wrapping around: a panel that never
+  /// activates its app gets no key view loop from AppKit, and the text box would type a tab.
+  fileprivate func tabs(
+    from field: SnippetForm.Field, focus: FocusState<SnippetForm.Field?>.Binding
+  ) -> some View {
+    // Held keys repeat; ⇧Tab may arrive as backtab (U+0019) rather than Tab with ⇧.
+    onKeyPress(keys: [.tab, KeyEquivalent("\u{19}")], phases: [.down, .repeat]) { press in
+      // A Japanese input method uses Tab to pick a prediction while it's composing. The panel
+      // is looked up: it takes keys without activating Ripcord, so NSApp.keyWindow can be nil.
+      if (launcherPanel()?.firstResponder as? NSTextView)?.hasMarkedText() == true {
+        return .ignored
+      }
+      let fields = SnippetForm.Field.allCases
+      let index = fields.firstIndex(of: field) ?? 0
+      let backward = press.modifiers.contains(.shift) || press.key == KeyEquivalent("\u{19}")
+      let step = backward ? fields.count - 1 : 1
+      focus.wrappedValue = fields[(index + step) % fields.count]
+      return .handled
     }
   }
 
-  private func detailRow<Value: View>(
-    _ label: String, index: Int, @ViewBuilder value: () -> Value
-  ) -> some View {
-    HStack {
-      Text(label).foregroundStyle(.secondary)
-      Spacer()
-      value()
-    }
-    .padding(.horizontal, 8)
-    .frame(height: 24)
-    .background(
-      index.isMultiple(of: 2) ? Color.primary.opacity(0.025) : .clear,
-      in: RoundedRectangle(cornerRadius: 6))
+  /// A form field's outline, as Raycast draws them: no fill, darker while it has focus.
+  fileprivate func field(isFocused: Bool) -> some View {
+    overlay(
+      RoundedRectangle(cornerRadius: 12)
+        .strokeBorder(Color.primary.opacity(isFocused ? 0.3 : 0.15), lineWidth: isFocused ? 2 : 1))
   }
+
+  fileprivate func inputField(isFocused: Bool) -> some View {
+    textFieldStyle(.plain)
+      .padding(.horizontal, 12)
+      .frame(height: 36)
+      .field(isFocused: isFocused)
+  }
+}
+
+/// The placeholders Snippet.expand fills in, as typed in a snippet.
+private let placeholderPattern = try? NSRegularExpression(
+  pattern: #"\{(clipboard|date|time|datetime|day|uuid|cursor)\}"#)
+
+/// Colors the placeholders in Create Snippet's text box in the accent color, so a mistyped one
+/// shows. As the text storage's delegate, it colors within each edit, typed or set by SwiftUI,
+/// so a placeholder is never drawn uncolored. Only attributes change: SwiftUI binds the
+/// characters, which stay as they are.
+final class PlaceholderHighlighter: NSObject, NSTextStorageDelegate {
+  private weak var storage: NSTextStorage?
+
+  /// SwiftUI's TextEditor leaves its text storage's delegate unset, so this takes it.
+  @MainActor func attach() {
+    guard storage == nil,
+      let panel = launcherPanel(),
+      let content = panel.contentView, let storage = snippetTextView(in: content)?.textStorage,
+      storage.delegate == nil
+    else { return }
+    self.storage = storage
+    storage.delegate = self
+    // One edit, so the delegate call it sets off colors once and doesn't recurse.
+    storage.beginEditing()
+    Self.color(storage)
+    storage.endEditing()
+  }
+
+  func textStorage(
+    _ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions,
+    range editedRange: NSRange, changeInLength delta: Int
+  ) {
+    Self.color(textStorage)
+  }
+
+  private static func color(_ storage: NSTextStorage) {
+    let all = NSRange(location: 0, length: storage.length)
+    storage.addAttribute(.foregroundColor, value: NSColor.textColor, range: all)
+    for match in placeholderPattern?.matches(in: storage.string, range: all) ?? [] {
+      storage.addAttribute(.foregroundColor, value: NSColor.controlAccentColor, range: match.range)
+    }
+  }
+}
+
+/// The panel, found among the app's windows: it takes keys without activating Ripcord.
+@MainActor private func launcherPanel() -> NSWindow? {
+  NSApp.windows.first { $0 is LauncherPanel && $0.isVisible }
+}
+
+/// The form's one multi-line editor; single-line fields edit through a shared field editor.
+@MainActor private func snippetTextView(in view: NSView) -> NSTextView? {
+  if let textView = view as? NSTextView, !textView.isFieldEditor, textView.isEditable {
+    return textView
+  }
+  return view.subviews.lazy.compactMap { snippetTextView(in: $0) }.first
+}
+
+/// SF Symbols to choose a snippet's icon from, named as Raycast names its icons.
+private let snippetIcons: [(name: String, symbol: String)] = [
+  ("Blank Document", "doc"), ("Text Document", "doc.text"), ("Note", "note.text"),
+  ("Quote", "quote.opening"), ("List", "list.bullet"), ("Checklist", "checklist"),
+  ("Pencil", "pencil"), ("Signature", "signature"), ("Envelope", "envelope"),
+  ("Paper Plane", "paperplane"), ("Message", "message"), ("Phone", "phone"), ("At", "at"),
+  ("Person", "person"), ("People", "person.2"), ("Building", "building.2"), ("House", "house"),
+  ("Location", "mappin.and.ellipse"), ("Globe", "globe"), ("Link", "link"),
+  ("Calendar", "calendar"), ("Clock", "clock"), ("Alarm", "alarm"), ("Bell", "bell"),
+  ("Key", "key"), ("Lock", "lock"), ("Number", "number"),
+  ("Code", "chevron.left.forwardslash.chevron.right"),
+  ("Terminal", "terminal"), ("Command", "command"), ("Keyboard", "keyboard"), ("Bug", "ant"),
+  ("Hammer", "hammer"), ("Wrench", "wrench.adjustable"), ("Gear", "gearshape"),
+  ("Light Bulb", "lightbulb"), ("Star", "star"), ("Heart", "heart"), ("Flag", "flag"),
+  ("Bookmark", "bookmark"), ("Tag", "tag"), ("Pin", "pin"), ("Bolt", "bolt"), ("Flame", "flame"),
+  ("Sparkles", "sparkles"), ("Magic Wand", "wand.and.stars"), ("Leaf", "leaf"),
+  ("Sun", "sun.max"), ("Moon", "moon"), ("Cloud", "cloud"), ("Umbrella", "umbrella"),
+  ("Coffee", "cup.and.saucer"), ("Fork & Knife", "fork.knife"), ("Cart", "cart"),
+  ("Bag", "bag"), ("Credit Card", "creditcard"), ("Gift", "gift"), ("Book", "book"),
+  ("Graduation Cap", "graduationcap"), ("Briefcase", "briefcase"), ("Folder", "folder"),
+  ("Tray", "tray"), ("Archive", "archivebox"), ("Paperclip", "paperclip"),
+  ("Checkmark", "checkmark.circle"), ("Question Mark", "questionmark.circle"),
+  ("Info", "info.circle"), ("Warning", "exclamationmark.triangle"), ("Smile", "face.smiling"),
+  ("Hand Wave", "hand.wave"), ("Thumbs Up", "hand.thumbsup"), ("Camera", "camera"),
+  ("Photo", "photo"), ("Music", "music.note"), ("Film", "film"), ("Microphone", "mic"),
+  ("Car", "car"), ("Airplane", "airplane"), ("Bike", "bicycle"), ("Bird", "bird"),
+  ("Paw", "pawprint"), ("Brain", "brain"),
+]
+
+/// A searchable list of `snippetIcons`. ↑↓ move, Return picks, a click picks.
+private struct IconPicker: View {
+  @Binding var selection: String?
+  let onClose: () -> Void
+  @State private var query = ""
+  @State private var highlighted = 0
+
+  private var matches: [(name: String, symbol: String)] {
+    query.isEmpty ? snippetIcons : snippetIcons.filter { $0.name.localizedStandardContains(query) }
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
+      // The panel's own field, which leaves arrows and Return to the input method while it's
+      // composing, and takes focus as it appears.
+      SearchField(
+        text: query, placeholder: "Search…", fontSize: 14,
+        onChange: {
+          query = $0
+          highlighted = 0
+        },
+        onCommand: { command in
+          switch command {
+          case .down: highlighted = min(highlighted + 1, max(matches.count - 1, 0))
+          case .up: highlighted = max(highlighted - 1, 0)
+          case .submit: pick(highlighted)
+          case .cancel: onClose()
+          default: break
+          }
+        }
+      )
+      .padding(.horizontal, 14)
+      .frame(height: 40)
+      Divider().opacity(0.5)
+      ScrollViewReader { proxy in
+        ScrollView {
+          LazyVStack(spacing: 0) {
+            ForEach(Array(matches.enumerated()), id: \.element.symbol) { index, icon in
+              HStack(spacing: 10) {
+                Image(systemName: icon.symbol).frame(width: 20)
+                Text(icon.name)
+                Spacer()
+              }
+              .font(.system(size: 14))
+              .padding(.horizontal, 10)
+              .frame(height: 34)
+              .background(
+                RoundedRectangle(cornerRadius: 8)
+                  .fill(index == highlighted ? Color.primary.opacity(0.1) : .clear)
+              )
+              .contentShape(Rectangle())
+              .onHover { if $0 { highlighted = index } }
+              .onTapGesture { pick(index) }
+            }
+          }
+          .padding(6)
+        }
+        .scrollIndicators(.never)
+        .onChange(of: highlighted) {
+          if matches.indices.contains(highlighted) { proxy.scrollTo(matches[highlighted].symbol) }
+        }
+      }
+    }
+    .frame(width: 240, height: 300)
+    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+    .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
+  }
+
+  private func pick(_ index: Int) {
+    guard matches.indices.contains(index) else { return }
+    // The blank document is the default, so it's stored as no icon.
+    selection = matches[index].symbol == "doc" ? nil : matches[index].symbol
+    onClose()
+  }
+}
+
+/// Search Snippets' "All Tags" dropdown, in the header's corner as Raycast puts it.
+private struct TagFilter: View {
+  let tags: [String]
+  let selection: String?
+  let onSelect: (String?) -> Void
+
+  var body: some View {
+    if !tags.isEmpty {
+      Menu {
+        Button("All Tags") { onSelect(nil) }
+        Divider()
+        ForEach(tags, id: \.self) { tag in
+          Button(tag) { onSelect(tag) }
+        }
+      } label: {
+        Label(selection ?? "All Tags", systemImage: "tag")
+      }
+      .menuStyle(.borderlessButton)
+      .fixedSize()
+      .font(.system(size: 13))
+      .foregroundStyle(.secondary)
+    }
+  }
+}
+
+/// The selected snippet's text as saved, placeholders and all, then its details.
+private struct SnippetPreview: View {
+  let result: SearchResult
+  let text: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      ScrollView {
+        Text(text)
+          .font(.system(size: 12))
+          .textSelection(.enabled)
+          .frame(maxWidth: .infinity, alignment: .topLeading)
+          .padding(16)
+      }
+      .frame(height: 210)
+      Divider().opacity(0.5)
+      Information {
+        detailRow("Name", index: 0) { Text(result.title) }
+        if let keyword = result.keyword {
+          detailRow("Keyword", index: 1) { Text(keyword) }
+        }
+        if !result.tags.isEmpty {
+          detailRow("Tags", index: result.keyword == nil ? 1 : 2) {
+            Text(result.tags.joined(separator: ", "))
+          }
+        }
+      }
+    }
+  }
+}
+
+/// A preview's "Information" rows, scrolling under the floating footer as in Raycast.
+private struct Information<Rows: View>: View {
+  @ViewBuilder let rows: Rows
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 2) {
+        Text("Information")
+          .font(.system(size: 12, weight: .medium))
+          .foregroundStyle(.secondary)
+          .padding(.horizontal, 8)
+          .padding(.bottom, 4)
+        rows
+      }
+      .font(.system(size: 12))
+      .padding(.horizontal, 8)
+      .padding(.top, 10)
+      // Clear of the floating footer.
+      .padding(.bottom, LauncherController.footerHeight)
+    }
+    .scrollIndicators(.never)
+  }
+}
+
+/// One striped label-and-value row of a preview's details.
+private func detailRow<Value: View>(
+  _ label: String, index: Int, @ViewBuilder value: () -> Value
+) -> some View {
+  HStack {
+    Text(label).foregroundStyle(.secondary)
+    Spacer()
+    value()
+  }
+  .padding(.horizontal, 8)
+  .frame(height: 24)
+  .background(
+    index.isMultiple(of: 2) ? Color.primary.opacity(0.025) : .clear,
+    in: RoundedRectangle(cornerRadius: 6))
 }
 
 /// A clipboard image, decoded off the main thread at `maxPixelSize` and cached, so a screenshot
@@ -387,15 +910,15 @@ private struct Footer: View {
 
   var body: some View {
     HStack {
-      if mode == .clipboard {
+      if let command = mode.command {
         // Names the command the panel is in, as Raycast's footer does.
         HStack(spacing: 8) {
-          Image(systemName: "list.clipboard.fill")
+          Image(systemName: command.symbol)
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(.white)
             .frame(width: 18, height: 18)
-            .background(Color.red.gradient, in: RoundedRectangle(cornerRadius: 5))
-          Text("Clipboard History")
+            .background(command.color.gradient, in: RoundedRectangle(cornerRadius: 5))
+          Text(command.title).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 10)
         .frame(height: 32)
@@ -413,7 +936,21 @@ private struct Footer: View {
       }
       Spacer()
       HStack(spacing: 2) {
-        if let selected {
+        if mode == .snippetForm {
+          HoverButton {
+            onCommand(.submit)
+          } label: {
+            HStack(spacing: 6) {
+              Text("Save Snippet")
+              HStack(spacing: 2) {
+                Keycap("⌘")
+                Keycap("↵")
+              }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+          }
+        } else if let selected {
           HoverButton {
             onCommand(.submit)
           } label: {
@@ -425,18 +962,8 @@ private struct Footer: View {
             .frame(height: 26)
           }
         }
-        HoverButton {
-          onCommand(.toggleMenu(root: false))
-        } label: {
-          HStack(spacing: 6) {
-            Text("Actions").foregroundStyle(.secondary)
-            HStack(spacing: 2) {
-              Keycap("⌘")
-              Keycap("K")
-            }
-          }
-          .padding(.horizontal, 10)
-          .frame(height: 26)
+        if mode != .snippetForm {
+          actionsButton
         }
       }
       .padding(.horizontal, 3)
@@ -447,6 +974,83 @@ private struct Footer: View {
     .padding(.horizontal, 8)
     .frame(height: LauncherController.footerHeight)
     .background(DragArea())
+  }
+
+  private var actionsButton: some View {
+    HoverButton {
+      onCommand(.toggleMenu(root: false))
+    } label: {
+      HStack(spacing: 6) {
+        Text("Actions").foregroundStyle(.secondary)
+        HStack(spacing: 2) {
+          Keycap("⌘")
+          Keycap("K")
+        }
+      }
+      .padding(.horizontal, 10)
+      .frame(height: 26)
+    }
+  }
+}
+
+/// An alert over a dimmed panel: the command's icon beside the question, then Cancel and a red
+/// Delete of equal width, each showing its key.
+private struct ConfirmationCard: View {
+  let confirmation: Confirmation
+  let command: BuiltinCommand?
+  let onCommand: (SearchCommand) -> Void
+
+  var body: some View {
+    ZStack {
+      // A click outside the card cancels, as Esc does.
+      Color.black.opacity(0.2)
+        .contentShape(Rectangle())
+        .onTapGesture { onCommand(.cancel) }
+      VStack(alignment: .leading, spacing: 22) {
+        HStack(alignment: .top, spacing: 14) {
+          if let command {
+            Image(systemName: command.symbol)
+              .font(.system(size: 18, weight: .semibold))
+              .foregroundStyle(.white)
+              .frame(width: 42, height: 42)
+              .background(command.color.gradient, in: RoundedRectangle(cornerRadius: 11))
+          }
+          VStack(alignment: .leading, spacing: 5) {
+            Text(confirmation.title).font(.system(size: 15, weight: .semibold))
+            Text(confirmation.message)
+              .font(.system(size: 13))
+              .foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+        HStack(spacing: 10) {
+          button("Cancel", key: "esc", command: .cancel, tint: .primary, fill: 0.07)
+          button(confirmation.confirmTitle, key: "↵", command: .submit, tint: .red, fill: 0.14)
+        }
+      }
+      .padding(22)
+      .frame(width: 360)
+      .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20))
+      .shadow(color: .black.opacity(0.18), radius: 18, y: 6)
+    }
+  }
+
+  private func button(
+    _ title: String, key: String, command: SearchCommand, tint: Color, fill: Double
+  ) -> some View {
+    Button {
+      onCommand(command)
+    } label: {
+      HStack(spacing: 6) {
+        Text(title).foregroundStyle(tint)
+        Keycap(key)
+      }
+      .font(.system(size: 13, weight: .medium))
+      .frame(maxWidth: .infinity, minHeight: 36)
+      .background(tint.opacity(fill), in: RoundedRectangle(cornerRadius: 10))
+      .contentShape(RoundedRectangle(cornerRadius: 10))
+    }
+    .buttonStyle(.plain)
   }
 }
 
@@ -527,7 +1131,7 @@ private struct MenuCard: View {
 private func title(
   of action: SearchResult.Action, else fallback: String, _ pasteTarget: String?
 ) -> String {
-  guard case .clip(_, .paste) = action, let pasteTarget else { return fallback }
+  guard action.isPaste, let pasteTarget else { return fallback }
   return "Paste to \(pasteTarget)"
 }
 
@@ -557,6 +1161,7 @@ extension SearchResult.Kind {
     case .command: "Command"
     case .text: "Text"
     case .image: "Image"
+    case .snippet: "Snippet"
     }
   }
 }
@@ -566,6 +1171,7 @@ extension SearchResult.Kind {
 private struct SearchField: NSViewRepresentable {
   let text: String
   let placeholder: String
+  var fontSize: CGFloat = 18
   let onChange: (String) -> Void
   let onCommand: (SearchCommand) -> Void
 
@@ -574,7 +1180,7 @@ private struct SearchField: NSViewRepresentable {
     field.isBordered = false
     field.drawsBackground = false
     field.focusRingType = .none
-    field.font = .systemFont(ofSize: 18)
+    field.font = .systemFont(ofSize: fontSize)
     field.cell?.isScrollable = true
     field.delegate = context.coordinator
     return field
@@ -629,5 +1235,25 @@ final class FocusingTextField: NSTextField {
     (currentEditor() as? NSTextView)?.insertionPointColor = NSColor(
       red: 1, green: 0.353, blue: 0.122, alpha: 1)
     return became
+  }
+}
+
+extension SearchResult.Action {
+  fileprivate var isPaste: Bool {
+    switch self {
+    case .clip(_, .paste), .snippet(_, .paste): true
+    default: false
+    }
+  }
+}
+
+extension LauncherMode {
+  fileprivate var placeholder: String {
+    switch self {
+    case .root: "Search apps, calculate, open Quicklinks…"
+    case .clipboard: "Search Clipboard History…"
+    case .snippets: "Search Snippets…"
+    case .snippetForm: ""
+    }
   }
 }

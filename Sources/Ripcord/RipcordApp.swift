@@ -1,6 +1,7 @@
 import AppKit
 import RipcordCore
 import ServiceManagement
+import UniformTypeIdentifiers
 
 @main
 @MainActor
@@ -34,6 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     NSApp.mainMenu = makeMainMenu()
     statusItem = makeStatusItem()
     launcher.onOpenSettings = { [weak self] in self?.openSettings() }
+    launcher.editSnippets = { [weak self] change in self?.editSnippets(change) ?? false }
+    launcher.onExportSnippets = { [weak self] in self?.exportSnippets() }
+    launcher.onImportSnippets = { [weak self] in self?.importSnippets() }
     settings.model.onSave = { [weak self] in self?.applyConfig() }
     settings.model.onRecordingChange = { [weak self] isRecording in
       self?.isRecording = isRecording
@@ -61,6 +65,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     launcher.toggle()
   }
 
+  /// Through the settings window's model, so an open window shows the change and can't write
+  /// back a list from before it. Read first, so edits made to the file meanwhile are kept.
+  private func editSnippets(_ change: ([Snippet]) -> [Snippet]?) -> Bool {
+    let model = settings.model
+    model.load()
+    guard model.loadError == nil else {
+      showError(model.loadError ?? "")
+      return false
+    }
+    guard let snippets = change(model.config.snippets) else {
+      // The file changed under the panel; show what it holds now.
+      applyConfig()
+      return false
+    }
+    model.config.snippets = snippets
+    // Saving calls applyConfig, which hands the launcher the new list.
+    model.saveIfChanged()
+    if let error = model.loadError { showError(error) }
+    return model.loadError == nil
+  }
+
+  /// Writes every snippet to a JSON file Raycast can import too.
+  private func exportSnippets() {
+    NSApp.activate()
+    let panel = NSSavePanel()
+    panel.nameFieldStringValue = "snippets.json"
+    panel.allowedContentTypes = [.json]
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    do {
+      // From the file as it is now; a file that doesn't read is reported, not covered up with
+      // an older list.
+      let snippets = try Config.load(from: configURL).snippets
+      try Snippet.exportData(snippets).write(to: url, options: .atomic)
+    } catch {
+      showError("Couldn't export the snippets: \(error.localizedDescription)")
+    }
+  }
+
+  /// Adds the snippets in a JSON file, such as one Raycast exported, skipping ones already here.
+  private func importSnippets() {
+    NSApp.activate()
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.json]
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    do {
+      let data = try Data(contentsOf: url)
+      var added = 0
+      var failure: Error?
+      let saved = editSnippets { current in
+        do {
+          let merged = try Snippet.merging(data, into: current)
+          added = merged.added
+          return merged.snippets
+        } catch {
+          failure = error
+          return nil
+        }
+      }
+      if let failure { throw failure }
+      if saved {
+        showMessage(added == 1 ? "Imported 1 snippet." : "Imported \(added) snippets.")
+      }
+    } catch {
+      showError("Couldn't import \(url.lastPathComponent): \(error.localizedDescription)")
+    }
+  }
+
   @objc private func openSettings() {
     settings.show()
   }
@@ -73,6 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.quicklinks = config.quicklinks
       launcher.items = config.items
       launcher.inputSource = config.inputSource
+      launcher.snippets = config.snippets
       applyLaunchAtLogin(config.launchAtLogin)
       // Saving mid-recording must not bring back the hotkeys the recorder turned off.
       if !isRecording { applyHotkeys(config) }
@@ -119,6 +191,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       toggleLauncher()
     case .item(let key):
       if let command = BuiltinCommand.allCases.first(where: { $0.settingsKey == key }) {
+        // Read now, as opening the panel does, so a snippet added to the file is listed.
+        if !launcher.isVisible { applyConfig() }
         launcher.perform(.run(command))
       } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: key)
         ?? (key.hasPrefix("/") ? URL(fileURLWithPath: key) : nil)
@@ -194,6 +268,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     item.menu = menu
     return item
+  }
+
+  private func showMessage(_ message: String) {
+    let alert = NSAlert()
+    alert.messageText = message
+    alert.runModal()
   }
 
   private func showError(_ message: String) {
