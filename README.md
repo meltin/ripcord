@@ -10,6 +10,8 @@
   Quicklinks
 - Calculator: `1+2*3`, `(1.5+2)^2`, full-width input too; Return copies the result
 - Quicklinks: `g swift testing` opens a search; with no match, the query goes to each Quicklink
+- Favorites: ⇧⌘F on an app, command or Quicklink pins it to the top of the empty search, in
+  your order (⌥⌘↑ and ⌥⌘↓ move it), as Raycast's Favorites do
 - ⌘K lists the selected row's actions (Open Command ↵, Show in Finder ⇧⌘F, Copy Path or URL ⇧⌘C)
 - Settings (⌘,): Launch at Login, the hotkey, the input source to type in and Quicklinks, kept
   in sync with the config file

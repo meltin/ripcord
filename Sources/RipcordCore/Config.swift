@@ -14,11 +14,14 @@ public struct Config: Codable, Equatable, Sendable {
   public var repositories: RepositorySettings
   /// What Pick Color copies, and Color History lists first.
   public var colorFormat: ColorFormat
+  /// The root search's Favorites, by item key, in the user's order.
+  public var favorites: [String]
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
     items: [String: ItemSettings] = [:], inputSource: String? = nil, snippets: [Snippet] = [],
-    repositories: RepositorySettings = RepositorySettings(), colorFormat: ColorFormat = .hex
+    repositories: RepositorySettings = RepositorySettings(), colorFormat: ColorFormat = .hex,
+    favorites: [String] = []
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
@@ -28,6 +31,7 @@ public struct Config: Codable, Equatable, Sendable {
     self.snippets = snippets
     self.repositories = repositories
     self.colorFormat = colorFormat
+    self.favorites = favorites
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -45,6 +49,7 @@ public struct Config: Codable, Equatable, Sendable {
     // An unknown value (say "SwiftUI", as Settings titles it) reads as HEX rather than leaving
     // the whole file unreadable.
     colorFormat = (try? container.decodeIfPresent(ColorFormat.self, forKey: .colorFormat)) ?? .hex
+    favorites = try container.decodeIfPresent([String].self, forKey: .favorites) ?? []
   }
 
   public static let `default` = Config(

@@ -343,6 +343,8 @@ private struct ResultIcon: View {
       tile("trash", .gray)
     case .editBookmark, .moveBookmarkMenu, .moveBookmark:
       tile("bookmark.fill", .yellow)
+    case .toggleFavorite, .moveFavorite:
+      tile("star", .yellow)
     case .emoji, .emojiSkinToneMenu, .setEmojiSkinTone:
       tile(BuiltinCommand.searchEmoji.symbol, BuiltinCommand.searchEmoji.color)
     case .cleanKeyboard:

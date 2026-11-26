@@ -191,6 +191,10 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case emojiSkinToneMenu(String)
     /// Remembers the skin tone (1 lightest to 5 darkest; nil for none).
     case setEmojiSkinTone(Int?)
+    /// Adds the item with this key to Favorites, or takes it out.
+    case toggleFavorite(String)
+    /// Moves a favorite up (-1) or down (1).
+    case moveFavorite(String, by: Int)
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -233,8 +237,9 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case .open(let url) where url.isFileURL:
       return [
         primary,
+        // ⌘↵, as Raycast's; ⇧⌘F is Add to Favorites.
         MenuAction(
-          title: "Show in Finder", symbol: "folder", shortcut: "⇧⌘F", action: .reveal(url)),
+          title: "Show in Finder", symbol: "folder", shortcut: "⌘↵", action: .reveal(url)),
         MenuAction(
           title: "Copy Path", symbol: "doc.on.doc", shortcut: "⇧⌘C", action: .copy(url.path)),
       ] + [settingsKey.map(MenuAction.configure)].compactMap { $0 }
@@ -346,14 +351,15 @@ public enum Search {
   /// The start screen for an empty query; otherwise one "Results" section.
   public static func sections(
     for query: String, apps: [AppEntry], running: [AppEntry], quicklinks: [Quicklink],
-    items: [String: ItemSettings] = [:]
+    items: [String: ItemSettings] = [:], favorites: [String] = []
   ) -> [SearchSection] {
     let links = quicklinks.filter(\.isEnabled)
     let trimmed = query.trimmingCharacters(in: .whitespaces)
     guard trimmed.isEmpty else {
       // As typed: results trims it too, but a command's argument needs to see the space after
       // its title.
-      let found = results(for: query, apps: apps, quicklinks: links, items: items)
+      let found = results(
+        for: query, apps: apps, quicklinks: links, items: items, favorites: favorites)
       guard found.isEmpty else { return [SearchSection(title: "Results", results: found)] }
       // Like Raycast's fallback commands: hand the whole query to each Quicklink.
       let fallbacks = links.compactMap { link in
@@ -366,23 +372,96 @@ public enum Search {
       return fallbacks.isEmpty
         ? [] : [SearchSection(title: "Use “\(trimmed)” with…", results: fallbacks)]
     }
-    let shownRunning = running.filter { items[$0.settingsKey]?.isEnabled ?? true }
+    // Favorites first, as Raycast's; what's there isn't listed again below.
+    let byKey = Dictionary(
+      candidates(apps: apps, quicklinks: links, items: items).compactMap { candidate in
+        candidate.result.itemKey.map { ($0, candidate.result) }
+      }, uniquingKeysWith: { first, _ in first })
+    let favored = favorites.compactMap { byKey[$0] }
+    let shownRunning = running.filter {
+      (items[$0.settingsKey]?.isEnabled ?? true) && !favorites.contains($0.settingsKey)
+    }
+    let decorate = { (result: SearchResult) in withFavoriteActions(result, favorites: favorites) }
     // Ripcord's own commands live in the footer's root menu; typing still finds them.
     return [
+      SearchSection(title: "Favorites", results: favored.map(decorate)),
       // Capped so Quicklinks stay in view.
       SearchSection(
         title: "Running",
-        results: shownRunning.prefix(5).map { result(for: $0, alias: items[$0.settingsKey]?.alias) }
-      ),
-      SearchSection(title: "Quicklinks", results: links.compactMap(result(for:))),
+        results: shownRunning.prefix(5).map {
+          decorate(result(for: $0, alias: items[$0.settingsKey]?.alias))
+        }),
+      SearchSection(
+        title: "Quicklinks",
+        results: links.compactMap(result(for:)).filter {
+          !favorites.contains($0.itemKey ?? "")
+        }.map(decorate)),
     ].filter { !$0.results.isEmpty }
+  }
+
+  /// A favorite's place in `favorites` moved by `offset`, kept in range.
+  public static func movingFavorite(_ key: String, by offset: Int, in favorites: [String])
+    -> [String]
+  {
+    guard let index = favorites.firstIndex(of: key) else { return favorites }
+    let target = min(max(index + offset, 0), favorites.count - 1)
+    var moved = favorites.filter { $0 != key }
+    moved.insert(key, at: target)
+    return moved
+  }
+
+  /// `favorites` with `key` added at the end, or taken out.
+  public static func togglingFavorite(_ key: String, in favorites: [String]) -> [String] {
+    favorites.contains(key) ? favorites.filter { $0 != key } : favorites + [key]
+  }
+
+  /// The row's ⌘K actions with Add to Favorites, or a favorite's Remove and Move, as Raycast's
+  /// list them; rows that can't be one stay as they are.
+  static func withFavoriteActions(_ result: SearchResult, favorites: [String]) -> SearchResult {
+    guard let key = result.itemKey else { return result }
+    let favorite: [MenuAction] =
+      if let index = favorites.firstIndex(of: key) {
+        [
+          MenuAction(
+            title: "Remove from Favorites", symbol: "star", shortcut: "⇧⌘F",
+            action: .toggleFavorite(key), startsSection: true)
+        ]
+          + (index > 0
+            ? [
+              MenuAction(
+                title: "Move Favorite Up", symbol: "chevron.up", shortcut: "⌥⌘↑",
+                action: .moveFavorite(key, by: -1))
+            ] : [])
+          + (index < favorites.count - 1
+            ? [
+              MenuAction(
+                title: "Move Favorite Down", symbol: "chevron.down", shortcut: "⌥⌘↓",
+                action: .moveFavorite(key, by: 1))
+            ] : [])
+      } else {
+        [
+          MenuAction(
+            title: "Add to Favorites", symbol: "star", shortcut: "⇧⌘F",
+            action: .toggleFavorite(key), startsSection: true)
+        ]
+      }
+    // Above Configure Command…, which Raycast keeps last.
+    let actions = result.actions
+    let configure = actions.last.flatMap { last -> MenuAction? in
+      if case .configureMenu = last.action { last } else { nil }
+    }
+    var decorated = result
+    decorated.menu =
+      Array(actions.dropLast(configure == nil ? 0 : 1)) + favorite
+      + [configure].compactMap { $0 }
+    return decorated
   }
 
   /// Calculator first, then a Quicklink whose keyword starts the query, then fuzzy matches.
   /// An exactly typed alias or keyword puts its item at the top of the matches.
   public static func results(
     for query: String, apps: [AppEntry], quicklinks: [Quicklink],
-    items: [String: ItemSettings] = [:]
+    items: [String: ItemSettings] = [:], favorites: [String] = []
   ) -> [SearchResult] {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return [] }
@@ -427,41 +506,7 @@ public enum Search {
         ]
       } ?? []
 
-    typealias Candidate = (names: [String], alias: String?, result: SearchResult)
-    let appCandidates: [Candidate] = apps.compactMap { app in
-      let settings = items[app.settingsKey] ?? ItemSettings()
-      guard settings.isEnabled else { return nil }
-      return (app.names, settings.alias, result(for: app, alias: settings.alias))
-    }
-    let linkCandidates: [Candidate] = links.compactMap { link in
-      result(for: link).map { ([link.name], link.keyword, $0) }
-    }
-    let commandCandidates: [Candidate] = BuiltinCommand.allCases.compactMap { command in
-      let settings = items[command.settingsKey] ?? ItemSettings()
-      guard settings.isEnabled else { return nil }
-      return ([command.title], settings.alias, result(for: command, alias: settings.alias))
-    }
-    // Only with CleanShot X installed: its commands would open nothing otherwise.
-    let hasCleanShot = apps.contains { CleanShotCommand.isCleanShot(bundleID: $0.bundleID) }
-    let cleanShotCandidates: [Candidate] = (hasCleanShot ? CleanShotCommand.allCases : [])
-      .compactMap { command in
-        let settings = items[command.settingsKey] ?? ItemSettings()
-        guard settings.isEnabled else { return nil }
-        return ([command.title], settings.alias, result(for: command, alias: settings.alias))
-      }
-    let systemCandidates: [Candidate] = SystemAction.allCases.compactMap { action in
-      let settings = items[action.settingsKey] ?? ItemSettings()
-      guard settings.isEnabled else { return nil }
-      return ([action.title], settings.alias, result(for: action, alias: settings.alias))
-    }
-    let windowCandidates: [Candidate] = WindowLayout.allCases.compactMap { layout in
-      let settings = items[layout.settingsKey] ?? ItemSettings()
-      guard settings.isEnabled else { return nil }
-      return ([layout.title], settings.alias, result(for: layout, alias: settings.alias))
-    }
-    let ranked =
-      (appCandidates + linkCandidates + commandCandidates + systemCandidates + windowCandidates
-      + cleanShotCandidates)
+    let ranked = candidates(apps: apps, quicklinks: links, items: items)
       .compactMap { candidate -> (score: Int, result: SearchResult)? in
         let names = candidate.names + [candidate.alias].compactMap { $0 }
         guard let score = names.compactMap({ Fuzzy.score(trimmed, in: $0) }).max() else {
@@ -470,7 +515,10 @@ public enum Search {
         let exactAlias =
           candidate.alias?.trimmingCharacters(in: .whitespaces)
           .caseInsensitiveCompare(trimmed) == .orderedSame
-        return (exactAlias ? score + 10_000 : score, candidate.result)
+        return (
+          exactAlias ? score + 10_000 : score,
+          withFavoriteActions(candidate.result, favorites: favorites)
+        )
       }
       .sorted {
         ($0.score, -$0.result.title.count, $1.result.title)
@@ -502,6 +550,50 @@ public enum Search {
     let timed: [SearchResult] = [caffeinateFor].compactMap { $0 } + sleepIn + cleanFor
     return [calculation].compactMap { $0 } + expanded + timed
       + ranked
+  }
+
+  typealias Candidate = (names: [String], alias: String?, result: SearchResult)
+
+  /// Every item the root search can list, enabled ones only: apps, Quicklinks, Ripcord's
+  /// commands, System Actions, window layouts, and CleanShot X's commands when it's there.
+  static func candidates(
+    apps: [AppEntry], quicklinks links: [Quicklink], items: [String: ItemSettings]
+  )
+    -> [Candidate]
+  {
+    let appCandidates: [Candidate] = apps.compactMap { app in
+      let settings = items[app.settingsKey] ?? ItemSettings()
+      guard settings.isEnabled else { return nil }
+      return (app.names, settings.alias, result(for: app, alias: settings.alias))
+    }
+    let linkCandidates: [Candidate] = links.compactMap { link in
+      result(for: link).map { ([link.name], link.keyword, $0) }
+    }
+    let commandCandidates: [Candidate] = BuiltinCommand.allCases.compactMap { command in
+      let settings = items[command.settingsKey] ?? ItemSettings()
+      guard settings.isEnabled else { return nil }
+      return ([command.title], settings.alias, result(for: command, alias: settings.alias))
+    }
+    // Only with CleanShot X installed: its commands would open nothing otherwise.
+    let hasCleanShot = apps.contains { CleanShotCommand.isCleanShot(bundleID: $0.bundleID) }
+    let cleanShotCandidates: [Candidate] = (hasCleanShot ? CleanShotCommand.allCases : [])
+      .compactMap { command in
+        let settings = items[command.settingsKey] ?? ItemSettings()
+        guard settings.isEnabled else { return nil }
+        return ([command.title], settings.alias, result(for: command, alias: settings.alias))
+      }
+    let systemCandidates: [Candidate] = SystemAction.allCases.compactMap { action in
+      let settings = items[action.settingsKey] ?? ItemSettings()
+      guard settings.isEnabled else { return nil }
+      return ([action.title], settings.alias, result(for: action, alias: settings.alias))
+    }
+    let windowCandidates: [Candidate] = WindowLayout.allCases.compactMap { layout in
+      let settings = items[layout.settingsKey] ?? ItemSettings()
+      guard settings.isEnabled else { return nil }
+      return ([layout.title], settings.alias, result(for: layout, alias: settings.alias))
+    }
+    return appCandidates + linkCandidates + commandCandidates + systemCandidates
+      + windowCandidates + cleanShotCandidates
   }
 
   /// The longest Clean Keyboard: no keyboard for more than five minutes, typed or not.
