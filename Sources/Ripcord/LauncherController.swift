@@ -28,7 +28,7 @@ struct OpenMenu {
 
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
-  case root, clipboard, snippets, snippetForm
+  case root, clipboard, snippets, snippetForm, repositories
 
   /// The command whose list this is; nil for the root search.
   var command: BuiltinCommand? {
@@ -37,6 +37,7 @@ enum LauncherMode {
     case .clipboard: .clipboardHistory
     case .snippets: .searchSnippets
     case .snippetForm: .createSnippet
+    case .repositories: .searchRepositories
     }
   }
 }
@@ -129,6 +130,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
       update(model.query)
     }
   }
+  var repositorySettings = RepositorySettings() {
+    didSet { if repositorySettings != oldValue { repositories = [] } }
+  }
+  /// The last scan, listed at once while a fresh one runs.
+  private var repositories: [Repository] = []
   var snippets: [Snippet] = [] {
     didSet {
       model.snippets = snippets
@@ -362,6 +368,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
       model.clipboard = clipboard.history
       return Search.clipboardSections(for: query, history: clipboard.history)
     }
+    if model.mode == .repositories {
+      return Search.repositorySections(
+        for: query, repositories: repositories, settings: repositorySettings)
+    }
     if model.mode == .snippets {
       // A tag no snippet carries any more lists nothing; drop it.
       if let tag = model.snippetTag,
@@ -428,7 +438,15 @@ final class LauncherController: NSObject, NSWindowDelegate {
     switch command {
     case .up: model.selection = max(model.selection - 1, 0)
     case .down: model.selection = min(model.selection + 1, max(count - 1, 0))
-    case .submit: model.selected.map { perform($0.action) } ?? NSSound.beep()
+    case .submit:
+      guard let selected = model.selected else { return NSSound.beep() }
+      // ⌥↵ and ⇧↵ reach here as Return; a row with an action for them runs it.
+      let flags = NSApp.currentEvent?.modifierFlags ?? []
+      let held = [(NSEvent.ModifierFlags.option, "⌥"), (.shift, "⇧")].filter {
+        flags.contains($0.0)
+      }.map(\.1).joined()
+      let action = held.isEmpty ? nil : selected.actions.first { $0.shortcut == held + "↵" }
+      perform(action?.action ?? selected.action)
     case .cancel:
       // An edit always goes back to its list, even one its hotkey opened.
       if model.mode == .snippetForm, model.formSource != nil { return goBack() }
@@ -498,7 +516,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     let symbols: [(NSEvent.ModifierFlags, String)] = [
       (.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘"),
     ]
-    let shortcut = symbols.filter { flags.contains($0.0) }.map(\.1).joined() + key.uppercased()
+    let shortcut =
+      symbols.filter { flags.contains($0.0) }.map(\.1).joined()
+      + (key == "\r" ? "↵" : key.uppercased())
     // ⌘N creates a snippet even when Search Snippets lists none.
     let create = MenuAction(
       title: "Create Snippet", symbol: "plus", shortcut: "⌘N", action: .run(.createSnippet))
@@ -516,6 +536,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.resetWindowPosition) { return resetPosition() }
     if action == .run(.clipboardHistory) { return open(.clipboard) }
     if action == .run(.searchSnippets) { return open(.snippets) }
+    if action == .run(.searchRepositories) {
+      scanRepositories()
+      return open(.repositories)
+    }
     if action == .run(.createSnippet) { return edit(nil) }
     if case .clip(let id, let clipAction) = action { return perform(clipAction, on: id) }
     if case .snippet(let index, let snippetAction) = action {
@@ -548,11 +572,16 @@ final class LauncherController: NSObject, NSWindowDelegate {
       NSWorkspace.shared.activateFileViewerSelecting([url])
     case .run(.settings):
       break  // Opened before hide(), above.
+    case .openWith(let url, let app):
+      NSWorkspace.shared.open([url], withApplicationAt: app, configuration: .init()) { _, error in
+        if error != nil { DispatchQueue.main.async { NSSound.beep() } }
+      }
     case .run(.exportSnippets):
       onExportSnippets()
     case .run(.importSnippets):
       onImportSnippets()
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
+      .run(.searchRepositories),
       .run(.createSnippet), .clip, .snippet, .system, .window:
       break  // Handled above, without hiding the panel.
     case .run(.quit):
@@ -586,6 +615,20 @@ final class LauncherController: NSObject, NSWindowDelegate {
   }
 
   /// Opens a command's own list, from its row or its hotkey.
+  /// Off the main thread, as walking the folders takes a moment; the list refreshes when done.
+  private func scanRepositories() {
+    let settings = repositorySettings
+    Task {
+      let found = await Task.detached(priority: .userInitiated) {
+        RepositoryIndex.scan(
+          roots: RepositoryIndex.roots(settings.folders), depth: max(1, settings.depth))
+      }.value
+      guard settings == repositorySettings else { return }
+      repositories = found
+      if model.mode == .repositories { refreshRows(selecting: model.selected?.id) }
+    }
+  }
+
   private func open(_ mode: LauncherMode) {
     // Its hotkey closes its own list, as the launcher hotkey closes the panel.
     if panel.isVisible, model.mode == mode { return hide() }

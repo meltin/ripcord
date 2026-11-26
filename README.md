@@ -28,6 +28,9 @@
 - System Actions: lock the screen, log out, restart, shut down, sleep, control music and volume,
   hide, unhide or quit apps, restart the frontmost app, open or empty the Trash, eject disks, show
   the desktop, and toggle Dark Mode or Finder's hidden files. Ones that lose work ask first
+- Git Repositories: Search Repositories lists the repositories in the folders you pick (`~/dev`
+  and the like) and opens one in the app you assign to ↵, ⌘↵, ⌥↵, ⌃↵ or ⇧↵, an editor or a
+  terminal; ⌘K adds Open on GitHub, Show in Finder and Copy Path
 - Window Management: put the frontmost window in a half, quarter or third, maximize or center
   it, move it to the next or previous display, or restore where it was; give each a hotkey such
   as ⌃⌥← on its settings page
@@ -91,6 +94,10 @@ the settings window opens. The settings window writes every change back to it.
   "hotkey": "cmd+space",
   "launchAtLogin": false,
   "inputSource": "com.apple.keylayout.ABC",
+  "repositories": {
+    "folders": ["~/dev"], "depth": 3,
+    "openWith": { "return": "/Applications/Visual Studio Code.app", "cmd": "/Applications/Ghostty.app" }
+  },
   "snippets": [
     { "name": "Address", "keyword": "addr", "text": "1 Infinite Loop\nCupertino", "icon": "house",
       "tags": ["home"] }

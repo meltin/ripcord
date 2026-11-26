@@ -11,10 +11,12 @@ public struct Config: Codable, Equatable, Sendable {
   /// panel is open; nil leaves the input source alone.
   public var inputSource: String?
   public var snippets: [Snippet]
+  public var repositories: RepositorySettings
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
-    items: [String: ItemSettings] = [:], inputSource: String? = nil, snippets: [Snippet] = []
+    items: [String: ItemSettings] = [:], inputSource: String? = nil, snippets: [Snippet] = [],
+    repositories: RepositorySettings = RepositorySettings()
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
@@ -22,6 +24,7 @@ public struct Config: Codable, Equatable, Sendable {
     self.items = items
     self.inputSource = inputSource
     self.snippets = snippets
+    self.repositories = repositories
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -33,6 +36,9 @@ public struct Config: Codable, Equatable, Sendable {
     items = try container.decodeIfPresent([String: ItemSettings].self, forKey: .items) ?? [:]
     inputSource = try container.decodeIfPresent(String.self, forKey: .inputSource)
     snippets = try container.decodeIfPresent([Snippet].self, forKey: .snippets) ?? []
+    repositories =
+      try container.decodeIfPresent(RepositorySettings.self, forKey: .repositories)
+      ?? RepositorySettings()
   }
 
   public static let `default` = Config(

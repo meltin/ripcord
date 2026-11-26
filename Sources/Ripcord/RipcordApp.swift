@@ -149,6 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.items = config.items
       launcher.inputSource = config.inputSource
       launcher.snippets = config.snippets
+      launcher.repositorySettings = config.repositories
       applyLaunchAtLogin(config.launchAtLogin)
       // Saving mid-recording must not bring back the hotkeys the recorder turned off.
       if !isRecording { applyHotkeys(config) }

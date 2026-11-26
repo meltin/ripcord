@@ -180,6 +180,7 @@ import Testing
     // Saved in config.json: changing one strands the user's alias and hotkey.
     #expect(BuiltinCommand.clipboardHistory.settingsKey == "command:clipboard-history")
     #expect(BuiltinCommand.searchSnippets.settingsKey == "command:search-snippets")
+    #expect(BuiltinCommand.searchRepositories.settingsKey == "command:search-repositories")
     #expect(BuiltinCommand.createSnippet.settingsKey == "command:create-snippet")
     #expect(BuiltinCommand.exportSnippets.settingsKey == "command:export-snippets")
     #expect(BuiltinCommand.importSnippets.settingsKey == "command:import-snippets")

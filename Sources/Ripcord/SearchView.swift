@@ -55,6 +55,8 @@ struct SearchView: View {
         SnippetForm(model: model)
       } else if model.sections.isEmpty {
         EmptyState(query: model.query, mode: model.mode)
+      } else if model.mode == .repositories {
+        resultList
       } else if model.mode != .root {
         // Raycast's layout: the list on the left, the selected item and its details on the right.
         HStack(spacing: 0) {
@@ -151,6 +153,10 @@ private struct EmptyState: View {
       "No snippet contains “\(query)”."
     case .snippetForm:
       ""
+    case .repositories where query.trimmingCharacters(in: .whitespaces).isEmpty:
+      "Repositories in the folders set under Settings › Git Repositories show up here."
+    case .repositories:
+      "No repository matches “\(query)”."
     }
   }
 
@@ -220,6 +226,11 @@ private struct ResultIcon: View {
 
   var body: some View {
     switch result.action {
+    case _ where result.kind == .repository:
+      // Whichever app it opens in, a repository looks like one.
+      tile("arrow.triangle.branch", .orange)
+    case .openWith:
+      tile("arrow.up.forward.app", .gray)
     case .open(let url) where url.isFileURL:
       // App icons carry a transparent margin, so draw them larger than the 24pt slot to match.
       Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable()
@@ -324,6 +335,7 @@ extension BuiltinCommand {
     switch self {
     case .clipboardHistory: "list.clipboard.fill"
     case .searchSnippets: "doc.plaintext.fill"
+    case .searchRepositories: "arrow.triangle.branch"
     case .createSnippet: "doc.badge.plus"
     case .exportSnippets: "square.and.arrow.up"
     case .importSnippets: "square.and.arrow.down"
@@ -337,6 +349,7 @@ extension BuiltinCommand {
     switch self {
     case .clipboardHistory, .quit: .red
     case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .blue
+    case .searchRepositories: .orange
     case .settings, .resetWindowPosition: .gray
     }
   }
@@ -1013,7 +1026,9 @@ private struct Footer: View {
             onCommand(.submit)
           } label: {
             HStack(spacing: 6) {
-              Text(title(of: selected.action, else: selected.kind.primaryAction, pasteTarget))
+              Text(
+                title(
+                  of: selected.action, else: selected.actions.first?.title ?? "", pasteTarget))
               Keycap("↵")
             }
             .padding(.horizontal, 10)
@@ -1224,6 +1239,7 @@ extension SearchResult.Kind {
     case .text: "Text"
     case .image: "Image"
     case .snippet: "Snippet"
+    case .repository: "Repository"
     }
   }
 }
@@ -1327,6 +1343,7 @@ extension LauncherMode {
     case .root: "Search apps, calculate, open Quicklinks…"
     case .clipboard: "Search Clipboard History…"
     case .snippets: "Search Snippets…"
+    case .repositories: "Search Repositories…"
     case .snippetForm: ""
     }
   }

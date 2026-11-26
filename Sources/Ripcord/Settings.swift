@@ -311,6 +311,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case snippets = "Snippets"
   case systemActions = "System Actions"
   case windowManagement = "Window Management"
+  case repositories = "Git Repositories"
   case ripcord = "Ripcord"
 
   var id: Self { self }
@@ -325,6 +326,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .snippets: "doc.plaintext.fill"
     case .systemActions: "gearshape.fill"
     case .windowManagement: "rectangle.split.2x1.fill"
+    case .repositories: "arrow.triangle.branch"
     case .ripcord: "command"
     }
   }
@@ -336,6 +338,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .applications, .quicklinks, .snippets: .blue
     case .clipboardHistory: .red
     case .windowManagement: .indigo
+    case .repositories: .orange
     }
   }
 
@@ -356,6 +359,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       "Lock, sleep, control music and volume, and manage apps, the Trash and disks."
     case .windowManagement:
       "Put the frontmost window in a half, quarter or third, or on another display."
+    case .repositories:
+      "Find the Git repositories in your folders and open each in the app you pick for its Return."
     case .ripcord: "Ripcord's own commands."
     }
   }
@@ -363,7 +368,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   /// The commands a page lists, by settings key; nil for pages built another way.
   var commandKeys: Set<String>? {
     switch self {
-    case .clipboardHistory, .snippets, .ripcord:
+    case .clipboardHistory, .snippets, .repositories, .ripcord:
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
@@ -378,6 +383,7 @@ extension BuiltinCommand {
     switch self {
     case .clipboardHistory: .clipboardHistory
     case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .snippets
+    case .searchRepositories: .repositories
     case .settings, .resetWindowPosition, .quit: .ripcord
     }
   }
@@ -407,6 +413,12 @@ struct SettingsView: View {
           PageScroll(model: model) {
             PageHeader(page: .quicklinks)
             QuicklinksPage(model: model)
+          }
+        case .repositories:
+          PageScroll(model: model) {
+            PageHeader(page: .repositories)
+            RepositoriesSettings(model: model)
+            CommandsList(model: model, page: .repositories)
           }
         default:
           PageScroll(model: model) {
@@ -813,9 +825,6 @@ private struct ShortcutRow: View {
   let page: SettingsPage
   var showsAlias = true
 
-  /// App icons, read from disk once each: a row's redraw would otherwise ask Launch Services again.
-  private static let icons = NSCache<NSString, NSImage>()
-
   var body: some View {
     HStack(spacing: 10) {
       icon.frame(width: 20, height: 20)
@@ -842,18 +851,12 @@ private struct ShortcutRow: View {
 
   @ViewBuilder private var icon: some View {
     if let appURL = entry.appURL {
-      Image(nsImage: Self.icon(for: appURL)).resizable()
+      Image(nsImage: appIcon(appURL)).resizable()
     } else {
       PageIcon(page: page, size: 20)
     }
   }
 
-  private static func icon(for app: URL) -> NSImage {
-    if let cached = icons.object(forKey: app.path as NSString) { return cached }
-    let icon = NSWorkspace.shared.icon(forFile: app.path)
-    icons.setObject(icon, forKey: app.path as NSString)
-    return icon
-  }
 }
 
 /// An alias shown as text, turning into a field when clicked. Saved as typed: switching pages
@@ -987,6 +990,287 @@ private struct HotkeyRecorder: View {
       if let message = model.recorderMessage, message.target == target {
         Text(message.text).font(.system(size: 11)).foregroundStyle(.orange)
       }
+    }
+  }
+}
+
+/// Git Repositories' folders, scan depth and the app each Return opens a repository in.
+private struct RepositoriesSettings: View {
+  @Bindable var model: SettingsModel
+
+  private var settings: RepositorySettings { model.config.repositories }
+
+  var body: some View {
+    Card {
+      SettingRow(
+        title: "Folders", description: "Where to look for repositories, and how many folders down."
+      ) {
+        Stepper(
+          "Depth \(settings.depth)", value: $model.config.repositories.depth, in: 1...6)
+      }
+      ForEach(Array(settings.folders.enumerated()), id: \.offset) { index, folder in
+        Divider()
+        HStack {
+          Image(systemName: "folder").foregroundStyle(.secondary)
+          Text(folder).font(.system(size: 13, design: .monospaced))
+          Spacer()
+          Button {
+            model.config.repositories.folders = settings.folders.enumerated()
+              .filter { $0.offset != index }.map(\.element)
+          } label: {
+            Image(systemName: "minus.circle")
+          }
+          .buttonStyle(.borderless)
+          .foregroundStyle(.secondary)
+          .accessibilityLabel("Remove \(folder)")
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 8)
+      }
+      Divider()
+      HStack {
+        Spacer()
+        Button("Add Folder…", action: addFolder)
+      }
+      .padding(.horizontal, 18)
+      .padding(.vertical, 10)
+    }
+    Card {
+      SettingRow(
+        title: "Open With",
+        description: "The app each Return opens a repository in; ↵ without one shows it in Finder."
+      ) { EmptyView() }
+      ForEach(RepositorySettings.OpenKey.allCases, id: \.self) { key in
+        Divider()
+        OpenWithRow(key: key, model: model)
+      }
+    }
+  }
+
+  private func addFolder() {
+    let panel = NSOpenPanel()
+    panel.canChooseDirectories = true
+    panel.canChooseFiles = false
+    panel.prompt = "Add"
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    let home = NSHomeDirectory()
+    // Kept with ~, so the config reads the same on another account.
+    let path = url.path.hasPrefix(home) ? "~" + url.path.dropFirst(home.count) : url.path
+    if !settings.folders.contains(path) { model.config.repositories.folders.append(path) }
+  }
+}
+
+/// App icons at 20pt, drawn once each from the full icon (up to 1024px), so a list of them
+/// scrolls without scaling a big image per row. NSCache is thread-safe, and the icons are
+/// rendered off the main thread before a list needs them.
+nonisolated(unsafe) private let appIcons = NSCache<NSString, NSImage>()
+
+nonisolated private func appIcon(_ app: URL) -> NSImage {
+  if let cached = appIcons.object(forKey: app.path as NSString) { return cached }
+  let full = NSWorkspace.shared.icon(forFile: app.path)
+  // 2× for Retina.
+  let side = 40
+  let small = NSImage(size: NSSize(width: 20, height: 20))
+  if let bitmap = NSBitmapImageRep(
+    bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side, bitsPerSample: 8,
+    samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+    bytesPerRow: 0, bitsPerPixel: 0)
+  {
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+    full.draw(in: NSRect(x: 0, y: 0, width: side, height: side))
+    NSGraphicsContext.restoreGraphicsState()
+    small.addRepresentation(bitmap)
+  }
+  appIcons.setObject(small, forKey: app.path as NSString)
+  return small
+}
+
+/// One Return's app, picked from a dropdown of the installed apps as Raycast's settings do.
+private struct OpenWithRow: View {
+  let key: RepositorySettings.OpenKey
+  @Bindable var model: SettingsModel
+  @State private var isPicking = false
+
+  private var app: URL? {
+    model.config.repositories.openWith[key.rawValue].map { URL(fileURLWithPath: $0) }
+  }
+
+  var body: some View {
+    HStack(spacing: 10) {
+      Text("Shortcut").foregroundStyle(.secondary)
+      Keycap(key.shortcut)
+      Spacer()
+      Button {
+        isPicking.toggle()
+      } label: {
+        HStack(spacing: 6) {
+          if let app {
+            Image(nsImage: appIcon(app)).resizable().frame(width: 18, height: 18)
+            Text(app.deletingPathExtension().lastPathComponent)
+          } else {
+            Text(key == .plain ? "Finder" : "–").foregroundStyle(.secondary)
+          }
+          Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 28)
+        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
+        .contentShape(RoundedRectangle(cornerRadius: 7))
+      }
+      .buttonStyle(.plain)
+      .popover(isPresented: $isPicking, arrowEdge: .bottom) {
+        AppPicker(model: model, noneLabel: key == .plain ? "Finder" : "–") { picked in
+          model.config.repositories.openWith[key.rawValue] = picked?.path
+          isPicking = false
+        }
+      }
+    }
+    .font(.system(size: 13))
+    .padding(.horizontal, 18)
+    .padding(.vertical, 8)
+  }
+}
+
+/// The installed apps, laid out like Raycast's dropdown: rounded rows with a soft highlight that
+/// follows the pointer and the arrows, and the search field at the bottom, focused as it opens.
+private struct AppPicker: View {
+  @Bindable var model: SettingsModel
+  let noneLabel: String
+  let onPick: (URL?) -> Void
+  @State private var query = ""
+  @State private var highlighted = 0
+  /// macOS's popover corner is about 20pt; rows inset 8pt round at 12pt to sit inside it evenly.
+  private static let inset: CGFloat = 8
+  private static let rowRadius: CGFloat = 12
+  @State private var scroll: ScrollGeometry?
+  /// Shown only while scrolling and briefly after, as Raycast's scroll bar is.
+  @State private var isScrolling = false
+  @FocusState private var isSearchFocused: Bool
+
+  /// nil stands for the "none" row.
+  private var rows: [AppEntry?] {
+    let unique = Dictionary(model.apps.map { ($0.settingsKey, $0) }) { first, _ in first }.values
+    let apps =
+      unique
+      .filter { query.isEmpty || $0.names.contains { $0.localizedStandardContains(query) } }
+      .sorted { $0.names[0].localizedStandardCompare($1.names[0]) == .orderedAscending }
+    return (query.isEmpty ? [nil] : []) + apps.map(Optional.some)
+  }
+
+  var body: some View {
+    let rows = rows
+    VStack(spacing: 0) {
+      // A lazy stack with icons rendered ahead scrolls smoothly; a List brought the system
+      // scroller, thick and in its own gutter when scroll bars are set to always show.
+      ScrollViewReader { proxy in
+        ScrollView {
+          LazyVStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, app in
+              row(app, isHighlighted: index == highlighted)
+                .id(index)
+                .onHover { if $0 { highlighted = index } }
+                .onTapGesture { onPick(app?.url) }
+            }
+          }
+          // The popover's corner radius less this inset is the rows', so the corners nest.
+          .padding(Self.inset)
+        }
+        // .never, not .hidden: with scroll bars set to always show, .hidden still draws the
+        // system scroller beside the thumb below.
+        .scrollIndicators(.never)
+        .onScrollGeometryChange(for: ScrollGeometry.self) {
+          $0
+        } action: {
+          scroll = $1
+        }
+        .onScrollPhaseChange { _, phase in
+          if phase.isScrolling {
+            withAnimation(.easeOut(duration: 0.15)) { isScrolling = true }
+          } else {
+            withAnimation(.easeOut(duration: 0.4).delay(0.6)) { isScrolling = false }
+          }
+        }
+        .overlay(alignment: .topTrailing) {
+          ScrollThumb(geometry: scroll).opacity(isScrolling ? 1 : 0)
+        }
+        .onChange(of: highlighted) { proxy.scrollTo(highlighted) }
+      }
+      // At the bottom, as Raycast's: the list's top and bottom corners stay clear for the thumb.
+      Divider().opacity(0.5)
+      TextField("Search…", text: $query)
+        .textFieldStyle(.plain)
+        .focused($isSearchFocused)
+        .padding(.horizontal, 14)
+        .frame(height: 40)
+        .onChange(of: query) { highlighted = 0 }
+        .onKeyPress(.downArrow) {
+          highlighted = min(highlighted + 1, max(rows.count - 1, 0))
+          return .handled
+        }
+        .onKeyPress(.upArrow) {
+          highlighted = max(highlighted - 1, 0)
+          return .handled
+        }
+        .onSubmit { if rows.indices.contains(highlighted) { onPick(rows[highlighted]?.url) } }
+    }
+    .font(.system(size: 13))
+    .frame(width: 280, height: 320)
+    .onAppear {
+      if model.apps.isEmpty { model.loadApps() }
+      DispatchQueue.main.async { isSearchFocused = true }
+      prerenderIcons()
+    }
+    .onChange(of: model.apps) { prerenderIcons() }
+  }
+
+  /// Every icon drawn before the list asks for it, so scrolling never waits on one.
+  private func prerenderIcons() {
+    let urls = model.apps.map(\.url)
+    Task.detached(priority: .userInitiated) { for url in urls { _ = appIcon(url) } }
+  }
+
+  private func row(_ app: AppEntry?, isHighlighted: Bool) -> some View {
+    HStack(spacing: 10) {
+      if let app {
+        Image(nsImage: appIcon(app.url)).frame(width: 20, height: 20)
+        Text(app.names[0]).lineLimit(1)
+      } else {
+        Text(noneLabel).foregroundStyle(.secondary)
+      }
+      Spacer(minLength: 0)
+    }
+    .padding(.horizontal, 10)
+    .frame(height: 34)
+    .background(
+      RoundedRectangle(cornerRadius: Self.rowRadius)
+        .fill(Color.primary.opacity(isHighlighted ? 0.08 : 0))
+    )
+    .contentShape(RoundedRectangle(cornerRadius: Self.rowRadius))
+  }
+}
+
+/// A thin, always-shown scroll thumb in the list's margin, as Raycast draws its own, so it's
+/// plain from the start that the list goes on.
+private struct ScrollThumb: View {
+  let geometry: ScrollGeometry?
+
+  var body: some View {
+    if let geometry, geometry.contentSize.height > geometry.containerSize.height + 1 {
+      // Clear of the popover's rounded top corner and the divider below.
+      let inset: CGFloat = 12
+      let track = geometry.containerSize.height - inset * 2
+      let visible = geometry.containerSize.height / geometry.contentSize.height
+      let height = max(24, track * visible)
+      let scrollable = geometry.contentSize.height - geometry.containerSize.height
+      let progress = min(max(geometry.contentOffset.y / scrollable, 0), 1)
+      Capsule()
+        .fill(Color.primary.opacity(0.25))
+        .frame(width: 4, height: height)
+        .offset(y: inset + (track - height) * progress)
+        .padding(.trailing, 4)
+        .allowsHitTesting(false)
     }
   }
 }
