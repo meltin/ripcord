@@ -218,6 +218,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Coffee: keep the Mac awake for this many seconds, or until Decaffeinate for nil.
   var onCaffeinate: (TimeInterval?) -> Void = { _ in }
   var onDecaffeinate: () -> Void = {}
+  /// Sleep Timer: sleep the Mac, or turn its display off, after this many seconds.
+  var onSleepTimer: (_ seconds: TimeInterval, _ displayOnly: Bool) -> Void = { _, _ in }
+  var onStopSleepTimer: () -> Void = {}
   var onImportSnippets: () -> Void = {}
   var isVisible: Bool { panel.isVisible }
 
@@ -628,6 +631,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.clipboardHistory) { return open(.clipboard) }
     if action == .run(.searchSnippets) { return open(.snippets) }
     if action == .run(.httpStatusCodes) { return open(.httpStatusCodes) }
+    if action == .run(.sleepTimer) {
+      // As Raycast asks for its argument: the title in the field, the time to be typed after it.
+      if !panel.isVisible { show() }
+      model.mode = .root
+      return update(BuiltinCommand.sleepTimer.title + " ")
+    }
     if action == .run(.searchRepositories) {
       // Not when its hotkey is closing the list.
       if !(panel.isVisible && model.mode == .repositories) { scanRepositories() }
@@ -702,8 +711,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onCaffeinate(seconds)
     case .run(.decaffeinate):
       onDecaffeinate()
+    case .sleepTimer(let seconds, let displayOnly):
+      onSleepTimer(seconds, displayOnly)
+    case .run(.stopSleepTimer):
+      onStopSleepTimer()
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
-      .run(.searchRepositories), .run(.httpStatusCodes),
+      .run(.searchRepositories), .run(.httpStatusCodes), .run(.sleepTimer),
       .run(.createSnippet), .clip, .snippet, .system, .window:
       break  // Handled above, without hiding the panel.
     case .run(.quit):

@@ -34,11 +34,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.mainMenu = makeMainMenu()
     statusItem = makeStatusItem()
-    caffeinator.onChange = { [weak self] in self?.showCoffeeInMenuBar() }
+    caffeinator.onChange = { [weak self] in self?.showTimersInMenuBar() }
     launcher.onCaffeinate = { [weak self] seconds in
       if self?.caffeinator.caffeinate(for: seconds) == false {
         self?.showError("macOS didn't let Ripcord keep the Mac awake.")
       }
+    }
+    sleepTimer.onChange = { [weak self] in self?.showTimersInMenuBar() }
+    sleepTimer.onFire = { [weak self] displayOnly in
+      if let message = SystemActions.run(
+        displayOnly ? .sleepDisplays : .sleep, frontmost: nil,
+        report: { self?.showError($0) })
+      {
+        self?.showError(message)
+      }
+    }
+    launcher.onSleepTimer = { [weak self] in self?.sleepTimer.start(after: $0, displayOnly: $1) }
+    launcher.onStopSleepTimer = { [weak self] in
+      guard self?.sleepTimer.isActive == true else { return NSSound.beep() }
+      self?.sleepTimer.stop()
     }
     launcher.onDecaffeinate = { [weak self] in
       // Nothing to stop: a beep rather than a panel that just closes.
@@ -289,29 +303,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private let caffeinator = Caffeinator()
+  private let sleepTimer = SleepTimer()
+  private let stopSleepTimerItem = NSMenuItem(
+    title: "Stop Sleep Timer", action: #selector(stopSleepTimer), keyEquivalent: "")
+
+  @objc private func stopSleepTimer() { sleepTimer.stop() }
   private var statusIcon: NSImage?
   private let decaffeinateItem = NSMenuItem(
     title: "Decaffeinate", action: #selector(decaffeinate), keyEquivalent: "")
 
   @objc private func decaffeinate() { caffeinator.decaffeinate() }
 
-  /// A cup in the menu bar while Coffee keeps the Mac awake, with the time left when timed, as
-  /// Raycast's Coffee shows it; Ripcord's icon otherwise.
-  private func showCoffeeInMenuBar() {
+  /// The menu bar while a timer runs: a moon and the time left for Sleep Timer, else a cup for
+  /// Coffee, with its time when timed, as Raycast's extensions show them; Ripcord's icon
+  /// otherwise.
+  private func showTimersInMenuBar() {
     guard let statusItem, let button = statusItem.button else { return }
     decaffeinateItem.isHidden = !caffeinator.isActive
-    guard caffeinator.isActive else {
+    stopSleepTimerItem.isHidden = !sleepTimer.isActive
+    let shown: (symbol: String, label: String, remaining: TimeInterval?)? =
+      sleepTimer.isActive
+      ? ("moon.zzz.fill", "Sleep timer", sleepTimer.remaining)
+      : caffeinator.isActive ? ("cup.and.saucer.fill", "Caffeinated", caffeinator.remaining) : nil
+    guard let shown else {
       button.image = statusIcon
       button.title = ""
       statusItem.length = NSStatusItem.squareLength
       return
     }
-    let cup = NSImage(
-      systemSymbolName: "cup.and.saucer.fill", accessibilityDescription: "Caffeinated")
-    cup?.isTemplate = true
-    button.image = cup
+    let image = NSImage(systemSymbolName: shown.symbol, accessibilityDescription: shown.label)
+    image?.isTemplate = true
+    button.image = image
     button.imagePosition = .imageLeading
-    button.title = caffeinator.remaining.map { " " + Coffee.format($0, seconds: false) } ?? ""
+    button.title = shown.remaining.map { " " + Coffee.format($0, seconds: false) } ?? ""
     statusItem.length = NSStatusItem.variableLength
   }
 
@@ -328,6 +352,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let menu = NSMenu()
     decaffeinateItem.isHidden = true
     menu.addItem(decaffeinateItem)
+    stopSleepTimerItem.isHidden = true
+    menu.addItem(stopSleepTimerItem)
     menu.addItem(withTitle: "Open Ripcord", action: #selector(toggleLauncher), keyEquivalent: "")
     menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
     menu.addItem(.separator())

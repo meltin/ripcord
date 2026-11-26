@@ -296,6 +296,8 @@ private struct ResultIcon: View {
       tile(command.symbol, command.color)
     case .caffeinate:
       tile(BuiltinCommand.caffeinate.symbol, BuiltinCommand.caffeinate.color)
+    case .sleepTimer(_, let displayOnly):
+      tile(displayOnly ? "display" : BuiltinCommand.sleepTimer.symbol, .indigo)
     case .system(let action, _):
       tile(action.symbol, .gray)
     case .window(let layout):
@@ -406,6 +408,8 @@ extension BuiltinCommand {
     case .settings: "gearshape.fill"
     case .caffeinate: "cup.and.saucer.fill"
     case .decaffeinate: "cup.and.saucer"
+    case .sleepTimer: "moon.zzz.fill"
+    case .stopSleepTimer: "moon.zzz"
     case .resetWindowPosition: "macwindow"
     case .quit: "power"
     }
@@ -417,6 +421,7 @@ extension BuiltinCommand {
     case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .blue
     case .searchRepositories: .orange
     case .caffeinate, .decaffeinate: .brown
+    case .sleepTimer, .stopSleepTimer: .indigo
     case .httpStatusCodes: .teal
     case .settings, .resetWindowPosition: .gray
     }

@@ -400,6 +400,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case systemActions = "System Actions"
   case windowManagement = "Window Management"
   case coffee = "Coffee"
+  case sleepTimer = "Sleep Timer"
   case cleanShot = "CleanShot X"
   case repositories = "Git Repositories"
   case httpStatusCodes = "HTTP Status Codes"
@@ -418,6 +419,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .systemActions: "gearshape.fill"
     case .windowManagement: "rectangle.split.2x1.fill"
     case .coffee: "cup.and.saucer.fill"
+    case .sleepTimer: "moon.zzz.fill"
     case .cleanShot: "camera.viewfinder"
     case .repositories: "arrow.triangle.branch"
     case .httpStatusCodes: "network"
@@ -433,6 +435,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .clipboardHistory: .red
     case .windowManagement: .indigo
     case .coffee: .brown
+    case .sleepTimer: .indigo
     case .cleanShot: .purple
     case .repositories: .orange
     case .httpStatusCodes: .teal
@@ -458,6 +461,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       "Put the frontmost window in a half, quarter or third, or on another display."
     case .cleanShot:
       "Capture, record and annotate with CleanShot X, through its URL scheme. Shown in search when CleanShot X is installed."
+    case .sleepTimer:
+      "Sleep the Mac, or turn its display off, after a time typed after Sleep Timer, as in “sleep timer 30m”."
     case .coffee:
       "Keep the Mac awake, until Decaffeinate or for a time typed after Caffeinate, as in “caffeinate 1h 30m”."
     case .repositories:
@@ -471,7 +476,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   /// The commands a page lists, by settings key; nil for pages built another way.
   var commandKeys: Set<String>? {
     switch self {
-    case .clipboardHistory, .snippets, .repositories, .coffee, .httpStatusCodes, .ripcord:
+    case .clipboardHistory, .snippets, .repositories, .coffee, .sleepTimer, .httpStatusCodes,
+      .ripcord:
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
@@ -489,6 +495,7 @@ extension BuiltinCommand {
     case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .snippets
     case .searchRepositories: .repositories
     case .caffeinate, .decaffeinate: .coffee
+    case .sleepTimer, .stopSleepTimer: .sleepTimer
     case .httpStatusCodes: .httpStatusCodes
     case .settings, .resetWindowPosition, .quit: .ripcord
     }
