@@ -27,6 +27,9 @@
 - System Actions: lock the screen, log out, restart, shut down, sleep, control music and volume,
   hide, unhide or quit apps, restart the frontmost app, open or empty the Trash, eject disks, show
   the desktop, and toggle Dark Mode or Finder's hidden files. Ones that lose work ask first
+- Window Management: put the frontmost window in a half, quarter or third, maximize or center
+  it, move it to the next or previous display, or restore where it was; give each a hotkey such
+  as ⌃⌥← on the Shortcuts page
 - Drag the panel anywhere; it remembers the spot, and Reset Ripcord Window Position brings it back
 
 ## Quick start
@@ -72,7 +75,8 @@ launch, on the first paste. Until then, Return only copies the item and beeps. R
 permission whenever a new build replaces the app: after an update, remove Ripcord from that list
 and add it again, or run `tccutil reset Accessibility io.github.meltin.ripcord`.
 
-System Actions use Accessibility for the music and volume keys too. Empty Trash, Toggle System
+System Actions use Accessibility for the music and volume keys too, and Window Management for
+moving windows. Empty Trash, Toggle System
 Appearance and Log Out, Restart and Shut Down ask macOS to let Ripcord control Finder, System
 Events and the login window; allow it in the prompt, or later under System Settings › Privacy &
 Security › Automation.
@@ -102,8 +106,8 @@ the settings window opens. The settings window writes every change back to it.
 }
 ```
 
-`hotkey` is `cmd`, `option` or `ctrl` (plus `shift` if you like), then `space`, a letter or a
-digit.
+`hotkey` is `cmd`, `option` or `ctrl` (plus `shift` if you like), then `space`, `return`, an
+arrow (`left`, `right`, `up`, `down`), a letter or a digit.
 Clipboard History keeps its last 300 unpinned items (plus every pinned one) in
 `~/Library/Application Support/Ripcord/Clipboard`, as plain text and image files; an image over
 32 MB or a text over 1 MB isn't kept. Delete the folder to clear it.
