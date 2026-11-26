@@ -78,7 +78,9 @@ final class SettingsModel {
       let hotkey = Hotkey(
         keyCode: UInt32(event.keyCode), modifiers: carbonModifiers(event.modifierFlags))
     else {
-      recorderMessage = (target, "Use ⌘, ⌥ or ⌃ (⇧ optional) with a letter, a digit or Space.")
+      recorderMessage = (
+        target, "Use ⌘, ⌥ or ⌃ (⇧ optional) with a letter, a digit, an arrow, Return or Space."
+      )
       return
     }
     if let owner = config.owner(of: hotkey, except: target) {
@@ -106,6 +108,7 @@ final class SettingsModel {
     case .item(let key):
       BuiltinCommand.allCases.first { $0.settingsKey == key }?.title
         ?? SystemAction.allCases.first { $0.settingsKey == key }?.title
+        ?? WindowLayout.allCases.first { $0.settingsKey == key }?.title
         ?? apps.first { $0.settingsKey == key }?.names[0]
         // Before the Shortcuts page has scanned the apps, ask Launch Services.
         ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: key).map {
