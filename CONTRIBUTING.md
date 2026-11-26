@@ -3,6 +3,10 @@
 Build and run Ripcord as in the README's [Build from source](README.md#build-from-source). Before a
 pull request, `swift test` and `swift format lint -r Sources Tests` should both pass.
 
+Run `scripts/create-signing-certificate.sh` once, so Accessibility stays granted across
+rebuilds instead of being granted again after each one (see the README's
+[Permissions](README.md#permissions)). Its private key stays in your keychain; never commit it.
+
 ## UI conventions
 
 These settled after side-by-side comparisons with Raycast; new UI should follow them.

@@ -31,5 +31,13 @@ sips -s format png -z 36 46 Resources/MenuBarIcon.svg --out "$app/Contents/Resou
 sips -s format png -z 18 18 Resources/ThirdParty/GitHub.svg --out "$app/Contents/Resources/GitHub.png" >/dev/null
 sips -s format png -z 36 36 Resources/ThirdParty/GitHub.svg --out "$app/Contents/Resources/GitHub@2x.png" >/dev/null
 cp Resources/ThirdParty/GitHub-LICENSE.txt "$app/Contents/Resources/"
-codesign --force --sign - "$app"
+# Signed with the certificate from scripts/create-signing-certificate.sh when it's in the keychain,
+# so macOS keeps permissions across builds; ad hoc otherwise (Nix, CI, a fresh clone).
+identity="${RIPCORD_SIGN_IDENTITY:-Ripcord Self-Signed}"
+if command -v security >/dev/null 2>&1 &&
+  security find-identity -v -p codesigning 2>/dev/null | grep -qF "\"$identity\""; then
+  codesign --force --sign "$identity" "$app"
+else
+  codesign --force --sign - "$app"
+fi
 echo "$app"

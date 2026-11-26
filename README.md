@@ -75,9 +75,20 @@ swift test
 
 Pasting from Clipboard History or Search Snippets presses ⌘V for you, which needs Ripcord to
 be allowed under System Settings › Privacy & Security › Accessibility; Ripcord asks once per
-launch, on the first paste. Until then, Return only copies the item and beeps. Ripcord is ad-hoc signed, so macOS forgets the
-permission whenever a new build replaces the app: after an update, remove Ripcord from that list
-and add it again, or run `tccutil reset Accessibility io.github.meltin.ripcord`.
+launch, on the first paste. Until then, Return only copies the item and beeps.
+
+macOS ties the permission to how the app is signed. A build signed ad hoc, as one made without
+the certificate below is, counts as a new app each time, so after an update remove Ripcord from
+that list and add it again, or run `tccutil reset Accessibility io.github.meltin.ripcord`. To
+build from source and keep the permission across rebuilds, create a signing certificate once:
+
+```sh
+scripts/create-signing-certificate.sh
+```
+
+It adds a self-signed certificate to your login keychain and asks for your password once, to trust
+it for code signing. `scripts/build-app.sh` signs with it from then on. Grant Accessibility to the
+first build signed with it; later builds keep it.
 
 System Actions use Accessibility for the music and volume keys too, as Window Management does to
 move windows. Empty Trash, Toggle System Appearance and Log Out, Restart and Shut Down ask macOS
