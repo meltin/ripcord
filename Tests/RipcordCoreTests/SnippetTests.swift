@@ -156,7 +156,7 @@ import Testing
   @Test func commandRowsOfferConfigureCommand() throws {
     let row = try #require(
       Search.results(for: "search snippets", apps: [], quicklinks: []).first)
-    #expect(row.actions.map(\.title) == ["Open Command", "Configure Command…"])
+    #expect(row.actions.map(\.title) == ["Open Command", "Add to Favorites", "Configure Command…"])
     #expect(row.actions.last?.action == .configureMenu(BuiltinCommand.searchSnippets.settingsKey))
   }
 

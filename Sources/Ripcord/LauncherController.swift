@@ -211,6 +211,14 @@ final class LauncherController: NSObject, NSWindowDelegate {
       update(model.query)
     }
   }
+  /// The root search's Favorites, by item key.
+  var favorites: [String] = [] {
+    didSet {
+      guard favorites != oldValue else { return }
+      model.settingsVersion += 1
+      update(model.query)
+    }
+  }
   var repositorySettings = RepositorySettings() {
     didSet {
       // Only a change in where to look empties the list; a new Open With app just redraws it.
@@ -536,7 +544,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
         }
       }
     return Search.sections(
-      for: query, apps: apps, running: running, quicklinks: quicklinks, items: items)
+      for: query, apps: apps, running: running, quicklinks: quicklinks, items: items,
+      favorites: favorites)
   }
 
   private func handle(_ command: SearchCommand) {
@@ -639,6 +648,14 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
   }
 
+  /// Selects the row of the item with `key` after a favorite moved it: its row ID can differ
+  /// between Running and Favorites, as a running app's path does.
+  private func select(itemKey key: String) {
+    if let index = model.results.firstIndex(where: { $0.itemKey == key }) {
+      model.selection = index
+    }
+  }
+
   /// Where an arrow moves the emoji grid's selection: ←→ by one, ↑↓ to the same column of the
   /// row above or below, across sections; nil for other commands.
   private func gridSelection(after command: SearchCommand) -> Int? {
@@ -721,9 +738,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
     let symbols: [(NSEvent.ModifierFlags, String)] = [
       (.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘"),
     ]
+    // Arrows by their key, as the menu writes them, for Move Favorite Up and Down: the layout
+    // translates them to control characters, not the arrow function keys.
+    let arrows = [kVK_UpArrow: "↑", kVK_DownArrow: "↓", kVK_LeftArrow: "←", kVK_RightArrow: "→"]
     let shortcut =
       symbols.filter { flags.contains($0.0) }.map(\.1).joined()
-      + (key == "\r" ? "↵" : key.uppercased())
+      + (arrows[Int(event.keyCode)] ?? (key == "\r" ? "↵" : key.uppercased()))
     // ⌘N creates a snippet even when Search Snippets lists none.
     let create = MenuAction(
       title: "Create Snippet", symbol: "plus", shortcut: "⌘N", action: .run(.createSnippet))
@@ -779,6 +799,24 @@ final class LauncherController: NSObject, NSWindowDelegate {
         title: "Skin Tone", items: Search.skinToneMenu(for: character, catalog: emojiCatalog),
         isRoot: false)
       return
+    }
+    if case .toggleFavorite(let key) = action {
+      model.menu = nil
+      if !editSettings({
+        $0.config.favorites = Search.togglingFavorite(key, in: $0.config.favorites)
+      }) {
+        NSSound.beep()
+      }
+      return select(itemKey: key)
+    }
+    if case .moveFavorite(let key, let other) = action {
+      model.menu = nil
+      if !editSettings({
+        $0.config.favorites = Search.swappingFavorite(key, with: other, in: $0.config.favorites)
+      }) {
+        NSSound.beep()
+      }
+      return select(itemKey: key)
     }
     if case .setEmojiSkinTone(let tone) = action {
       model.menu = nil
@@ -929,7 +967,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       .run(.searchRepositories), .run(.httpStatusCodes), .run(.sleepTimer), .run(.colorHistory),
       .run(.cleanKeyboard), .run(.searchBookmarks), .run(.addBookmark), .deleteBookmark,
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
-      .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone,
+      .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,
+      .moveFavorite,
       .deleteColor,
       .run(.createSnippet), .clip, .snippet, .system, .window:
       break  // Handled above, without hiding the panel.
