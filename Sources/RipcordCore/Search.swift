@@ -4,6 +4,7 @@ import Foundation
 public enum BuiltinCommand: CaseIterable, Sendable {
   case clipboardHistory, searchSnippets, createSnippet, exportSnippets, importSnippets
   case searchRepositories, settings
+  case caffeinate, decaffeinate
   case resetWindowPosition, quit
 
   public var title: String {
@@ -15,6 +16,8 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .exportSnippets: "Export Snippets"
     case .importSnippets: "Import Snippets"
     case .settings: "Ripcord Settings"
+    case .caffeinate: "Caffeinate"
+    case .decaffeinate: "Decaffeinate"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .quit: "Quit Ripcord"
     }
@@ -30,6 +33,8 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .exportSnippets: "command:export-snippets"
     case .importSnippets: "command:import-snippets"
     case .settings: "command:settings"
+    case .caffeinate: "command:caffeinate"
+    case .decaffeinate: "command:decaffeinate"
     case .resetWindowPosition: "command:reset-window-position"
     case .quit: "command:quit"
     }
@@ -126,6 +131,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case setAlias(String)
     case deleteHotkey(String)
     case deleteAlias(String)
+    /// Keeps the Mac awake for this many seconds; nil until Decaffeinate.
+    case caffeinate(TimeInterval?)
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -322,6 +329,21 @@ public enum Search {
         keyword: keyword, kind: .quicklink, action: .open(url))
     }
 
+    // "caffeinate 1h 30m", or its alias and the time, as a Quicklink takes its query.
+    let caffeinateSettings = items[BuiltinCommand.caffeinate.settingsKey] ?? ItemSettings()
+    let caffeinateFor = [BuiltinCommand.caffeinate.title, caffeinateSettings.alias]
+      .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
+      .filter { !$0.isEmpty && caffeinateSettings.isEnabled }
+      .compactMap { name -> SearchResult? in
+        guard trimmed.lowercased().hasPrefix(name.lowercased() + " "),
+          let seconds = Coffee.duration(from: String(trimmed.dropFirst(name.count + 1)))
+        else { return nil }
+        return SearchResult(
+          id: "caffeinate-for", title: "Caffeinate for \(Coffee.format(seconds))",
+          subtitle: "Coffee", keyword: nil, kind: .command, action: .caffeinate(seconds))
+      }
+      .prefix(1)
+
     typealias Candidate = (names: [String], alias: String?, result: SearchResult)
     let appCandidates: [Candidate] = apps.compactMap { app in
       let settings = items[app.settingsKey] ?? ItemSettings()
@@ -365,7 +387,7 @@ public enum Search {
       .prefix(30)
       .map(\.result)
 
-    return [calculation].compactMap { $0 } + expanded + ranked
+    return [calculation].compactMap { $0 } + expanded + caffeinateFor + ranked
   }
 
   /// Clipboard History's list: pinned items, then the rest by the day they were last copied,

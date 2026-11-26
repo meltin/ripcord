@@ -283,6 +283,8 @@ private struct ResultIcon: View {
       tile("link", .blue)
     case .run(let command):
       tile(command.symbol, command.color)
+    case .caffeinate:
+      tile(BuiltinCommand.caffeinate.symbol, BuiltinCommand.caffeinate.color)
     case .system(let action, _):
       tile(action.symbol, .gray)
     case .window(let layout):
@@ -383,6 +385,8 @@ extension BuiltinCommand {
     case .exportSnippets: "square.and.arrow.up"
     case .importSnippets: "square.and.arrow.down"
     case .settings: "gearshape.fill"
+    case .caffeinate: "cup.and.saucer.fill"
+    case .decaffeinate: "cup.and.saucer"
     case .resetWindowPosition: "macwindow"
     case .quit: "power"
     }
@@ -393,6 +397,7 @@ extension BuiltinCommand {
     case .clipboardHistory, .quit: .red
     case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .blue
     case .searchRepositories: .orange
+    case .caffeinate, .decaffeinate: .brown
     case .settings, .resetWindowPosition: .gray
     }
   }

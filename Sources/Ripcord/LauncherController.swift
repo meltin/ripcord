@@ -214,6 +214,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
   var onError: (String) -> Void = { _ in NSSound.beep() }
   /// Export Snippets and Import Snippets, which need file dialogs and the config.
   var onExportSnippets: () -> Void = {}
+  /// Coffee: keep the Mac awake for this many seconds, or until Decaffeinate for nil.
+  var onCaffeinate: (TimeInterval?) -> Void = { _ in }
+  var onDecaffeinate: () -> Void = {}
   var onImportSnippets: () -> Void = {}
   var isVisible: Bool { panel.isVisible }
 
@@ -687,6 +690,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onExportSnippets()
     case .run(.importSnippets):
       onImportSnippets()
+    case .run(.caffeinate):
+      onCaffeinate(nil)
+    case .caffeinate(let seconds):
+      onCaffeinate(seconds)
+    case .run(.decaffeinate):
+      onDecaffeinate()
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
       .run(.searchRepositories),
       .run(.createSnippet), .clip, .snippet, .system, .window:

@@ -398,6 +398,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case snippets = "Snippets"
   case systemActions = "System Actions"
   case windowManagement = "Window Management"
+  case coffee = "Coffee"
   case repositories = "Git Repositories"
   case ripcord = "Ripcord"
 
@@ -413,6 +414,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .snippets: "doc.plaintext.fill"
     case .systemActions: "gearshape.fill"
     case .windowManagement: "rectangle.split.2x1.fill"
+    case .coffee: "cup.and.saucer.fill"
     case .repositories: "arrow.triangle.branch"
     case .ripcord: "command"
     }
@@ -425,6 +427,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .applications, .quicklinks, .snippets: .blue
     case .clipboardHistory: .red
     case .windowManagement: .indigo
+    case .coffee: .brown
     case .repositories: .orange
     }
   }
@@ -446,6 +449,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       "Lock, sleep, control music and volume, and manage apps, the Trash and disks."
     case .windowManagement:
       "Put the frontmost window in a half, quarter or third, or on another display."
+    case .coffee:
+      "Keep the Mac awake, until Decaffeinate or for a time typed after Caffeinate, as in “caffeinate 1h 30m”."
     case .repositories:
       "Find the Git repositories in your folders and open each in the app you pick for its Return."
     case .ripcord: "Ripcord's own commands."
@@ -455,7 +460,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   /// The commands a page lists, by settings key; nil for pages built another way.
   var commandKeys: Set<String>? {
     switch self {
-    case .clipboardHistory, .snippets, .repositories, .ripcord:
+    case .clipboardHistory, .snippets, .repositories, .coffee, .ripcord:
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
@@ -471,6 +476,7 @@ extension BuiltinCommand {
     case .clipboardHistory: .clipboardHistory
     case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .snippets
     case .searchRepositories: .repositories
+    case .caffeinate, .decaffeinate: .coffee
     case .settings, .resetWindowPosition, .quit: .ripcord
     }
   }
