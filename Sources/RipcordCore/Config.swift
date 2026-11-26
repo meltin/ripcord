@@ -16,12 +16,14 @@ public struct Config: Codable, Equatable, Sendable {
   public var colorFormat: ColorFormat
   /// The root search's Favorites, by item key, in the user's order.
   public var favorites: [String]
+  /// Folders holding Raycast Script Commands, `~` allowed.
+  public var scriptFolders: [String]
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
     items: [String: ItemSettings] = [:], inputSource: String? = nil, snippets: [Snippet] = [],
     repositories: RepositorySettings = RepositorySettings(), colorFormat: ColorFormat = .hex,
-    favorites: [String] = []
+    favorites: [String] = [], scriptFolders: [String] = []
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
@@ -32,6 +34,7 @@ public struct Config: Codable, Equatable, Sendable {
     self.repositories = repositories
     self.colorFormat = colorFormat
     self.favorites = favorites
+    self.scriptFolders = scriptFolders
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -50,6 +53,7 @@ public struct Config: Codable, Equatable, Sendable {
     // the whole file unreadable.
     colorFormat = (try? container.decodeIfPresent(ColorFormat.self, forKey: .colorFormat)) ?? .hex
     favorites = try container.decodeIfPresent([String].self, forKey: .favorites) ?? []
+    scriptFolders = try container.decodeIfPresent([String].self, forKey: .scriptFolders) ?? []
   }
 
   public static let `default` = Config(

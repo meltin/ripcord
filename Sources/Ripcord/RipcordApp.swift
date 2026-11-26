@@ -214,6 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.repositorySettings = config.repositories
       launcher.colorFormat = config.colorFormat
       launcher.favorites = config.favorites
+      launcher.scriptFolders = config.scriptFolders
       applyLaunchAtLogin(config.launchAtLogin)
       // Saving mid-recording must not bring back the hotkeys the recorder turned off.
       if !isRecording { applyHotkeys(config) }
@@ -269,6 +270,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         launcher.perform(.window(layout))
       } else if let command = CleanShotCommand.allCases.first(where: { $0.settingsKey == key }) {
         launcher.perform(.cleanShot(command))
+      } else if key.hasPrefix("script:") {
+        launcher.perform(.runScript(String(key.dropFirst("script:".count))))
       } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: key)
         ?? (key.hasPrefix("/") ? URL(fileURLWithPath: key) : nil)
       {

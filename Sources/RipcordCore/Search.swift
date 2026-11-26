@@ -193,6 +193,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case setEmojiSkinTone(Int?)
     /// Adds the item with this key to Favorites, or takes it out.
     case toggleFavorite(String)
+    /// Runs the Script Command at this path.
+    case runScript(String)
     /// Reopens a form left unfinished, with what was typed.
     case openDraft(SavedDrafts.Form)
     /// Throws a form's draft away.
@@ -216,7 +218,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
 
   public enum Kind: Equatable, Sendable {
     case application, calculator, quicklink, command, text, image, snippet, repository, statusCode
-    case color, bookmark, emoji, draft
+    case color, bookmark, emoji, draft, script
 
     public var primaryAction: String {
       switch self {
@@ -229,6 +231,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
       case .bookmark: "Open in Browser"
       case .emoji: "Paste"
       case .draft: "Open Draft"
+      case .script: "Run Script"
       }
     }
   }
@@ -289,6 +292,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case .system(let system, _): return [primary, .configure(system.settingsKey)]
     case .cleanShot(let command): return [primary, .configure(command.settingsKey)]
     case .window(let layout): return [primary, .configure(layout.settingsKey)]
+    case .runScript(let path): return [primary, .configure("script:\(path)")]
     default:
       return [primary]
     }
@@ -357,7 +361,7 @@ public enum Search {
   public static func sections(
     for query: String, apps: [AppEntry], running: [AppEntry], quicklinks: [Quicklink],
     items: [String: ItemSettings] = [:], favorites: [String] = [],
-    drafts: SavedDrafts = SavedDrafts()
+    drafts: SavedDrafts = SavedDrafts(), scripts: [ScriptCommand] = []
   ) -> [SearchSection] {
     let links = quicklinks.filter(\.isEnabled)
     let trimmed = query.trimmingCharacters(in: .whitespaces)
@@ -365,7 +369,8 @@ public enum Search {
       // As typed: results trims it too, but a command's argument needs to see the space after
       // its title.
       let found = results(
-        for: query, apps: apps, quicklinks: links, items: items, favorites: favorites)
+        for: query, apps: apps, quicklinks: links, items: items, favorites: favorites,
+        scripts: scripts)
       guard found.isEmpty else { return [SearchSection(title: "Results", results: found)] }
       // Like Raycast's fallback commands: hand the whole query to each Quicklink.
       let fallbacks = links.compactMap { link in
@@ -380,7 +385,8 @@ public enum Search {
     }
     // Favorites first, as Raycast's; what's there isn't listed again below.
     let byKey = Dictionary(
-      candidates(apps: apps, quicklinks: links, items: items).compactMap { candidate in
+      candidates(apps: apps, quicklinks: links, items: items, scripts: scripts).compactMap {
+        candidate in
         candidate.result.itemKey.map { ($0, candidate.result) }
       }, uniquingKeysWith: { first, _ in first })
     let shown = shownFavorites(favorites, among: Set(byKey.keys))
@@ -475,7 +481,8 @@ public enum Search {
   /// An exactly typed alias or keyword puts its item at the top of the matches.
   public static func results(
     for query: String, apps: [AppEntry], quicklinks: [Quicklink],
-    items: [String: ItemSettings] = [:], favorites: [String] = []
+    items: [String: ItemSettings] = [:], favorites: [String] = [],
+    scripts: [ScriptCommand] = []
   ) -> [SearchResult] {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return [] }
@@ -520,7 +527,7 @@ public enum Search {
         ]
       } ?? []
 
-    let everything = candidates(apps: apps, quicklinks: links, items: items)
+    let everything = candidates(apps: apps, quicklinks: links, items: items, scripts: scripts)
     let shown = shownFavorites(favorites, among: Set(everything.compactMap(\.result.itemKey)))
     let ranked =
       everything
@@ -574,10 +581,9 @@ public enum Search {
   /// Every item the root search can list, enabled ones only: apps, Quicklinks, Ripcord's
   /// commands, System Actions, window layouts, and CleanShot X's commands when it's there.
   static func candidates(
-    apps: [AppEntry], quicklinks links: [Quicklink], items: [String: ItemSettings]
-  )
-    -> [Candidate]
-  {
+    apps: [AppEntry], quicklinks links: [Quicklink], items: [String: ItemSettings],
+    scripts: [ScriptCommand] = []
+  ) -> [Candidate] {
     let appCandidates: [Candidate] = apps.compactMap { app in
       let settings = items[app.settingsKey] ?? ItemSettings()
       guard settings.isEnabled else { return nil }
@@ -609,8 +615,19 @@ public enum Search {
       guard settings.isEnabled else { return nil }
       return ([layout.title], settings.alias, result(for: layout, alias: settings.alias))
     }
+    let scriptCandidates: [Candidate] = scripts.compactMap { script in
+      let settings = items[script.settingsKey] ?? ItemSettings()
+      guard settings.isEnabled else { return nil }
+      return (
+        [script.title], settings.alias,
+        SearchResult(
+          id: "script:\(script.url.path)", title: script.title, subtitle: script.packageName,
+          keyword: settings.alias, kind: .script, action: .runScript(script.url.path),
+          symbol: script.icon, settingsKey: script.settingsKey)
+      )
+    }
     return appCandidates + linkCandidates + commandCandidates + systemCandidates
-      + windowCandidates + cleanShotCandidates
+      + windowCandidates + cleanShotCandidates + scriptCandidates
   }
 
   /// The longest Clean Keyboard: no keyboard for more than five minutes, typed or not.
