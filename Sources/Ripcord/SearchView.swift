@@ -37,7 +37,8 @@ struct SearchView: View {
       .padding(.horizontal, 20)
       .frame(height: LauncherController.fieldHeight)
       .background(DragArea())
-      Divider().opacity(0.5)
+      // Raycast's form has no rule under its header.
+      if model.mode != .snippetForm { Divider().opacity(0.5) }
       if model.mode == .snippetForm {
         SnippetForm(model: model)
       } else if model.sections.isEmpty {
@@ -234,8 +235,8 @@ extension BuiltinCommand {
   fileprivate var symbol: String {
     switch self {
     case .clipboardHistory: "list.clipboard.fill"
-    case .searchSnippets: "text.quote"
-    case .createSnippet: "text.badge.plus"
+    case .searchSnippets: "doc.plaintext.fill"
+    case .createSnippet: "doc.badge.plus"
     case .settings: "gearshape.fill"
     case .resetWindowPosition: "macwindow"
     case .quit: "power"
@@ -245,7 +246,7 @@ extension BuiltinCommand {
   fileprivate var color: Color {
     switch self {
     case .clipboardHistory, .quit: .red
-    case .searchSnippets, .createSnippet: .orange
+    case .searchSnippets, .createSnippet: .blue
     case .settings, .resetWindowPosition: .gray
     }
   }
@@ -349,27 +350,28 @@ private struct SnippetForm: View {
         TextEditor(text: $model.draft.text)
           .font(.system(size: 13))
           .scrollContentBackground(.hidden)
-          .padding(8)
-          .field()
+          .scrollIndicators(.never)
+          .padding(10)
+          .frame(height: 230)
+          .field(isFocused: focus == .text)
           .focused($focus, equals: .text)
           // Tab moves on to Name, as in Raycast, instead of typing a tab into the snippet.
           .onKeyPress(.tab) {
             focus = .name
             return .handled
           }
-        Text("{date} and {clipboard} are filled in with today's date and the copied text.")
-          .font(.system(size: 11))
+        let date = Text(verbatim: "{date}").foregroundStyle(.tint)
+        let clipboard = Text(verbatim: "{clipboard}").foregroundStyle(.tint)
+        Text("Include \(date) or \(clipboard) for the current date or the copied text")
+          .font(.system(size: 12))
           .foregroundStyle(.secondary)
       }
       VStack(alignment: .leading, spacing: 8) {
         label("Name")
         TextField("Snippet name", text: $model.draft.name)
           .focused($focus, equals: .name)
-          .textFieldStyle(.plain)
-          .padding(.horizontal, 10)
-          .frame(height: 32)
-          .field()
-        label("Keyword").padding(.top, 12)
+          .inputField(isFocused: focus == .name)
+        label("Keyword").padding(.top, 14)
         TextField(
           "Keyword",
           text: Binding {
@@ -379,31 +381,35 @@ private struct SnippetForm: View {
           }
         )
         .focused($focus, equals: .keyword)
-        .textFieldStyle(.plain)
-        .padding(.horizontal, 10)
-        .frame(height: 32)
-        .field()
-        Spacer()
+        .inputField(isFocused: focus == .keyword)
       }
-      .frame(width: 260)
     }
-    .font(.system(size: 13))
-    .padding(.horizontal, 24)
-    .padding(.top, 16)
-    .padding(.bottom, LauncherController.footerHeight + 12)
+    .font(.system(size: 14))
+    // Centered with wide margins, as Raycast's form sits in the panel.
+    .padding(.horizontal, 56)
+    .padding(.top, 12)
+    .frame(maxHeight: .infinity, alignment: .top)
     .onAppear { focus = .text }
   }
 
   private func label(_ text: String) -> some View {
-    Text(text).font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+    Text(text).font(.system(size: 12)).foregroundStyle(.secondary)
   }
 }
 
 extension View {
-  /// A form field's rounded well, as Raycast draws them.
-  fileprivate func field() -> some View {
-    background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-      .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
+  /// A form field's outline, as Raycast draws them: no fill, darker while it has focus.
+  fileprivate func field(isFocused: Bool) -> some View {
+    overlay(
+      RoundedRectangle(cornerRadius: 12)
+        .strokeBorder(Color.primary.opacity(isFocused ? 0.3 : 0.15), lineWidth: isFocused ? 2 : 1))
+  }
+
+  fileprivate func inputField(isFocused: Bool) -> some View {
+    textFieldStyle(.plain)
+      .padding(.horizontal, 12)
+      .frame(height: 36)
+      .field(isFocused: isFocused)
   }
 }
 
@@ -540,7 +546,7 @@ private struct Footer: View {
             .foregroundStyle(.white)
             .frame(width: 18, height: 18)
             .background(command.color.gradient, in: RoundedRectangle(cornerRadius: 5))
-          Text(command.title)
+          Text(command.title).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 10)
         .frame(height: 32)
