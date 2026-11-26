@@ -387,7 +387,8 @@ public enum Search {
       guard !trimmed.isEmpty else { return (0, repository) }
       let score = [
         Fuzzy.score(trimmed, in: repository.name),
-        repository.url.path.localizedStandardContains(trimmed) ? 0 : nil,
+        // From `~`, so the home folder's own path doesn't match every repository.
+        tildePath(repository.url.path, home: home).localizedStandardContains(trimmed) ? 0 : nil,
       ].compactMap { $0 }.max()
       return score.map { ($0, repository) }
     }
@@ -424,10 +425,16 @@ public enum Search {
       let path = url.deletingLastPathComponent().path
       return SearchResult(
         id: "repo:\(url.path)", title: repository.name,
-        subtitle: path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path, keyword: nil,
+        subtitle: tildePath(path, home: home), keyword: nil,
         kind: .repository, action: menu[0].action, menu: menu)
     }
     return results.isEmpty ? [] : [SearchSection(title: "Repositories", results: results)]
+  }
+
+  /// `path` with the home folder written `~`; a sibling such as /Users/alex for /Users/al is
+  /// left alone.
+  public static func tildePath(_ path: String, home: String) -> String {
+    path == home || path.hasPrefix(home + "/") ? "~" + path.dropFirst(home.count) : path
   }
 
   /// Every app, Quicklink, command and system action the Shortcuts page lists, by section. Disabled

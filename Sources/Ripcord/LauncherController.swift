@@ -131,7 +131,18 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
   }
   var repositorySettings = RepositorySettings() {
-    didSet { if repositorySettings != oldValue { repositories = [] } }
+    didSet {
+      // Only a change in where to look empties the list; a new Open With app just redraws it.
+      if repositorySettings.folders != oldValue.folders
+        || repositorySettings.depth != oldValue.depth
+      {
+        repositories = []
+        // Kept open behind Settings, the list would otherwise come back empty.
+        if model.mode == .repositories { scanRepositories() }
+      } else if repositorySettings != oldValue, model.mode == .repositories {
+        refreshRows(selecting: model.selected?.id)
+      }
+    }
   }
   /// The last scan, listed at once while a fresh one runs.
   private var repositories: [Repository] = []
@@ -537,7 +548,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.clipboardHistory) { return open(.clipboard) }
     if action == .run(.searchSnippets) { return open(.snippets) }
     if action == .run(.searchRepositories) {
-      scanRepositories()
+      // Not when its hotkey is closing the list.
+      if !(panel.isVisible && model.mode == .repositories) { scanRepositories() }
       return open(.repositories)
     }
     if action == .run(.createSnippet) { return edit(nil) }
@@ -614,7 +626,6 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
   }
 
-  /// Opens a command's own list, from its row or its hotkey.
   /// Off the main thread, as walking the folders takes a moment; the list refreshes when done.
   private func scanRepositories() {
     let settings = repositorySettings
@@ -623,12 +634,15 @@ final class LauncherController: NSObject, NSWindowDelegate {
         RepositoryIndex.scan(
           roots: RepositoryIndex.roots(settings.folders), depth: max(1, settings.depth))
       }.value
-      guard settings == repositorySettings else { return }
+      guard settings.folders == repositorySettings.folders,
+        settings.depth == repositorySettings.depth
+      else { return }
       repositories = found
       if model.mode == .repositories { refreshRows(selecting: model.selected?.id) }
     }
   }
 
+  /// Opens a command's own list, from its row or its hotkey.
   private func open(_ mode: LauncherMode) {
     // Its hotkey closes its own list, as the launcher hotkey closes the panel.
     if panel.isVisible, model.mode == mode { return hide() }

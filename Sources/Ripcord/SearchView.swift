@@ -1299,7 +1299,10 @@ struct SearchField: NSViewRepresentable {
         switch selector {
         case #selector(NSResponder.moveUp(_:)): .up
         case #selector(NSResponder.moveDown(_:)): .down
-        case #selector(NSResponder.insertNewline(_:)): .submit
+        // ⌥↵ arrives as the second, so it reaches the Return variants too.
+        case #selector(NSResponder.insertNewline(_:)),
+          #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
+          .submit
         case #selector(NSResponder.cancelOperation(_:)): .cancel
         default: nil
         }

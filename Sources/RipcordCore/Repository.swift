@@ -52,8 +52,10 @@ public struct RepositorySettings: Codable, Equatable, Sendable {
 public enum RepositoryIndex {
   /// Every folder holding a `.git` under `roots`, at most `depth` folders down; a repository's
   /// own folders aren't searched further, and hidden folders and node_modules are skipped.
+  /// A repository reached from two folders (`~/dev` and `~/dev/oss`) is listed once.
   public static func scan(roots: [URL], depth: Int) -> [Repository] {
-    roots.flatMap { root -> [Repository] in
+    var seen = Set<String>()
+    return roots.flatMap { root -> [Repository] in
       var found: [Repository] = []
       func walk(_ folder: URL, level: Int) {
         if isRepository(folder) {
@@ -75,6 +77,7 @@ public enum RepositoryIndex {
       walk(root, level: 0)
       return found
     }
+    .filter { seen.insert($0.url.resolvingSymlinksInPath().path).inserted }
   }
 
   /// `~/dev` and the like as folder URLs, the ones that exist.
@@ -89,11 +92,29 @@ public enum RepositoryIndex {
   }
 
   private static func remote(of repository: URL) -> URL? {
-    guard
-      let config = try? String(
-        contentsOf: repository.appending(path: ".git/config"), encoding: .utf8)
+    guard let config = try? String(contentsOf: configFile(of: repository), encoding: .utf8)
     else { return nil }
     return originPage(config: config)
+  }
+
+  /// `.git/config`, or for a worktree or submodule, whose `.git` is a file naming its git
+  /// folder, that folder's config, or the main repository's for a worktree (`commondir`).
+  private static func configFile(of repository: URL) -> URL {
+    let dotGit = repository.appending(path: ".git")
+    guard let pointer = try? String(contentsOf: dotGit, encoding: .utf8),
+      pointer.hasPrefix("gitdir:")
+    else { return dotGit.appending(path: "config") }
+    let gitDir = resolve(pointer.dropFirst("gitdir:".count), against: repository)
+    let common = (try? String(contentsOf: gitDir.appending(path: "commondir"), encoding: .utf8))
+      .map { resolve(Substring($0), against: gitDir) }
+    return (common ?? gitDir).appending(path: "config")
+  }
+
+  /// A path as git writes it in those files: absolute, or relative to `base`.
+  private static func resolve(_ path: Substring, against base: URL) -> URL {
+    let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.hasPrefix("/")
+      ? URL(fileURLWithPath: trimmed) : base.appending(path: trimmed).standardizedFileURL
   }
 
   /// The web page of the `origin` remote in a `.git/config`'s text: an SSH address such as
@@ -116,8 +137,7 @@ public enum RepositoryIndex {
   }
 
   private static func webPage(_ address: String) -> URL? {
-    var path = address
-    if path.hasSuffix(".git") { path.removeLast(4) }
+    let path = address.hasSuffix(".git") ? String(address.dropLast(4)) : address
     if path.hasPrefix("git@"), let colon = path.firstIndex(of: ":") {
       // git@host:owner/repo
       let host = path[path.index(path.startIndex, offsetBy: 4)..<colon]

@@ -275,7 +275,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
       escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
         guard let self else { return event }
         if let step = pageStep(event) {
-          NotificationCenter.default.post(name: Self.stepPage, object: step)
+          NotificationCenter.default.post(
+            name: step > 0 ? Self.nextPage : Self.previousPage, object: nil)
           return nil
         }
         guard event.keyCode == UInt16(kVK_Escape), event.window === window,
@@ -305,8 +306,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
   }
 
-  /// Posted with +1 or -1 for the sidebar to move to the next or previous page.
-  static let stepPage = Notification.Name("RipcordSettingsStepPage")
+  /// Posted for the sidebar to move to the next or previous page.
+  static let nextPage = Notification.Name("RipcordSettingsNextPage")
+  static let previousPage = Notification.Name("RipcordSettingsPreviousPage")
 
   /// +1 for ↓ and -1 for ↑, held down too, unless a field, an alias or a hotkey recording has
   /// the keys.
@@ -512,8 +514,11 @@ private struct Sidebar: View {
     }
     .scrollIndicators(.never)
     .background(SidebarMaterial())
-    .onReceive(NotificationCenter.default.publisher(for: SettingsWindowController.stepPage)) {
-      if let offset = $0.object as? Int { step(offset) }
+    .onReceive(NotificationCenter.default.publisher(for: SettingsWindowController.nextPage)) { _ in
+      step(1)
+    }
+    .onReceive(NotificationCenter.default.publisher(for: SettingsWindowController.previousPage)) {
+      _ in step(-1)
     }
   }
 
@@ -1120,8 +1125,10 @@ private struct RepositoriesSettings: View {
     guard panel.runModal() == .OK, let url = panel.url else { return }
     let home = NSHomeDirectory()
     // Kept with ~, so the config reads the same on another account.
-    let path = url.path.hasPrefix(home) ? "~" + url.path.dropFirst(home.count) : url.path
-    if !settings.folders.contains(path) { model.config.repositories.folders.append(path) }
+    let path = Search.tildePath(url.path, home: home)
+    if !settings.folders.contains(path) {
+      model.config.repositories.folders = settings.folders + [path]
+    }
   }
 }
 

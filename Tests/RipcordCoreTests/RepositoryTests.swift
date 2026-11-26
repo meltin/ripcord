@@ -39,6 +39,40 @@ import Testing
     #expect(names == ["a", "c"])
   }
 
+  @Test func listsARepositoryReachedFromTwoFoldersOnce() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(
+      at: root.appending(path: "oss/ripcord/.git"), withIntermediateDirectories: true)
+    let found = RepositoryIndex.scan(roots: [root, root.appending(path: "oss")], depth: 3)
+    #expect(found.map(\.name) == ["ripcord"])
+  }
+
+  @Test func readsAWorktreesRemoteFromItsMainRepository() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let main = root.appending(path: "ripcord")
+    let gitDir = main.appending(path: ".git/worktrees/feature")
+    try FileManager.default.createDirectory(at: gitDir, withIntermediateDirectories: true)
+    try "[remote \"origin\"]\n\turl = git@github.com:meltin/ripcord.git\n".write(
+      to: main.appending(path: ".git/config"), atomically: true, encoding: .utf8)
+    try "../..\n".write(to: gitDir.appending(path: "commondir"), atomically: true, encoding: .utf8)
+    let worktree = root.appending(path: "feature")
+    try FileManager.default.createDirectory(at: worktree, withIntermediateDirectories: true)
+    try "gitdir: \(gitDir.path)\n".write(
+      to: worktree.appending(path: ".git"), atomically: true, encoding: .utf8)
+    let found = RepositoryIndex.scan(roots: [root], depth: 1)
+    #expect(
+      found.first { $0.name == "feature" }?.remote?.absoluteString
+        == "https://github.com/meltin/ripcord")
+  }
+
+  @Test func writesTheHomeFolderAsTildeOnlyForItsOwnPaths() {
+    #expect(Search.tildePath("/Users/al/dev", home: "/Users/al") == "~/dev")
+    #expect(Search.tildePath("/Users/al", home: "/Users/al") == "~")
+    #expect(Search.tildePath("/Users/alex/dev", home: "/Users/al") == "/Users/alex/dev")
+  }
+
   @Test func settingsReadFromOlderConfigs() throws {
     let data = Data(#"{"hotkey": "ctrl+space", "quicklinks": []}"#.utf8)
     #expect(try JSONDecoder().decode(Config.self, from: data).repositories == RepositorySettings())
@@ -63,5 +97,11 @@ import Testing
     #expect(result.action == .open(repository.url))
     #expect(
       Search.repositorySections(for: "zzz", repositories: [repository], settings: settings).isEmpty)
+    // The home folder's own path isn't something to search by.
+    let home = NSHomeDirectory()
+    let inHome = Repository(url: URL(fileURLWithPath: home + "/dev/ripcord"), remote: nil)
+    let homeName = URL(fileURLWithPath: home).lastPathComponent
+    #expect(
+      Search.repositorySections(for: homeName, repositories: [inHome], settings: settings).isEmpty)
   }
 }
