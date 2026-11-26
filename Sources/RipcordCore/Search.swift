@@ -129,6 +129,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case snippet(Int, SnippetAction)
     /// `confirmed` once its warning has been answered, or for one with none.
     case system(SystemAction, confirmed: Bool = false)
+    /// A CleanShot X command, through its URL scheme.
+    case cleanShot(CleanShotCommand)
     case window(WindowLayout)
     /// A folder opened in a chosen app, as a repository is.
     case openWith(URL, app: URL)
@@ -221,6 +223,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
       ]
     case .run(let command): return [primary, .configure(command.settingsKey)]
     case .system(let system, _): return [primary, .configure(system.settingsKey)]
+    case .cleanShot(let command): return [primary, .configure(command.settingsKey)]
     case .window(let layout): return [primary, .configure(layout.settingsKey)]
     default:
       return [primary]
@@ -253,6 +256,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     switch action {
     case .run(let command): return command.settingsKey
     case .system(let action, _): return action.settingsKey
+    case .cleanShot(let command): return command.settingsKey
     case .window(let layout): return layout.settingsKey
     default: return kind == .quicklink ? id : nil
     }
@@ -369,6 +373,14 @@ public enum Search {
       guard settings.isEnabled else { return nil }
       return ([command.title], settings.alias, result(for: command, alias: settings.alias))
     }
+    // Only with CleanShot X installed: its commands would open nothing otherwise.
+    let hasCleanShot = apps.contains { CleanShotCommand.isCleanShot(bundleID: $0.bundleID) }
+    let cleanShotCandidates: [Candidate] = (hasCleanShot ? CleanShotCommand.allCases : [])
+      .compactMap { command in
+        let settings = items[command.settingsKey] ?? ItemSettings()
+        guard settings.isEnabled else { return nil }
+        return ([command.title], settings.alias, result(for: command, alias: settings.alias))
+      }
     let systemCandidates: [Candidate] = SystemAction.allCases.compactMap { action in
       let settings = items[action.settingsKey] ?? ItemSettings()
       guard settings.isEnabled else { return nil }
@@ -380,7 +392,8 @@ public enum Search {
       return ([layout.title], settings.alias, result(for: layout, alias: settings.alias))
     }
     let ranked =
-      (appCandidates + linkCandidates + commandCandidates + systemCandidates + windowCandidates)
+      (appCandidates + linkCandidates + commandCandidates + systemCandidates + windowCandidates
+      + cleanShotCandidates)
       .compactMap { candidate -> (score: Int, result: SearchResult)? in
         let names = candidate.names + [candidate.alias].compactMap { $0 }
         guard let score = names.compactMap({ Fuzzy.score(trimmed, in: $0) }).max() else {
@@ -588,6 +601,11 @@ public enum Search {
         entries: WindowLayout.allCases.map {
           CatalogEntry(target: .item($0.settingsKey), title: $0.title, kind: .command, appURL: nil)
         }),
+      CatalogSection(
+        title: "CleanShot X",
+        entries: CleanShotCommand.allCases.map {
+          CatalogEntry(target: .item($0.settingsKey), title: $0.title, kind: .command, appURL: nil)
+        }),
     ]
   }
 
@@ -609,6 +627,12 @@ public enum Search {
     SearchResult(
       id: layout.settingsKey, title: layout.title, subtitle: "Window Management", keyword: alias,
       kind: .command, action: .window(layout))
+  }
+
+  private static func result(for command: CleanShotCommand, alias: String?) -> SearchResult {
+    SearchResult(
+      id: command.settingsKey, title: command.title, subtitle: "CleanShot X", keyword: alias,
+      kind: .command, action: .cleanShot(command))
   }
 
   private static func result(for action: SystemAction, alias: String?) -> SearchResult {

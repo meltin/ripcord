@@ -160,6 +160,7 @@ import Testing
     #expect(
       catalog.map(\.title) == [
         "Applications", "Quicklinks", "Ripcord", "System Actions", "Window Management",
+        "CleanShot X",
       ])
     #expect(catalog[0].entries.map(\.title) == ["Adobe Photoshop 2026", "PS Remote Play"])
     #expect(catalog[0].entries[0].target == .item("com.adobe.Photoshop"))

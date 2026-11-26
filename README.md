@@ -35,6 +35,9 @@
   it, as in `caffeinate 1h 30m`, to stop on its own. A cup with the time left shows in the menu bar
 - HTTP Status Codes: look a code up by number or name, grouped by hundred; Return opens its MDN
   page and ⌘K copies the code or its name
+- CleanShot X: Capture Area, Window, Fullscreen and Previous Area, Scrolling Capture, Record
+  Screen, Capture Text, Self-Timer, Pin, Annotate, History and the rest of its URL scheme, listed
+  when CleanShot X is installed
 - Window Management: put the frontmost window in a half, quarter or third, maximize or center
   it, move it to the next or previous display, or restore where it was; give each a hotkey such
   as ⌃⌥← on its settings page

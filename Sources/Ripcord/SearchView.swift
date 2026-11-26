@@ -257,6 +257,11 @@ private struct ResultRow: View {
 private struct ResultIcon: View {
   let result: SearchResult
 
+  /// Found once, from whichever app opens cleanshot:// links, rather than on every redraw.
+  private static let cleanShotIcon = URL(string: "cleanshot://")
+    .flatMap(NSWorkspace.shared.urlForApplication(toOpen:))
+    .map { NSWorkspace.shared.icon(forFile: $0.path) }
+
   var body: some View {
     switch result.action {
     case _ where result.kind == .statusCode:
@@ -297,6 +302,13 @@ private struct ResultIcon: View {
       tile(layout.symbol, .indigo)
     case .reveal:
       tile("folder", .gray)
+    case .cleanShot:
+      // CleanShot X's own icon, as Raycast shows its extension's commands.
+      if let icon = Self.cleanShotIcon {
+        Image(nsImage: icon).resizable().frame(width: 30, height: 30).padding(-3)
+      } else {
+        tile("camera.viewfinder", .purple)
+      }
     case .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey, .deleteAlias:
       tile("gearshape", .gray)
     case .snippet:
