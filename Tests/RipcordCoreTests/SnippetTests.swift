@@ -14,6 +14,11 @@ import Testing
     #expect(Snippet.expand("{clipboard}", date: "today", clipboard: "{date}") == "{date}")
   }
 
+  @Test func readsTagsAsTyped() {
+    #expect(Snippet.tags(from: " work, mail ,,work ") == ["work", "mail"])
+    #expect(Snippet.tags(from: " , ") == nil)
+  }
+
   @Test func readsConfigsWrittenBeforeSnippetsExisted() throws {
     let data = Data(#"{"hotkey": "ctrl+space", "quicklinks": []}"#.utf8)
     #expect(try JSONDecoder().decode(Config.self, from: data).snippets == [])
@@ -38,7 +43,7 @@ import Testing
     Snippet(name: "", text: ""),
     Snippet(name: "", text: "No name yet"),
     Snippet(name: "Address", text: "1 Infinite Loop", keyword: "addr", icon: "house"),
-    Snippet(name: "Greeting", text: "Hello on {date}", keyword: "sig"),
+    Snippet(name: "Greeting", text: "Hello on {date}", keyword: "sig", tags: ["mail"]),
   ]
 
   @Test func listsSnippetsWithTextByName() throws {
@@ -54,6 +59,12 @@ import Testing
   @Test func showsTheChosenIcon() {
     let results = Search.snippetSections(for: "addr", snippets: snippets).flatMap(\.results)
     #expect(results.map(\.symbol) == ["house"])
+  }
+
+  @Test func findsAndShowsTags() {
+    let results = Search.snippetSections(for: "mail", snippets: snippets).flatMap(\.results)
+    #expect(results.map(\.title) == ["Greeting"])
+    #expect(results.map(\.tags) == [["mail"]])
   }
 
   @Test func findsByNameKeywordOrText() {

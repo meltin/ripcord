@@ -174,6 +174,14 @@ private struct ResultRow: View {
           .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
       }
       Spacer(minLength: 12)
+      ForEach(result.tags, id: \.self) { tag in
+        Text(tag)
+          .font(.system(size: 12))
+          .foregroundStyle(.secondary)
+          .padding(.horizontal, 7)
+          .padding(.vertical, 2)
+          .background(.quaternary, in: Capsule())
+      }
       if showsKind {
         Text(result.kind.label).font(.system(size: 13)).foregroundStyle(.secondary)
       }
@@ -345,7 +353,7 @@ private struct SnippetForm: View {
   @Bindable var model: LauncherModel
   @FocusState private var focus: Field?
 
-  private enum Field { case text, name, keyword }
+  private enum Field { case text, name, keyword, tags }
 
   var body: some View {
     HStack(alignment: .top, spacing: 24) {
@@ -414,6 +422,10 @@ private struct SnippetForm: View {
         )
         .focused($focus, equals: .keyword)
         .inputField(isFocused: focus == .keyword)
+        label("Tags").padding(.top, 14)
+        TextField("Tags, separated by commas", text: $model.tagsText)
+          .focused($focus, equals: .tags)
+          .inputField(isFocused: focus == .tags)
       }
     }
     .font(.system(size: 14))
@@ -567,6 +579,11 @@ private struct SnippetPreview: View {
         detailRow("Name", index: 0) { Text(result.title) }
         if let keyword = result.keyword {
           detailRow("Keyword", index: 1) { Text(keyword) }
+        }
+        if !result.tags.isEmpty {
+          detailRow("Tags", index: result.keyword == nil ? 1 : 2) {
+            Text(result.tags.joined(separator: ", "))
+          }
         }
       }
     }

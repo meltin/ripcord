@@ -44,6 +44,8 @@ final class LauncherModel {
   var draft = Snippet(name: "", text: "")
   var editing: Int?
   var isPickingIcon = false
+  /// The Tags field as typed; split into tags when saved, so a half-typed ", " stays put.
+  var tagsText = ""
 
   /// Every row in display order; `selection` indexes into this.
   var results: [SearchResult] { sections.flatMap(\.results) }
@@ -472,8 +474,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.editing = index.flatMap { snippets.indices.contains($0) ? $0 : nil }
     if let editing = model.editing {
       model.draft = snippets[editing]
+      model.tagsText = (snippets[editing].tags ?? []).joined(separator: ", ")
     } else if wasEditing {
       model.draft = Snippet(name: "", text: "")
+      model.tagsText = ""
     }
     if index != nil {
       model.mode = .snippetForm
@@ -488,7 +492,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       name: model.draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
       text: model.draft.text,
       keyword: model.draft.keyword?.trimmingCharacters(in: .whitespaces).nilIfEmpty,
-      icon: model.draft.icon)
+      icon: model.draft.icon, tags: Snippet.tags(from: model.tagsText))
     guard !draft.name.isEmpty, !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else { return NSSound.beep() }
     // The list can shrink while the form is open; an edit then has nothing left to replace.
@@ -507,6 +511,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     guard saved else { return NSSound.beep() }
     model.draft = Snippet(name: "", text: "")
+    model.tagsText = ""
     model.editing = nil
     model.mode = .snippets
     update("")

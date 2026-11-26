@@ -145,6 +145,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   public var thumbnail: URL? = nil
   /// An SF Symbols name drawn as the row's icon, as a snippet's chosen one.
   public var symbol: String? = nil
+  /// A snippet's tags, shown at the end of its row.
+  public var tags: [String] = []
   public var isPinned = false
 }
 
@@ -318,7 +320,8 @@ public enum Search {
     let matches = snippets.enumerated().filter { _, snippet in
       !snippet.text.isEmpty
         && (trimmed.isEmpty
-          || ([snippet.name, snippet.text] + [keyword(snippet)].compactMap { $0 })
+          || ([snippet.name, snippet.text] + [keyword(snippet)].compactMap { $0 }
+            + (snippet.tags ?? []))
             .contains { $0.localizedStandardContains(trimmed) })
     }
     let sorted = matches.sorted { a, b in
@@ -333,7 +336,7 @@ public enum Search {
         // By position: a new snippet's name is empty, and names may repeat.
         id: "snippet:\(index)", title: title(snippet),
         subtitle: "", keyword: keyword(snippet), kind: .snippet,
-        action: .snippet(index, .paste), symbol: snippet.icon ?? "doc")
+        action: .snippet(index, .paste), symbol: snippet.icon ?? "doc", tags: snippet.tags ?? [])
     }
     return results.isEmpty ? [] : [SearchSection(title: "Snippets", results: results)]
   }
