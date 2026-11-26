@@ -193,8 +193,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case setEmojiSkinTone(Int?)
     /// Adds the item with this key to Favorites, or takes it out.
     case toggleFavorite(String)
-    /// Moves a favorite up (-1) or down (1).
-    case moveFavorite(String, by: Int)
+    /// Moves a favorite past the one shown next to it, up or down.
+    case moveFavorite(String, swappingWith: String)
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -377,11 +377,14 @@ public enum Search {
       candidates(apps: apps, quicklinks: links, items: items).compactMap { candidate in
         candidate.result.itemKey.map { ($0, candidate.result) }
       }, uniquingKeysWith: { first, _ in first })
-    let favored = favorites.compactMap { byKey[$0] }
+    let shown = shownFavorites(favorites, among: Set(byKey.keys))
+    let favored = shown.compactMap { byKey[$0] }
+    // Only what Favorites shows leaves the lists below: a favorite that can't be listed there
+    // (an app run from outside the folders scanned) stays where it can be seen and removed.
     let shownRunning = running.filter {
-      (items[$0.settingsKey]?.isEnabled ?? true) && !favorites.contains($0.settingsKey)
+      (items[$0.settingsKey]?.isEnabled ?? true) && !shown.contains($0.settingsKey)
     }
-    let decorate = { (result: SearchResult) in withFavoriteActions(result, favorites: favorites) }
+    let decorate = { (result: SearchResult) in withFavoriteActions(result, favorites: shown) }
     // Ripcord's own commands live in the footer's root menu; typing still finds them.
     return [
       SearchSection(title: "Favorites", results: favored.map(decorate)),
@@ -394,20 +397,24 @@ public enum Search {
       SearchSection(
         title: "Quicklinks",
         results: links.compactMap(result(for:)).filter {
-          !favorites.contains($0.itemKey ?? "")
+          !shown.contains($0.itemKey ?? "")
         }.map(decorate)),
     ].filter { !$0.results.isEmpty }
   }
 
-  /// A favorite's place in `favorites` moved by `offset`, kept in range.
-  public static func movingFavorite(_ key: String, by offset: Int, in favorites: [String])
+  /// The favorites that can be listed, once each, in the user's order: one for an app that's
+  /// gone, or a key written twice by hand, isn't shown and doesn't take a place.
+  static func shownFavorites(_ favorites: [String], among listed: Set<String>) -> [String] {
+    favorites.enumerated().filter { index, key in
+      listed.contains(key) && favorites.firstIndex(of: key) == index
+    }.map(\.element)
+  }
+
+  /// `favorites` with `key` and `other` trading places, so a move skips keys that aren't shown.
+  public static func swappingFavorite(_ key: String, with other: String, in favorites: [String])
     -> [String]
   {
-    guard let index = favorites.firstIndex(of: key) else { return favorites }
-    let target = min(max(index + offset, 0), favorites.count - 1)
-    var moved = favorites.filter { $0 != key }
-    moved.insert(key, at: target)
-    return moved
+    favorites.map { $0 == key ? other : $0 == other ? key : $0 }
   }
 
   /// `favorites` with `key` added at the end, or taken out.
@@ -430,13 +437,13 @@ public enum Search {
             ? [
               MenuAction(
                 title: "Move Favorite Up", symbol: "chevron.up", shortcut: "⌥⌘↑",
-                action: .moveFavorite(key, by: -1))
+                action: .moveFavorite(key, swappingWith: favorites[index - 1]))
             ] : [])
           + (index < favorites.count - 1
             ? [
               MenuAction(
                 title: "Move Favorite Down", symbol: "chevron.down", shortcut: "⌥⌘↓",
-                action: .moveFavorite(key, by: 1))
+                action: .moveFavorite(key, swappingWith: favorites[index + 1]))
             ] : [])
       } else {
         [
@@ -506,7 +513,10 @@ public enum Search {
         ]
       } ?? []
 
-    let ranked = candidates(apps: apps, quicklinks: links, items: items)
+    let everything = candidates(apps: apps, quicklinks: links, items: items)
+    let shown = shownFavorites(favorites, among: Set(everything.compactMap(\.result.itemKey)))
+    let ranked =
+      everything
       .compactMap { candidate -> (score: Int, result: SearchResult)? in
         let names = candidate.names + [candidate.alias].compactMap { $0 }
         guard let score = names.compactMap({ Fuzzy.score(trimmed, in: $0) }).max() else {
@@ -517,7 +527,7 @@ public enum Search {
           .caseInsensitiveCompare(trimmed) == .orderedSame
         return (
           exactAlias ? score + 10_000 : score,
-          withFavoriteActions(candidate.result, favorites: favorites)
+          withFavoriteActions(candidate.result, favorites: shown)
         )
       }
       .sorted {

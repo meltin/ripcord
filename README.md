@@ -12,7 +12,8 @@
 - Quicklinks: `g swift testing` opens a search; with no match, the query goes to each Quicklink
 - Favorites: ⇧⌘F on an app, command or Quicklink pins it to the top of the empty search, in
   your order (⌥⌘↑ and ⌥⌘↓ move it), as Raycast's Favorites do
-- ⌘K lists the selected row's actions (Open Command ↵, Show in Finder ⇧⌘F, Copy Path or URL ⇧⌘C)
+- ⌘K lists the selected row's actions (Open Command ↵, Show in Finder ⌘↵, Copy Path or URL ⇧⌘C,
+  Add to Favorites ⇧⌘F)
 - Settings (⌘,): Launch at Login, the hotkey, the input source to type in and Quicklinks, kept
   in sync with the config file
 - Settings has a page per extension (Applications, Quicklinks, Clipboard History, Snippets, System
@@ -134,6 +135,7 @@ the settings window opens. The settings window writes every change back to it.
     "openWith": { "return": "/Applications/Visual Studio Code.app", "cmd": "/Applications/Ghostty.app" }
   },
   "colorFormat": "hex",
+  "favorites": ["com.apple.Safari", "command:search-snippets"],
   "snippets": [
     { "name": "Address", "keyword": "addr", "text": "1 Infinite Loop\nCupertino", "icon": "house",
       "tags": ["home"] }

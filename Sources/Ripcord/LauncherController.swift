@@ -648,6 +648,14 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
   }
 
+  /// Selects the row of the item with `key` after a favorite moved it: its row ID can differ
+  /// between Running and Favorites, as a running app's path does.
+  private func select(itemKey key: String) {
+    if let index = model.results.firstIndex(where: { $0.itemKey == key }) {
+      model.selection = index
+    }
+  }
+
   /// Where an arrow moves the emoji grid's selection: ←→ by one, ↑↓ to the same column of the
   /// row above or below, across sections; nil for other commands.
   private func gridSelection(after command: SearchCommand) -> Int? {
@@ -794,23 +802,21 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     if case .toggleFavorite(let key) = action {
       model.menu = nil
-      let id = model.selected?.id
       if !editSettings({
         $0.config.favorites = Search.togglingFavorite(key, in: $0.config.favorites)
       }) {
         NSSound.beep()
       }
-      return refreshRows(selecting: id)
+      return select(itemKey: key)
     }
-    if case .moveFavorite(let key, let offset) = action {
+    if case .moveFavorite(let key, let other) = action {
       model.menu = nil
-      let id = model.selected?.id
       if !editSettings({
-        $0.config.favorites = Search.movingFavorite(key, by: offset, in: $0.config.favorites)
+        $0.config.favorites = Search.swappingFavorite(key, with: other, in: $0.config.favorites)
       }) {
         NSSound.beep()
       }
-      return refreshRows(selecting: id)
+      return select(itemKey: key)
     }
     if case .setEmojiSkinTone(let tone) = action {
       model.menu = nil

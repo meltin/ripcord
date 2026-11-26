@@ -46,9 +46,28 @@ import Testing
   @Test func togglesAndMoves() {
     #expect(Search.togglingFavorite("a", in: ["b"]) == ["b", "a"])
     #expect(Search.togglingFavorite("b", in: ["a", "b"]) == ["a"])
-    #expect(Search.movingFavorite("c", by: -1, in: ["a", "b", "c"]) == ["a", "c", "b"])
-    #expect(Search.movingFavorite("a", by: -1, in: ["a", "b"]) == ["a", "b"])
-    #expect(Search.movingFavorite("a", by: 1, in: ["a", "b"]) == ["b", "a"])
+    #expect(Search.swappingFavorite("c", with: "b", in: ["a", "b", "c"]) == ["a", "c", "b"])
+    // A hidden key between them stays where it is.
+    #expect(Search.swappingFavorite("c", with: "a", in: ["a", "gone", "c"]) == ["c", "gone", "a"])
+  }
+
+  @Test func hidesAndSkipsWhatCantBeListed() throws {
+    let snippets = BuiltinCommand.searchSnippets.settingsKey
+    // Gone first and written twice: neither shows nor takes a place.
+    let favorites = try #require(
+      root(["app:/Gone.app", snippets, snippets, app.settingsKey]).first?.results)
+    #expect(favorites.map(\.title) == ["Search Snippets", "Rex"])
+    #expect(!favorites[0].actions.contains { $0.title == "Move Favorite Up" })
+    #expect(
+      favorites[1].actions.first { $0.title == "Move Favorite Up" }?.action
+        == .moveFavorite(app.settingsKey, swappingWith: snippets))
+    // A running app the index never scanned stays under Running, where it can be removed.
+    let elsewhere = AppEntry(
+      url: URL(fileURLWithPath: "/Users/me/Downloads/Tool.app"), names: ["Tool"], bundleID: "tool")
+    let sections = Search.sections(
+      for: "", apps: [app], running: [elsewhere], quicklinks: [], favorites: [elsewhere.settingsKey]
+    )
+    #expect(sections.map(\.title) == ["Running"])
   }
 
   @Test func searchResultsOfferFavoritesToo() throws {
