@@ -202,7 +202,7 @@ private struct CleanKeyboardOverlay: View {
     ZStack {
       Color.black.opacity(0.55)
       VStack(spacing: 14) {
-        Image(systemName: "keyboard").font(.system(size: 56, weight: .light))
+        Glyph("keyboard", pointSize: 56)
         Text("Cleaning Keyboard").font(.system(size: 28, weight: .semibold))
         Text(Coffee.format(countdown.remaining.rounded(.up)))
           .font(.system(size: 48, weight: .medium).monospacedDigit())

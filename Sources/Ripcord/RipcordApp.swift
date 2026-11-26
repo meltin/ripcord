@@ -357,8 +357,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       statusItem.length = NSStatusItem.squareLength
       return
     }
-    let image = NSImage(systemSymbolName: shown.symbol, accessibilityDescription: shown.label)
+    // A copy: the cached image is shared with the panel's icons of the same size.
+    let image =
+      (Tabler.image(shown.symbol, size: 18)?.copy() as? NSImage)
+      ?? NSImage(systemSymbolName: shown.symbol, accessibilityDescription: shown.label)
     image?.isTemplate = true
+    image?.accessibilityDescription = shown.label
     button.image = image
     button.imagePosition = .imageLeading
     button.title = shown.remaining.map { " " + Coffee.format($0, seconds: false) } ?? ""

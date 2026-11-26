@@ -16,8 +16,7 @@ struct SearchView: View {
           HoverButton {
             onCommand(.back)
           } label: {
-            Image(systemName: "chevron.left")
-              .font(.system(size: 15, weight: .medium))
+            Glyph("chevron.left", pointSize: 15)
               .frame(width: 28, height: 28)
           }
           .accessibilityLabel("Back")
@@ -193,8 +192,7 @@ private struct EmptyState: View {
 
   var body: some View {
     VStack(spacing: 10) {
-      Image(systemName: "magnifyingglass")
-        .font(.system(size: 34, weight: .light))
+      Glyph("magnifyingglass", pointSize: 34)
         .foregroundStyle(.tertiary)
       Text("No Results").font(.system(size: 15, weight: .semibold))
       Text(message)
@@ -297,8 +295,7 @@ private struct ResultIcon: View {
           .fill(Color(red: 0.94, green: 0.31, blue: 0.2).gradient)
           .frame(width: 18, height: 18)
           .rotationEffect(.degrees(45))
-        Image(systemName: "arrow.triangle.branch")
-          .font(.system(size: 10, weight: .bold))
+        Glyph("arrow.triangle.branch", pointSize: 10)
           .foregroundStyle(.white)
       }
       .frame(width: 24, height: 24)
@@ -342,8 +339,7 @@ private struct ResultIcon: View {
       tile("gearshape", .gray)
     case .snippet:
       // Plain, as Raycast draws a snippet's icon.
-      Image(systemName: result.symbol ?? "doc")
-        .font(.system(size: 15))
+      Glyph(result.symbol ?? "doc", pointSize: 15)
         .foregroundStyle(.secondary)
         .frame(width: 24, height: 24)
     case .clip:
@@ -359,8 +355,7 @@ private struct ResultIcon: View {
   }
 
   private func tile(_ symbol: String, _ color: Color) -> some View {
-    Image(systemName: symbol)
-      .font(.system(size: 12, weight: .semibold))
+    Glyph(symbol, pointSize: 12)
       .foregroundStyle(.white)
       .frame(width: 24, height: 24)
       .background(color.gradient, in: RoundedRectangle(cornerRadius: 6))
@@ -587,9 +582,8 @@ private struct SnippetForm: View {
             model.isPickingIcon.toggle()
           } label: {
             HStack(spacing: 6) {
-              Image(systemName: model.draft.icon ?? "doc").font(.system(size: 14))
-              Image(systemName: model.isPickingIcon ? "chevron.up" : "chevron.down")
-                .font(.system(size: 9, weight: .semibold))
+              Glyph(model.draft.icon ?? "doc", pointSize: 14)
+              Glyph(model.isPickingIcon ? "chevron.up" : "chevron.down", pointSize: 10)
             }
             .padding(.horizontal, 12)
             .frame(maxHeight: .infinity)
@@ -753,7 +747,7 @@ private struct BookmarkForm: View {
       HStack {
         Text(model.bookmarkDraft.heading.map(name(of:)) ?? "New Group…")
         Spacer(minLength: 8)
-        Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+        Glyph("chevron.down", pointSize: 11)
           .foregroundStyle(.secondary)
       }
       .padding(.horizontal, 12)
@@ -1010,7 +1004,7 @@ private struct IconPicker: View {
           LazyVStack(spacing: 0) {
             ForEach(Array(matches.enumerated()), id: \.element.symbol) { index, icon in
               HStack(spacing: 10) {
-                Image(systemName: icon.symbol).frame(width: 20)
+                Glyph(icon.symbol, pointSize: 14).frame(width: 20)
                 Text(icon.name)
                 Spacer()
               }
@@ -1062,7 +1056,11 @@ private struct TagFilter: View {
           Button(tag) { onSelect(tag) }
         }
       } label: {
-        Label(selection ?? "All Tags", systemImage: "tag")
+        Label {
+          Text(selection ?? "All Tags")
+        } icon: {
+          Glyph("tag")
+        }
       }
       .menuStyle(.borderlessButton)
       .fixedSize()
@@ -1208,8 +1206,7 @@ private struct Footer: View {
       if let command {
         // Names the command the panel is in, as Raycast's footer does.
         HStack(spacing: 8) {
-          Image(systemName: command.symbol)
-            .font(.system(size: 10, weight: .semibold))
+          Glyph(command.symbol, pointSize: 10)
             .foregroundStyle(.white)
             .frame(width: 18, height: 18)
             .background(command.color.gradient, in: RoundedRectangle(cornerRadius: 5))
@@ -1222,8 +1219,7 @@ private struct Footer: View {
         HoverButton {
           onCommand(.toggleMenu(root: true))
         } label: {
-          Image(systemName: "equal")
-            .font(.system(size: 15, weight: .medium))
+          Glyph("equal", pointSize: 15)
             .frame(width: 32, height: 32)
         }
         .glassEffect(.regular.interactive(), in: Circle())
@@ -1311,8 +1307,7 @@ private struct ConfirmationCard: View {
         .onTapGesture { onCommand(.cancel) }
       VStack(alignment: .leading, spacing: 22) {
         HStack(alignment: .top, spacing: 14) {
-          Image(systemName: icon.symbol)
-            .font(.system(size: 18, weight: .semibold))
+          Glyph(icon.symbol, pointSize: 18)
             .foregroundStyle(.white)
             .frame(width: 42, height: 42)
             .background(icon.color.gradient, in: RoundedRectangle(cornerRadius: 11))
@@ -1403,10 +1398,9 @@ private struct MenuCard: View {
             if let icon = menuIcon(item) {
               Image(nsImage: icon).resizable().frame(width: 18, height: 18)
             } else {
-              Image(systemName: item.symbol)
-                .font(.system(size: 13, weight: .light))
+              Glyph(item.symbol, pointSize: 13)
                 .frame(width: 18)
-                // Latin glyphs: text.cursor draws あ under a Japanese locale.
+                // For the SF Symbol fallback: text.cursor draws あ under a Japanese locale.
                 .environment(\.locale, Locale(identifier: "en"))
             }
             Text(title(of: item.action, else: item.title, pasteTarget))
@@ -1566,7 +1560,10 @@ struct Keycap: View {
     label.reduce(Text("")) { text, character in
       let piece =
         character == "↵"
-        ? Text(Image(systemName: "return")).font(.system(size: 9, weight: .semibold))
+        ? Text(
+          Tabler.image("return", size: 11).map { Image(nsImage: $0).renderingMode(.template) }
+            ?? Image(systemName: "return")
+        ).font(.system(size: 9, weight: .semibold))
         : Text(String(character))
       return Text("\(text)\(piece)")
     }
