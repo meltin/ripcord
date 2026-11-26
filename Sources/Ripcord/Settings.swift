@@ -596,17 +596,23 @@ private struct Sidebar: View {
   @Binding var page: SettingsPage
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 2) {
-        row(.general)
-        row(.permissions)
-        Spacer().frame(height: 14)
-        ForEach(SettingsPage.allCases.filter { $0 != .general && $0 != .permissions }) { row($0) }
+    ScrollViewReader { proxy in
+      ScrollView {
+        VStack(alignment: .leading, spacing: 2) {
+          row(.general)
+          row(.permissions)
+          Spacer().frame(height: 14)
+          ForEach(SettingsPage.allCases.filter { $0 != .general && $0 != .permissions }) {
+            row($0)
+          }
+        }
+        .padding(.horizontal, 10)
+        // Below the window's traffic lights.
+        .padding(.top, 52)
+        .padding(.bottom, 12)
       }
-      .padding(.horizontal, 10)
-      // Below the window's traffic lights.
-      .padding(.top, 52)
-      .padding(.bottom, 12)
+      // A short window cuts the list off; ↑ and ↓ keep the page they reach in view.
+      .onChange(of: page) { proxy.scrollTo(page) }
     }
     .scrollIndicators(.never)
     .background(SidebarMaterial())
@@ -645,6 +651,7 @@ private struct Sidebar: View {
     }
     .buttonStyle(.plain)
     .accessibilityAddTraits(item == page ? .isSelected : [])
+    .id(item)
   }
 }
 
