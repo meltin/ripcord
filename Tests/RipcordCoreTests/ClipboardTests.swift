@@ -102,6 +102,16 @@ private func temporaryDirectory() -> URL {
       #expect(
         ClipCapture.read(pasteboard) == .image(data, fileExtension: "png", width: 5, height: 4))
     }
+    // A capture whose file is gone still comes through as the PNG copied alongside it.
+    let missing = directory.appending(path: "Gone.png")
+    withPasteboard { pasteboard in
+      pasteboard.writeObjects([missing as NSURL])
+      pasteboard.addTypes([.png, .string], owner: nil)
+      pasteboard.setData(data, forType: .png)
+      pasteboard.setString("Gone.png", forType: .string)
+      #expect(
+        ClipCapture.read(pasteboard) == .image(data, fileExtension: "png", width: 5, height: 4))
+    }
     let notes = directory.appending(path: "notes.txt")
     try Data("hi".utf8).write(to: notes)
     withPasteboard { pasteboard in
@@ -187,6 +197,23 @@ private func temporaryDirectory() -> URL {
     #expect(history.items[0].copies == 2)
   }
 
+  @Test func keepsTheFirstCopyDateOfAnOldItemWhenItIsCopiedAgain() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let id = UUID()
+    let json = """
+      [{"id":"\(id.uuidString)","content":{"text":{"_0":"old"}},"digest":"x","date":0,\
+      "isPinned":false}]
+      """
+    try Data(json.utf8).write(to: directory.appending(path: "history.json"))
+    var history = ClipboardHistory(directory: directory)
+    let first = history.items[0].date
+    try history.touch(id, at: first.addingTimeInterval(86_400))
+    #expect(history.items[0].firstDate == first)
+    #expect(history.items[0].copies == 2)
+  }
+
   @Test func readsAHistoryWrittenBeforeCopyDetailsExisted() throws {
     let directory = temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -228,10 +255,12 @@ private func temporaryDirectory() -> URL {
     let directory = temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
     var history = ClipboardHistory(directory: directory)
-    try history.add(.text("\n  first line\nsecond line"))
-    try history.add(.text("pin me"))
+    // One fixed instant for adding and grouping, so a run across midnight still says "Today".
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    try history.add(.text("\n  first line\nsecond line"), at: now)
+    try history.add(.text("pin me"), at: now)
     try history.togglePin(history.items[0].id)
-    let sections = Search.clipboardSections(for: "", history: history)
+    let sections = Search.clipboardSections(for: "", history: history, now: now)
     #expect(sections.map(\.title) == ["Pinned", "Today"])
     #expect(sections[0].results.map(\.title) == ["pin me"])
     #expect(sections[1].results.map(\.title) == ["first line second line"])
@@ -241,9 +270,11 @@ private func temporaryDirectory() -> URL {
     let directory = temporaryDirectory()
     defer { try? FileManager.default.removeItem(at: directory) }
     var history = ClipboardHistory(directory: directory)
-    try history.add(.text("Hello World"))
-    try history.add(.image(try png(width: 2, height: 2), fileExtension: "png", width: 2, height: 2))
-    let found = Search.clipboardSections(for: "world", history: history)
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    try history.add(.text("Hello World"), at: now)
+    try history.add(
+      .image(try png(width: 2, height: 2), fileExtension: "png", width: 2, height: 2), at: now)
+    let found = Search.clipboardSections(for: "world", history: history, now: now)
     #expect(found.map(\.title) == ["Today"])
     #expect(found[0].results.map(\.title) == ["Hello World"])
     let image = try #require(Search.clipboardSections(for: "image", history: history).first)

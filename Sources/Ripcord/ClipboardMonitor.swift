@@ -38,6 +38,8 @@ final class ClipboardMonitor {
     guard isEnabled, pasteboard.changeCount != changeCount else { return }
     changeCount = pasteboard.changeCount
     guard let capture = ClipCapture.read(pasteboard) else { return }
+    // shortcut: the app in front at the poll, up to ~0.7 s after the copy, so a quick ⌘Tab or
+    // Ripcord's own Copy Answer credits another app; exact needs a per-app event tap.
     let source = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
     update { try $0.add(capture, from: source) }
   }
@@ -68,12 +70,18 @@ final class ClipboardMonitor {
       guard let url = history.imageURL(of: item), let data = try? Data(contentsOf: url) else {
         return false
       }
-      pasteboard.clearContents()
       switch url.pathExtension {
-      case "png": written = pasteboard.setData(data, forType: .png)
-      case "tiff": written = pasteboard.setData(data, forType: .tiff)
-      // A JPEG or HEIC from a copied file goes back as an image every app can paste.
-      default: written = NSImage(data: data).map { pasteboard.writeObjects([$0]) } ?? false
+      case "png":
+        pasteboard.clearContents()
+        written = pasteboard.setData(data, forType: .png)
+      case "tiff":
+        pasteboard.clearContents()
+        written = pasteboard.setData(data, forType: .tiff)
+      default:
+        // A JPEG or HEIC from a copied file goes back as an image every app can paste.
+        guard let image = NSImage(data: data) else { return false }
+        pasteboard.clearContents()
+        written = pasteboard.writeObjects([image])
       }
     }
     // Ripcord's own write isn't a new copy; count it here instead of on the next poll.

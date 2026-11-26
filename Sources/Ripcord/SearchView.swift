@@ -215,26 +215,32 @@ private struct ResultIcon: View {
 private struct ClipPreview: View {
   let item: ClipItem
   let imageURL: URL?
+  // Worked out once per item, not on every redraw: counting a 1 MB clip is slow.
+  private let details: [(label: String, value: String)]
+  private let sourceApp: URL?
 
-  private var details: [(label: String, value: String)] {
-    var rows = [(label: String, value: String)]()
-    switch item.content {
-    case .text(let text):
-      rows.append(("Type", "Text"))
-      rows.append(("Characters", "\(text.count)"))
-      rows.append(("Words", "\(text.split(whereSeparator: \.isWhitespace).count)"))
-    case .image(_, let width, let height):
-      rows.append(("Type", "Image"))
-      rows.append(("Dimensions", "\(width)×\(height)"))
+  init(item: ClipItem, imageURL: URL?) {
+    self.item = item
+    self.imageURL = imageURL
+    let content: [(label: String, value: String)] =
+      switch item.content {
+      case .text(let text):
+        [
+          ("Type", "Text"), ("Characters", "\(text.count)"),
+          ("Words", "\(text.split(whereSeparator: \.isWhitespace).count)"),
+        ]
+      case .image(_, let width, let height):
+        [("Type", "Image"), ("Dimensions", "\(width)×\(height)")]
+      }
+    details =
+      content + [
+        ("Times copied", "\(item.copies)"),
+        ("Last copied", item.date.formatted(date: .abbreviated, time: .shortened)),
+        ("First copied", item.firstDate.formatted(date: .abbreviated, time: .shortened)),
+      ]
+    sourceApp = item.source.flatMap {
+      NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)
     }
-    rows.append(("Times copied", "\(item.copies)"))
-    rows.append(("Last copied", item.date.formatted(date: .abbreviated, time: .shortened)))
-    rows.append(("First copied", item.firstDate.formatted(date: .abbreviated, time: .shortened)))
-    return rows
-  }
-
-  private var sourceApp: URL? {
-    item.source.flatMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
   }
 
   var body: some View {
@@ -322,10 +328,9 @@ private struct Thumbnail: View {
       }
     }
     .task(id: key) {
-      if let cached = Self.cache.object(forKey: key) {
-        image = cached
-        return
-      }
+      // Cleared first: the view is reused when the selection moves to another image.
+      image = Self.cache.object(forKey: key)
+      if image != nil { return }
       let made = await Task.detached(priority: .userInitiated) {
         [url, maxPixelSize] () -> CGImage? in
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }

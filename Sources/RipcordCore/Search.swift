@@ -232,7 +232,8 @@ public enum Search {
       case .text(let text):
         guard trimmed.isEmpty || text.localizedStandardContains(trimmed) else { return nil }
         // All of it on one line, as Raycast shows it, so a second line isn't hidden.
-        let line = text.prefix(1000).split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        let line = text.drop(while: \.isWhitespace).prefix(1000)
+          .split(whereSeparator: \.isWhitespace).joined(separator: " ")
         return (
           item,
           SearchResult(

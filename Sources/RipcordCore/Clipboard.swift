@@ -49,10 +49,18 @@ public enum ClipCapture: Equatable, Sendable {
       let urls = pasteboard.readObjects(
         forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
       guard let urls, urls.count == 1, let url = urls.first as? URL,
-        UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true,
-        let data = try? Data(contentsOf: url)
+        UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true
       else { return nil }
-      return image(data, fileExtension: url.pathExtension.lowercased())
+      // Size first, so a huge or not-yet-downloaded file is never read on the main thread.
+      if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+        size <= maxImageBytes, let data = try? Data(contentsOf: url),
+        let capture = image(data, fileExtension: url.pathExtension.lowercased())
+      {
+        return capture
+      }
+      // Too big or unreadable: use the image the copying app put alongside, as CleanShot X
+      // does, never the file name a Finder copy also carries as text.
+      return pasteboardImage(pasteboard)
     }
     // shortcut: a fixed cap keeps history.json small; becomes a setting with #5.
     if let text = pasteboard.string(forType: .string),
@@ -61,7 +69,11 @@ public enum ClipCapture: Equatable, Sendable {
     {
       return .text(text)
     }
-    // PNG first: a screenshot's TIFF can be ten times its size.
+    return pasteboardImage(pasteboard)
+  }
+
+  /// PNG first: a screenshot's TIFF can be ten times its size.
+  private static func pasteboardImage(_ pasteboard: NSPasteboard) -> ClipCapture? {
     for (type, fileExtension) in [(NSPasteboard.PasteboardType.png, "png"), (.tiff, "tiff")] {
       if let data = pasteboard.data(forType: type),
         let capture = image(data, fileExtension: fileExtension)
@@ -156,6 +168,8 @@ public struct ClipboardHistory: Sendable {
   /// Counts another copy of `id` and moves it to the top.
   public mutating func touch(_ id: UUID, at date: Date = .now) throws {
     guard var item = item(id) else { return }
+    // Kept before `date` moves on, for items saved before firstCopied existed.
+    item.firstCopied = item.firstDate
     item.date = date
     item.timesCopied = item.copies + 1
     items = [item] + items.filter { $0.id != id }
