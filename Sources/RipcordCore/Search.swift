@@ -406,7 +406,7 @@ public enum Search {
 
   private static func result(for action: SystemAction, alias: String?) -> SearchResult {
     SearchResult(
-      id: action.settingsKey, title: action.title, subtitle: "System", keyword: alias,
+      id: action.settingsKey, title: action.title, subtitle: "System Actions", keyword: alias,
       kind: .command, action: .system(action))
   }
 
