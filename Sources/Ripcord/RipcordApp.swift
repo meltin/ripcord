@@ -40,7 +40,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.showError("macOS didn't let Ripcord keep the Mac awake.")
       }
     }
-    launcher.onDecaffeinate = { [weak self] in self?.caffeinator.decaffeinate() }
+    launcher.onDecaffeinate = { [weak self] in
+      // Nothing to stop: a beep rather than a panel that just closes.
+      guard self?.caffeinator.isActive == true else { return NSSound.beep() }
+      self?.caffeinator.decaffeinate()
+    }
     launcher.onOpenSettings = { [weak self] in self?.openSettings() }
     launcher.onConfigure = { [weak self] in self?.settings.show(configuring: $0) }
     launcher.settings = settings.model
@@ -305,7 +309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     cup?.isTemplate = true
     button.image = cup
     button.imagePosition = .imageLeading
-    button.title = caffeinator.remaining.map { " " + Coffee.format($0) } ?? ""
+    button.title = caffeinator.remaining.map { " " + Coffee.format($0, seconds: false) } ?? ""
     statusItem.length = NSStatusItem.variableLength
   }
 

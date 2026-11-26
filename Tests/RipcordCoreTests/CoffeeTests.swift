@@ -15,17 +15,29 @@ import Testing
   }
 
   @Test func refusesWhatIsNotATime() {
-    for text in ["", "soon", "1h 30", "h", "0m", "-5", "1x"] {
+    for text in [
+      "", "soon", "1h 30", "h", "0m", "-5", "1x", "inf", "1e20", "0x10", "200h",
+      "99999999999999999999h",
+    ] {
       #expect(Coffee.duration(from: text) == nil, "\(text)")
     }
   }
 
-  @Test func showsTheTimeLeftAsRaycastDoes() {
+  @Test func showsTheTimeAsRaycastDoes() {
     #expect(Coffee.format(5400) == "1h 30m")
     #expect(Coffee.format(3600) == "1h")
-    #expect(Coffee.format(2700) == "45m")
-    #expect(Coffee.format(59.2) == "1m")
+    #expect(Coffee.format(90) == "1m 30s")
+    #expect(Coffee.format(3630) == "1h 30s")
     #expect(Coffee.format(30) == "30s")
+    // The menu bar's countdown drops the seconds from a minute up.
+    #expect(Coffee.format(5340.5, seconds: false) == "1h 29m")
+    #expect(Coffee.format(42, seconds: false) == "42s")
+    #expect(Coffee.format(.infinity) == "168h")
+  }
+
+  @Test func filesItsCommandsUnderCoffee() {
+    #expect(
+      Search.results(for: "decaffeinate", apps: [], quicklinks: []).first?.subtitle == "Coffee")
   }
 
   @Test func caffeinateWithATimeComesFirst() throws {

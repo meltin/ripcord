@@ -23,6 +23,14 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     }
   }
 
+  /// What its row says it belongs to.
+  public var group: String {
+    switch self {
+    case .caffeinate, .decaffeinate: "Coffee"
+    default: "Ripcord"
+    }
+  }
+
   /// The key its settings are stored under. Spelled out so renaming a case never strands them.
   public var settingsKey: String {
     switch self {
@@ -613,7 +621,7 @@ public enum Search {
 
   private static func result(for command: BuiltinCommand, alias: String?) -> SearchResult {
     SearchResult(
-      id: "command:\(command)", title: command.title, subtitle: "Ripcord", keyword: alias,
+      id: "command:\(command)", title: command.title, subtitle: command.group, keyword: alias,
       kind: .command, action: .run(command))
   }
 }

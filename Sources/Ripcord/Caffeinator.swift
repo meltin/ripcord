@@ -27,12 +27,15 @@ final class Caffeinator {
     }
     endsAt = seconds.map { Date.now.addingTimeInterval($0) }
     timer?.invalidate()
-    timer =
-      endsAt == nil
-      ? nil
-      : Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+    timer = nil
+    if endsAt != nil {
+      let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
         MainActor.assumeIsolated { self?.tick() }
       }
+      // .common, so it keeps counting, and ends on time, while a menu is open.
+      RunLoop.main.add(timer, forMode: .common)
+      self.timer = timer
+    }
     onChange()
     return true
   }
