@@ -985,8 +985,8 @@ private struct Footer: View {
   }
 }
 
-/// Raycast's alert over a dimmed panel: the command's icon, the question, a warning, and Cancel
-/// beside a red Delete.
+/// An alert over a dimmed panel: the command's icon beside the question, then Cancel and a red
+/// Delete of equal width, each showing its key.
 private struct ConfirmationCard: View {
   let confirmation: Confirmation
   let command: BuiltinCommand?
@@ -998,49 +998,51 @@ private struct ConfirmationCard: View {
       Color.black.opacity(0.2)
         .contentShape(Rectangle())
         .onTapGesture { onCommand(.cancel) }
-      VStack(alignment: .leading, spacing: 0) {
-        if let command {
-          Image(systemName: command.symbol)
-            .font(.system(size: 24, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 52, height: 52)
-            .background(command.color.gradient, in: RoundedRectangle(cornerRadius: 12))
-            .padding(.bottom, 14)
-        }
-        Text(confirmation.title).font(.system(size: 14, weight: .semibold))
-        Text(confirmation.message)
-          .font(.system(size: 12))
-          .fixedSize(horizontal: false, vertical: true)
-          .padding(.top, 6)
-        HStack(spacing: 8) {
-          Button {
-            onCommand(.cancel)
-          } label: {
-            Text("Cancel")
+      VStack(alignment: .leading, spacing: 18) {
+        HStack(alignment: .top, spacing: 12) {
+          if let command {
+            Image(systemName: command.symbol)
+              .font(.system(size: 15, weight: .semibold))
+              .foregroundStyle(.white)
+              .frame(width: 34, height: 34)
+              .background(command.color.gradient, in: RoundedRectangle(cornerRadius: 9))
+          }
+          VStack(alignment: .leading, spacing: 4) {
+            Text(confirmation.title).font(.system(size: 14, weight: .semibold))
+            Text(confirmation.message)
+              .font(.system(size: 12))
               .foregroundStyle(.secondary)
-              .frame(maxWidth: .infinity, minHeight: 32)
-              .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-          }
-          Button {
-            onCommand(.submit)
-          } label: {
-            Text(confirmation.confirmTitle)
-              .foregroundStyle(.red)
-              .frame(maxWidth: .infinity, minHeight: 32)
-              .background(Color.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
-              // Return confirms, as Raycast marks its default button.
-              .overlay(alignment: .top) { Keycap("↵").offset(y: -12) }
+              .fixedSize(horizontal: false, vertical: true)
           }
         }
-        .buttonStyle(.plain)
-        .font(.system(size: 13, weight: .medium))
-        .padding(.top, 20)
+        HStack(spacing: 8) {
+          button("Cancel", key: "esc", command: .cancel, tint: .primary, fill: 0.07)
+          button(confirmation.confirmTitle, key: "↵", command: .submit, tint: .red, fill: 0.14)
+        }
       }
-      .padding(16)
-      .frame(width: 260)
-      .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20))
-      .shadow(color: .black.opacity(0.2), radius: 20, y: 8)
+      .padding(18)
+      .frame(width: 300)
+      .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18))
+      .shadow(color: .black.opacity(0.18), radius: 18, y: 6)
     }
+  }
+
+  private func button(
+    _ title: String, key: String, command: SearchCommand, tint: Color, fill: Double
+  ) -> some View {
+    Button {
+      onCommand(command)
+    } label: {
+      HStack(spacing: 6) {
+        Text(title).foregroundStyle(tint)
+        Keycap(key)
+      }
+      .font(.system(size: 13, weight: .medium))
+      .frame(maxWidth: .infinity, minHeight: 32)
+      .background(tint.opacity(fill), in: RoundedRectangle(cornerRadius: 9))
+      .contentShape(RoundedRectangle(cornerRadius: 9))
+    }
+    .buttonStyle(.plain)
   }
 }
 
