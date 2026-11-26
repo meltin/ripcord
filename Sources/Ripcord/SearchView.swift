@@ -25,7 +25,9 @@ struct SearchView: View {
           Image(nsImage: logo).renderingMode(.template).foregroundStyle(.secondary)
         }
         if model.mode == .snippetForm {
-          // A form has no query; the field would take its keys.
+          // A form has no query, so the header names what it does instead.
+          Text(model.editing == nil ? "Create Snippet" : "Edit Snippet")
+            .font(.system(size: 15, weight: .semibold))
           Spacer()
         } else {
           SearchField(
@@ -368,7 +370,7 @@ private struct SnippetForm: View {
   private enum Field { case text, name, keyword, tags }
 
   var body: some View {
-    HStack(alignment: .top, spacing: 24) {
+    HStack(alignment: .top, spacing: 28) {
       VStack(alignment: .leading, spacing: 8) {
         label("Snippet")
         TextEditor(text: $model.draft.text)
@@ -376,7 +378,8 @@ private struct SnippetForm: View {
           .scrollContentBackground(.hidden)
           .scrollIndicators(.never)
           .padding(10)
-          .frame(height: 230)
+          // Down to the footer, level with the placeholders at the bottom of the right column.
+          .frame(maxHeight: .infinity)
           .field(isFocused: focus == .text)
           .focused($focus, equals: .text)
           // Tab moves on to Name, as in Raycast, instead of typing a tab into the snippet.
@@ -384,14 +387,6 @@ private struct SnippetForm: View {
             focus = .name
             return .handled
           }
-        let clipboard = Text(verbatim: "{clipboard}").foregroundStyle(.tint)
-        let date = Text(verbatim: "{date}").foregroundStyle(.tint)
-        let cursor = Text(verbatim: "{cursor}").foregroundStyle(.tint)
-        Text(
-          "Include \(clipboard), \(date) (or {time}, {datetime}, {day}, {uuid}) and \(cursor), where the caret lands"
-        )
-        .font(.system(size: 12))
-        .foregroundStyle(.secondary)
       }
       VStack(alignment: .leading, spacing: 8) {
         label("Name & Icon")
@@ -441,12 +436,16 @@ private struct SnippetForm: View {
         TextField("Tags, separated by commas", text: $model.tagsText)
           .focused($focus, equals: .tags)
           .inputField(isFocused: focus == .tags)
+        Spacer(minLength: 16)
+        PlaceholderList()
       }
+      .frame(width: 280)
     }
     .font(.system(size: 14))
-    // Centered with wide margins, as Raycast's form sits in the panel.
-    .padding(.horizontal, 56)
-    .padding(.top, 12)
+    .padding(.horizontal, 40)
+    .padding(.top, 4)
+    // Clear of the floating footer, with the same gap the sides have.
+    .padding(.bottom, LauncherController.footerHeight + 12)
     .frame(maxHeight: .infinity, alignment: .top)
     .onAppear { focus = .text }
     // Back to the name once the icon list closes, however it closed.
@@ -455,6 +454,39 @@ private struct SnippetForm: View {
 
   private func label(_ text: String) -> some View {
     Text(text).font(.system(size: 12)).foregroundStyle(.secondary)
+  }
+}
+
+/// What a snippet can hold besides text, each with what it becomes on hover.
+private struct PlaceholderList: View {
+  private let rows: [[(token: String, help: String)]] = [
+    [
+      ("{clipboard}", "What's copied"), ("{date}", "Today's date"),
+      ("{time}", "The time now"),
+    ],
+    [
+      ("{datetime}", "Date and time"), ("{day}", "The weekday"), ("{uuid}", "A new UUID"),
+      ("{cursor}", "Where the caret lands"),
+    ],
+  ]
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Placeholders").font(.system(size: 12)).foregroundStyle(.secondary)
+      ForEach(rows.indices, id: \.self) { row in
+        HStack(spacing: 6) {
+          ForEach(rows[row], id: \.token) { placeholder in
+            Text(verbatim: placeholder.token)
+              .font(.system(size: 11, design: .monospaced))
+              .foregroundStyle(.tint)
+              .padding(.horizontal, 7)
+              .padding(.vertical, 3)
+              .background(Color.accentColor.opacity(0.12), in: Capsule())
+              .help(placeholder.help)
+          }
+        }
+      }
+    }
   }
 }
 
