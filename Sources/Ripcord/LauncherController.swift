@@ -89,7 +89,7 @@ struct BookmarkDraft {
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
   case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, bookmarks
-  case bookmarkForm, emoji
+  case bookmarkForm, emoji, scriptOutput
 
   /// A form, with no query or rows: the footer names it, and ⌘↵ saves it.
   var isForm: Bool { self == .snippetForm || self == .bookmarkForm }
@@ -107,6 +107,7 @@ enum LauncherMode {
     case .bookmarks: .searchBookmarks
     case .bookmarkForm: .addBookmark
     case .emoji: .searchEmoji
+    case .scriptOutput: nil
     }
   }
 }
@@ -153,6 +154,8 @@ final class LauncherModel {
   /// Search Emoji & Symbols' categories, and the one picked; nil shows them all.
   var emojiGroups: [String] = []
   var emojiCategory: Int?
+  /// A fullOutput Script Command's title and output; nil output while it runs.
+  var scriptOutput: (title: String, output: String?, failed: Bool) = ("", nil, false)
   /// A compact Script Command's last line, shown over the footer for a moment.
   var toast: (text: String, failed: Bool)?
   /// A new bookmark's draft, kept while an edit has the form.
@@ -245,6 +248,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private var scripts: [ScriptCommand] = []
   /// Which compact run's toast is showing, so an older one doesn't clear a newer.
   private var scriptRun = 0
+  /// The fullOutput run the output view waits for, so an earlier one's result never shows there.
+  private var outputRun = 0
   /// The root search's Favorites, by item key.
   var favorites: [String] = [] {
     didSet {
@@ -357,7 +362,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     panel.typingHandler = { [weak self] in self?.typeIntoMenu($0) ?? false }
     panel.escapeHandler = { [weak self] in
       // Only the form: the search field turns Esc into .cancel itself.
-      guard let self, model.mode.isForm else { return false }
+      // The output view has no field either.
+      guard let self, model.mode.isForm || model.mode == .scriptOutput else { return false }
       // An open icon list closes first, as a menu does.
       if model.isPickingIcon {
         model.isPickingIcon = false
@@ -575,7 +581,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return Search.snippetSections(for: query, snippets: snippets, tag: model.snippetTag)
     }
     // No rows behind the form, so ⌘K and row shortcuts have nothing to act on.
-    if model.mode.isForm { return [] }
+    if model.mode.isForm || model.mode == .scriptOutput { return [] }
     let running = NSWorkspace.shared.runningApplications
       .filter { $0.activationPolicy == .regular }
       .compactMap { app in
@@ -757,23 +763,41 @@ final class LauncherController: NSObject, NSWindowDelegate {
   }
 
   /// Runs a Script Command as its mode says: silent closes the panel and shows the last line
-  /// over the screen; compact keeps the panel and shows it over the footer. A failure shows the
-  /// exit code and the last line of what the script printed.
+  /// over the screen; compact keeps the panel and shows it over the footer; fullOutput opens a
+  /// view that shows all of it once the script ends. A failure shows the exit code and the last
+  /// line of what the script printed.
   private func runScript(_ path: String) {
     guard let script = scripts.first(where: { $0.url.path == path }) else {
       return onError("That script is gone from its folder.")
     }
     // Hidden already when its hotkey ran it: what was left open there stays.
     if script.mode == .silent, panel.isVisible { hide() }
+    if script.mode == .fullOutput {
+      outputRun += 1
+      model.scriptOutput = (script.title, nil, false)
+      // Already showing another's output: open() would take it as a toggle and close.
+      if !(panel.isVisible && model.mode == .scriptOutput) { open(.scriptOutput) }
+    }
+    let run = outputRun
     ScriptRunner.run(script) { [weak self] result in
       DispatchQueue.main.async {
-        MainActor.assumeIsolated { self?.finish(script, result) }
+        MainActor.assumeIsolated { self?.finish(script, result, run: run) }
       }
     }
   }
 
-  private func finish(_ script: ScriptCommand, _ result: ScriptRunner.Result) {
+  private func finish(_ script: ScriptCommand, _ result: ScriptRunner.Result, run: Int) {
     let failed = result.status != 0
+    if script.mode == .fullOutput {
+      // Shown only while its view is still the one open for this run.
+      guard model.mode == .scriptOutput, run == outputRun else { return }
+      // stdout, then stderr (not interleaved): many tools log to stderr even when they succeed.
+      let parts = [result.output, result.errors, failed ? "Exit code \(result.status)" : ""]
+        .map { $0.trimmingCharacters(in: .newlines) }.filter { !$0.isEmpty }
+      let shown = ScriptCommand.plain(parts.joined(separator: "\n"))
+      model.scriptOutput = (script.title, shown.isEmpty ? "No output" : shown, failed)
+      return
+    }
     let line =
       failed
       ? "“\(script.title)” failed (exit \(result.status)): "
