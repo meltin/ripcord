@@ -124,6 +124,15 @@ final class LauncherModel {
   var tagsText = ""
   var bookmarkDraft = BookmarkDraft()
 
+  /// The command the footer names: an edit's form is the list's, where it came from.
+  var footerCommand: BuiltinCommand? {
+    switch mode {
+    case .bookmarkForm where bookmarkDraft.original != nil: .searchBookmarks
+    case .snippetForm where editing != nil: .searchSnippets
+    default: mode.command
+    }
+  }
+
   /// Every row in display order; `selection` indexes into this.
   var results: [SearchResult] { sections.flatMap(\.results) }
   var selected: SearchResult? { results.indices.contains(selection) ? results[selection] : nil }
@@ -681,10 +690,18 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     if action == .run(.addBookmark) {
       guard loadBookmarks() else { return }
-      let headings = bookmarks.headings
-      model.bookmarkDraft = BookmarkDraft(
-        heading: headings.first, newGroup: headings.isEmpty ? "Bookmarks" : "",
-        headings: headings)
+      let draft = model.bookmarkDraft
+      // A new bookmark's draft survives the panel closing, as Create Snippet's does, as when
+      // clicking the browser to copy its URL; it's cleared once saved.
+      if draft.original == nil, !(draft.title + draft.url + draft.description).isEmpty {
+        model.bookmarkDraft = rebased(draft)
+      } else {
+        // Raycast's starts on No group: the top of the file, above the first heading.
+        let choices = groupChoices()
+        model.bookmarkDraft = BookmarkDraft(heading: choices.first, headings: choices)
+      }
+      // From an edit, a new form rather than closing the panel, as its hotkey closes its own.
+      if model.mode == .bookmarkForm, draft.original != nil { return update("") }
       return open(.bookmarkForm)
     }
     if case .editBookmark(let line, let text) = action {
@@ -990,8 +1007,18 @@ final class LauncherController: NSObject, NSWindowDelegate {
       bookmarks = changed.file
       return "bookmark:\(changed.line):\(changed.text)"
     } catch BookmarkFile.EditError.changed {
-      refreshRows(selecting: model.selected?.id)
-      onError(Self.changedMessage)
+      guard model.mode == .bookmarkForm else {
+        refreshRows(selecting: model.selected?.id)
+        onError(Self.changedMessage)
+        return nil
+      }
+      // What's typed stays; the form is set against the file as it is now, so ⌘↵ can save.
+      let wasEditing = model.bookmarkDraft.original != nil
+      model.bookmarkDraft = rebased(model.bookmarkDraft)
+      onError(
+        wasEditing && model.bookmarkDraft.original == nil
+          ? "bookmarks.md changed, and the bookmark being edited isn't in it any more. Saving now adds it as a new one."
+          : "bookmarks.md changed since the form opened. Check the group, then save again.")
     } catch BookmarkFile.EditError.invalid(let message) {
       onError(message)
     } catch {
@@ -1013,6 +1040,26 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if deleted != nil { refreshRows(selecting: id) }
   }
 
+  /// Where a bookmark can go: No group (above the first heading), then the file's headings.
+  private func groupChoices() -> [BookmarkFile.Heading] {
+    [BookmarkFile.Heading(title: "", line: -1)] + bookmarks.headings
+  }
+
+  /// `draft` against bookmarks.md as it is now: its groups read again, its group found again by
+  /// name (a new one by that name if it's gone), and an edited bookmark found again by its line.
+  private func rebased(_ draft: BookmarkDraft) -> BookmarkDraft {
+    var rebased = draft
+    rebased.headings = groupChoices()
+    rebased.original = draft.original.flatMap { original in
+      bookmarks.bookmarks.first { $0.text == original.text }.map { ($0.line, $0.text) }
+    }
+    if let heading = draft.heading {
+      rebased.heading = rebased.headings.first { $0.title == heading.title }
+      if rebased.heading == nil { rebased.newGroup = heading.title }
+    }
+    return rebased
+  }
+
   /// Opens the form on the bookmark on `line`, if the file still has it there.
   private func editBookmark(line: Int, text: String) {
     guard loadBookmarks() else { return }
@@ -1021,13 +1068,17 @@ final class LauncherController: NSObject, NSWindowDelegate {
       refreshRows(selecting: model.selected?.id)
       return onError(Self.changedMessage)
     }
-    let heading = BookmarkFile.Heading(title: bookmark.group, line: bookmark.groupLine)
-    // Above the first heading is a place of its own, offered only to what's already there.
-    let headings = (bookmark.groupLine == -1 ? [heading] : []) + bookmarks.headings
+    // Saving would drop what the form can't show, such as a link title or a note after it.
+    guard bookmark.isEditable else {
+      return onError(
+        "This bookmark's line has text the form doesn't show, which saving would drop; edit it in bookmarks.md instead."
+      )
+    }
+    // The URL as written, not percent-encoded, so an edit leaves it alone.
     model.bookmarkDraft = BookmarkDraft(
-      title: bookmark.title, url: bookmark.url.absoluteString,
-      description: bookmark.description ?? "", heading: heading, headings: headings,
-      original: (line, text))
+      title: bookmark.title, url: bookmark.rawURL, description: bookmark.description ?? "",
+      heading: BookmarkFile.Heading(title: bookmark.group, line: bookmark.groupLine),
+      headings: groupChoices(), original: (line, text))
     model.mode = .bookmarkForm
     update("")
   }
@@ -1046,8 +1097,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
       })
     else { return }
     model.bookmarkDraft = BookmarkDraft()
-    // The list, on the bookmark saved, as Raycast shows it after Add Bookmark.
-    closesOnCancel = false
+    // The list, on the bookmark saved, as Raycast shows it after Add Bookmark. An edit came from
+    // the list, so Esc does there what it did before.
+    if draft.original == nil { closesOnCancel = false }
     model.mode = .bookmarks
     update("")
     refreshRows(selecting: id)

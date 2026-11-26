@@ -25,13 +25,7 @@ struct SearchView: View {
           Image(nsImage: logo).renderingMode(.template).foregroundStyle(.secondary)
         }
         if model.mode.isForm {
-          // A form has no query, so the header names what it does instead.
-          Text(
-            model.mode == .bookmarkForm
-              ? (model.bookmarkDraft.original == nil ? "Add Bookmark" : "Edit Bookmark")
-              : (model.editing == nil ? "Create Snippet" : "Edit Snippet")
-          )
-          .font(.system(size: 15, weight: .semibold))
+          // Only the way back, as Raycast's forms have: the footer names the command.
           Spacer()
         } else {
           SearchField(
@@ -90,8 +84,8 @@ struct SearchView: View {
     // Floats over the list like Raycast's footer, so rows scroll on underneath it.
     .overlay(alignment: .bottom) {
       Footer(
-        selected: model.selected, mode: model.mode, pasteTarget: model.pasteTarget,
-        onCommand: onCommand)
+        selected: model.selected, mode: model.mode, command: model.footerCommand,
+        pasteTarget: model.pasteTarget, onCommand: onCommand)
     }
     .overlay {
       if let menu = model.menu {
@@ -676,72 +670,100 @@ private struct SnippetForm: View {
   }
 }
 
-/// Add Bookmark's and Edit Bookmark's form: title, URL, description, and the group, picked
-/// from the file's headings or named new. ⌘↵ saves.
+/// Add Bookmark's and Edit Bookmark's form, laid out as Raycast's: labels on the right of their
+/// column, every field the same width, and the group below a line. ⌘↵ saves.
 private struct BookmarkForm: View {
   @Bindable var model: LauncherModel
   @FocusState private var focus: Field?
 
   enum Field: CaseIterable { case title, url, description, newGroup }
 
+  /// The fields' width, Raycast's for a form in a panel this size.
+  private let fieldWidth: CGFloat = 380
+
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      label("Title")
-      TextField("Title", text: $model.bookmarkDraft.title)
-        .focused($focus, equals: .title)
-        .tabs(from: .title, focus: $focus, among: fields)
-        .inputField(isFocused: focus == .title)
-      label("URL").padding(.top, 10)
-      TextField("https://example.com", text: $model.bookmarkDraft.url)
-        // No spelling fixes or predictions in a URL.
-        .autocorrectionDisabled()
-        .focused($focus, equals: .url)
-        .tabs(from: .url, focus: $focus, among: fields)
-        .inputField(isFocused: focus == .url)
-      label("Description").padding(.top, 10)
-      TextField("Optional", text: $model.bookmarkDraft.description)
-        .focused($focus, equals: .description)
-        .tabs(from: .description, focus: $focus, among: fields)
-        .inputField(isFocused: focus == .description)
-      label("Group").padding(.top, 10)
-      HStack(spacing: 10) {
-        Menu {
-          ForEach(model.bookmarkDraft.headings, id: \.line) { heading in
-            Button(heading.title.isEmpty ? "Top of the File" : heading.title) {
-              model.bookmarkDraft.heading = heading
-            }
-          }
-          if !model.bookmarkDraft.headings.isEmpty { Divider() }
-          Button("New Group…") {
-            model.bookmarkDraft.heading = nil
-            focus = .newGroup
-          }
-        } label: {
-          Label(groupLabel, systemImage: "number")
-        }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
-        .padding(.horizontal, 12)
-        .frame(height: 36)
-        .field(isFocused: false)
-        if model.bookmarkDraft.heading == nil {
-          TextField("New group name", text: $model.bookmarkDraft.newGroup)
+    Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 18) {
+      GridRow {
+        label("Title")
+        TextField("", text: $model.bookmarkDraft.title)
+          .focused($focus, equals: .title)
+          .tabs(from: .title, focus: $focus, among: fields)
+          .inputField(isFocused: focus == .title)
+          .frame(width: fieldWidth)
+      }
+      GridRow {
+        label("URL")
+        TextField("", text: $model.bookmarkDraft.url)
+          // No spelling fixes or predictions in a URL.
+          .autocorrectionDisabled()
+          .focused($focus, equals: .url)
+          .tabs(from: .url, focus: $focus, among: fields)
+          .inputField(isFocused: focus == .url)
+          .frame(width: fieldWidth)
+      }
+      GridRow {
+        label("Description")
+        TextField("Optional description", text: $model.bookmarkDraft.description)
+          .focused($focus, equals: .description)
+          .tabs(from: .description, focus: $focus, among: fields)
+          .inputField(isFocused: focus == .description)
+          .frame(width: fieldWidth)
+      }
+      Divider().opacity(0.5).gridCellColumns(2).padding(.vertical, 4)
+        .padding(.horizontal, 14)
+      GridRow {
+        label("Group")
+        groupMenu
+      }
+      if model.bookmarkDraft.heading == nil {
+        GridRow {
+          label("New Group")
+          TextField("Group name", text: $model.bookmarkDraft.newGroup)
             .focused($focus, equals: .newGroup)
             .tabs(from: .newGroup, focus: $focus, among: fields)
             .inputField(isFocused: focus == .newGroup)
+            .frame(width: fieldWidth)
         }
       }
     }
     .font(.system(size: 14))
-    .frame(maxWidth: 560, alignment: .leading)
-    .padding(.horizontal, 40)
-    .padding(.top, 4)
-    // Clear of the floating footer, with the same gap the sides have.
+    .padding(.top, 28)
+    // Clear of the floating footer.
     .padding(.bottom, LauncherController.footerHeight + 12)
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     // On the next pass, as Create Snippet's form does: the search field it replaces is still
     // first responder as it appears.
     .onAppear { DispatchQueue.main.async { focus = .title } }
+  }
+
+  /// The group, as a field of the same width with the choice on the left and a chevron on the
+  /// right, as Raycast's dropdown is.
+  private var groupMenu: some View {
+    Menu {
+      ForEach(model.bookmarkDraft.headings, id: \.line) { heading in
+        Button(name(of: heading)) { model.bookmarkDraft.heading = heading }
+      }
+      Divider()
+      Button("New Group…") {
+        model.bookmarkDraft.heading = nil
+        // On the next pass: the name field only appears with this change.
+        DispatchQueue.main.async { focus = .newGroup }
+      }
+    } label: {
+      HStack {
+        Text(model.bookmarkDraft.heading.map(name(of:)) ?? "New Group…")
+        Spacer(minLength: 8)
+        Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+          .foregroundStyle(.secondary)
+      }
+      .padding(.horizontal, 12)
+      .frame(width: fieldWidth, height: 36)
+      .contentShape(Rectangle())
+    }
+    .menuStyle(.button)
+    .buttonStyle(.plain)
+    .menuIndicator(.hidden)
+    .field(isFocused: false)
   }
 
   /// The fields Tab steps through: the new group's name only while it shows.
@@ -749,13 +771,14 @@ private struct BookmarkForm: View {
     model.bookmarkDraft.heading == nil ? Field.allCases : [.title, .url, .description]
   }
 
-  private var groupLabel: String {
-    guard let heading = model.bookmarkDraft.heading else { return "New Group" }
-    return heading.title.isEmpty ? "Top of the File" : heading.title
+  /// Above the first heading is Raycast's "No group".
+  private func name(of heading: BookmarkFile.Heading) -> String {
+    heading.line == -1 ? "No group" : heading.title
   }
 
   private func label(_ text: String) -> some View {
     Text(text).font(.system(size: 12)).foregroundStyle(.secondary)
+      .gridColumnAlignment(.trailing)
   }
 }
 
@@ -1175,12 +1198,14 @@ private struct Thumbnail: View {
 private struct Footer: View {
   let selected: SearchResult?
   let mode: LauncherMode
+  /// The command the panel is in, named on the left.
+  let command: BuiltinCommand?
   let pasteTarget: String?
   let onCommand: (SearchCommand) -> Void
 
   var body: some View {
     HStack {
-      if let command = mode.command {
+      if let command {
         // Names the command the panel is in, as Raycast's footer does.
         HStack(spacing: 8) {
           Image(systemName: command.symbol)
