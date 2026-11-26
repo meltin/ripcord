@@ -16,6 +16,8 @@ final class SettingsModel {
   var onRecordingChange: (Bool) -> Void = { _ in }
   /// A command's settings key whose page the window should turn to, from Configure Command.
   var requestedKey: String?
+  /// An app's name to filter the Applications page by, from Open Command Settings on its row.
+  var requestedAppFilter: String?
   /// Hotkeys macOS refused at the last registration, shown on their rows.
   var failedHotkeys: Set<HotkeyTarget> = []
   /// Scanned when the Applications page first appears, so the window costs nothing until then.
@@ -522,9 +524,15 @@ struct SettingsView: View {
     .onChange(of: model.config) { model.saveIfChanged() }
     .onChange(of: model.requestedKey, initial: true) {
       guard let key = model.requestedKey else { return }
-      // A key no page lists as a command is an app's.
-      page =
-        SettingsPage.allCases.first { $0.commandKeys?.contains(key) == true } ?? .applications
+      if let commandPage = SettingsPage.allCases.first(where: {
+        $0.commandKeys?.contains(key) == true
+      }) {
+        page = commandPage
+      } else {
+        // A key no page lists as a command is an app's: its page, filtered down to it.
+        model.requestedAppFilter = model.name(of: .item(key))
+        page = .applications
+      }
       model.requestedKey = nil
     }
     // A recording left running on a page no longer shown would swallow every key typed.
@@ -927,6 +935,11 @@ private struct ApplicationsPage: View {
     .padding(.top, 44)
     .padding(.bottom, 20)
     .onAppear { if model.apps.isEmpty { model.loadApps() } }
+    .onChange(of: model.requestedAppFilter, initial: true) {
+      guard let name = model.requestedAppFilter else { return }
+      filter = name
+      model.requestedAppFilter = nil
+    }
   }
 }
 
