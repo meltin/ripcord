@@ -791,7 +791,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if script.mode == .fullOutput {
       // Shown only while its view is still the one open for this run.
       guard model.mode == .scriptOutput, run == outputRun else { return }
-      // Both streams, as a terminal shows them: many tools log to stderr even when they succeed.
+      // stdout, then stderr (not interleaved): many tools log to stderr even when they succeed.
       let parts = [result.output, result.errors, failed ? "Exit code \(result.status)" : ""]
         .map { $0.trimmingCharacters(in: .newlines) }.filter { !$0.isEmpty }
       let shown = ScriptCommand.plain(parts.joined(separator: "\n"))
