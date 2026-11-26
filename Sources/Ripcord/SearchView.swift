@@ -367,7 +367,7 @@ private struct SnippetForm: View {
   @Bindable var model: LauncherModel
   @FocusState private var focus: Field?
 
-  private enum Field { case text, name, keyword, tags }
+  enum Field: CaseIterable { case text, name, keyword, tags }
 
   var body: some View {
     HStack(alignment: .top, spacing: 28) {
@@ -382,17 +382,14 @@ private struct SnippetForm: View {
           .frame(maxHeight: .infinity)
           .field(isFocused: focus == .text)
           .focused($focus, equals: .text)
-          // Tab moves on to Name, as in Raycast, instead of typing a tab into the snippet.
-          .onKeyPress(.tab) {
-            focus = .name
-            return .handled
-          }
+          .tabs(from: .text, focus: $focus)
       }
       VStack(alignment: .leading, spacing: 8) {
         label("Name & Icon")
         HStack(spacing: 0) {
           TextField("Snippet name", text: $model.draft.name)
             .focused($focus, equals: .name)
+            .tabs(from: .name, focus: $focus)
             .textFieldStyle(.plain)
             .padding(.horizontal, 12)
           Divider().frame(height: 20)
@@ -431,10 +428,12 @@ private struct SnippetForm: View {
           }
         )
         .focused($focus, equals: .keyword)
+        .tabs(from: .keyword, focus: $focus)
         .inputField(isFocused: focus == .keyword)
         label("Tags").padding(.top, 14)
         TextField("Tags, separated by commas", text: $model.tagsText)
           .focused($focus, equals: .tags)
+          .tabs(from: .tags, focus: $focus)
           .inputField(isFocused: focus == .tags)
         Spacer(minLength: 16)
         PlaceholderList()
@@ -491,6 +490,24 @@ private struct PlaceholderList: View {
 }
 
 extension View {
+  /// Tab and ⇧Tab move through the form's fields in order, wrapping around: a panel that never
+  /// activates its app gets no key view loop from AppKit, and the text box would type a tab.
+  fileprivate func tabs(
+    from field: SnippetForm.Field, focus: FocusState<SnippetForm.Field?>.Binding
+  ) -> some View {
+    onKeyPress(.tab, phases: .down) { press in
+      // A Japanese input method uses Tab to pick a prediction while it's composing.
+      if (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true {
+        return .ignored
+      }
+      let fields = SnippetForm.Field.allCases
+      let index = fields.firstIndex(of: field) ?? 0
+      let step = press.modifiers.contains(.shift) ? fields.count - 1 : 1
+      focus.wrappedValue = fields[(index + step) % fields.count]
+      return .handled
+    }
+  }
+
   /// A form field's outline, as Raycast draws them: no fill, darker while it has focus.
   fileprivate func field(isFocused: Bool) -> some View {
     overlay(
