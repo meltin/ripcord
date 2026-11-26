@@ -3,11 +3,15 @@ import Carbon
 import IOKit.hidsystem
 import RipcordCore
 
-/// Runs System Actions. Each returns nil when done, or a message to show when it couldn't be.
+/// Runs System Actions. Each returns nil when done, or a message to show when it couldn't be;
+/// ones that wait on another app or a disk run off the main thread and `report` a problem later.
 @MainActor
 enum SystemActions {
   /// `frontmost` is the app the user was in when they asked.
-  static func run(_ action: SystemAction, frontmost: NSRunningApplication?) -> String? {
+  static func run(
+    _ action: SystemAction, frontmost: NSRunningApplication?,
+    report: @escaping @MainActor (String) -> Void
+  ) -> String? {
     switch action {
     case .lockScreen:
       return lockScreen()
@@ -54,21 +58,20 @@ enum SystemActions {
       let trash = FileManager.default.urls(for: .trashDirectory, in: .userDomainMask).first
       return trash.map { NSWorkspace.shared.open($0) } == true ? nil : "Couldn't open the Trash."
     case .emptyTrash:
-      return runAppleScript(#"tell application "Finder" to empty trash"#, controlling: "Finder")
+      return runAppleScript(
+        #"tell application "Finder" to empty trash"#, controlling: "Finder", report: report)
     case .ejectAllDisks:
-      return ejectAllDisks()
+      return ejectAllDisks(report: report)
     case .showDesktop:
       return showDesktop()
     case .toggleAppearance:
       return runAppleScript(
         #"tell application "System Events" to tell appearance preferences to set dark mode to not dark mode"#,
-        controlling: "System Events")
+        controlling: "System Events", report: report)
     case .toggleHiddenFiles:
       return toggleHiddenFiles()
     }
   }
-
-  private static var hasAskedForAccessibility = false
 
   private static let noFrontmostApp = "There's no app in front to act on."
 
@@ -99,7 +102,9 @@ enum SystemActions {
     guard app.terminate() else { return "\(app.localizedName ?? "The app") didn't quit." }
     Task { @MainActor in
       // Waits for it to finish quitting, which may include the user answering a save prompt.
-      for _ in 0..<600 where !app.isTerminated {
+      // Ten seconds, not longer: an app whose save prompt was cancelled stays open, and one
+      // quit by hand much later mustn't come back unasked.
+      for _ in 0..<100 where !app.isTerminated {
         try? await Task.sleep(for: .milliseconds(100))
       }
       guard app.isTerminated else { return }
@@ -123,10 +128,10 @@ enum SystemActions {
 
   /// The Dock's notification behind the Show Desktop gesture; there's no public API for it.
   private static func showDesktop() -> String? {
-    typealias Send = @convention(c) (CFString, Int32) -> Int32
+    typealias Send = @convention(c) (CFString, UnsafeMutableRawPointer?) -> Void
     guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CoreDockSendNotification")
     else { return "Couldn't show the desktop on this version of macOS." }
-    _ = unsafeBitCast(symbol, to: Send.self)("com.apple.showdesktop.awake" as CFString, 0)
+    unsafeBitCast(symbol, to: Send.self)("com.apple.showdesktop.awake" as CFString, nil)
     return nil
   }
 
@@ -162,10 +167,13 @@ enum SystemActions {
   /// A keyboard's media key, down then up; posting it needs the Accessibility permission, as
   /// pasting does.
   private static func pressMediaKey(_ key: Int32) -> String? {
-    // macOS's request comes up once per launch; after that, the message says where to go.
-    let options = ["AXTrustedCheckOptionPrompt": !hasAskedForAccessibility] as CFDictionary
-    hasAskedForAccessibility = true
-    guard AXIsProcessTrustedWithOptions(options) else {
+    let permission = AccessibilityPermission.check()
+    guard permission.trusted else {
+      // macOS's own request is up; a message on top of it would only cover it.
+      if permission.asked {
+        NSSound.beep()
+        return nil
+      }
       return
         "Allow Ripcord under System Settings › Privacy & Security › Accessibility, then try again."
     }
@@ -181,7 +189,9 @@ enum SystemActions {
     return nil
   }
 
-  private static func ejectAllDisks() -> String? {
+  /// Off the main thread, as ejecting waits on the disk. A volume already gone counts as
+  /// ejected: ejecting one volume takes the others on the same disk with it.
+  private static func ejectAllDisks(report: @escaping @MainActor (String) -> Void) -> String? {
     let keys: [URLResourceKey] = [.volumeIsEjectableKey, .volumeIsRemovableKey]
     let volumes =
       FileManager.default.mountedVolumeURLs(
@@ -190,10 +200,17 @@ enum SystemActions {
       let values = try? url.resourceValues(forKeys: Set(keys))
       return values?.volumeIsEjectable == true || values?.volumeIsRemovable == true
     }
-    let failed = ejectable.filter { (try? NSWorkspace.shared.unmountAndEjectDevice(at: $0)) == nil }
-    guard !failed.isEmpty else { return nil }
-    let names = failed.map { FileManager.default.displayName(atPath: $0.path) }
-    return "Couldn't eject \(names.joined(separator: ", ")). Something may be using it."
+    Task.detached {
+      let failed = ejectable.filter { url in
+        guard (try? NSWorkspace.shared.unmountAndEjectDevice(at: url)) == nil else { return false }
+        let mounted = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: nil)
+        return mounted?.contains(url) == true
+      }
+      guard !failed.isEmpty else { return }
+      let names = failed.map { FileManager.default.displayName(atPath: $0.path) }
+      await report("Couldn't eject \(names.joined(separator: ", ")). Something may be using it.")
+    }
+    return nil
   }
 
   /// Flips Finder's AppleShowAllFiles and reopens Finder, which reads it only at launch.
@@ -201,23 +218,50 @@ enum SystemActions {
     let key = "AppleShowAllFiles" as CFString
     let domain = "com.apple.finder" as CFString
     let showing = CFPreferencesGetAppBooleanValue(key, domain, nil)
-    CFPreferencesSetAppValue(key, (!showing) as CFBoolean, domain)
-    CFPreferencesAppSynchronize(domain)
+    func set(_ value: Bool) {
+      CFPreferencesSetAppValue(key, value as CFBoolean, domain)
+      CFPreferencesAppSynchronize(domain)
+    }
+    set(!showing)
     guard
       let finder = NSRunningApplication.runningApplications(
         withBundleIdentifier: "com.apple.finder"
       ).first
     else { return nil }
-    return relaunch(finder)
+    // Finder only reads it at launch; if it won't quit, the setting goes back to what it shows.
+    let problem = relaunch(finder)
+    if problem != nil { set(showing) }
+    return problem
   }
 
-  private static func runAppleScript(_ source: String, controlling app: String) -> String? {
-    var error: NSDictionary?
-    NSAppleScript(source: source)?.executeAndReturnError(&error)
-    guard let error else { return nil }
-    let code = error[NSAppleScript.errorNumber] as? Int ?? 0
-    return automationMessage(for: code, app: app)
-      ?? (error[NSAppleScript.errorMessage] as? String ?? "Couldn't ask \(app).")
+  /// Through osascript, off the main thread: the script waits for the app to answer, which
+  /// for a full Trash can take minutes. macOS still credits Ripcord, which launched it, when it
+  /// asks for the Automation permission.
+  private static func runAppleScript(
+    _ source: String, controlling app: String, report: @escaping @MainActor (String) -> Void
+  ) -> String? {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+    process.arguments = ["-e", source]
+    let errors = Pipe()
+    process.standardError = errors
+    let output = errors.fileHandleForReading
+    process.terminationHandler = { process in
+      guard process.terminationStatus != 0 else { return }
+      let text = String(decoding: output.readDataToEndOfFile(), as: UTF8.self)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      Task { @MainActor in
+        report(
+          automationMessage(for: text.contains("-1743") ? -1743 : 0, app: app)
+            ?? "Couldn't ask \(app): \(text)")
+      }
+    }
+    do {
+      try process.run()
+      return nil
+    } catch {
+      return "Couldn't run osascript: \(error.localizedDescription)"
+    }
   }
 
   /// errAEEventNotPermitted: the user said no to, or hasn't yet been asked about, Automation.

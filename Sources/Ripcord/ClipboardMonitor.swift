@@ -143,17 +143,11 @@ final class ClipboardMonitor {
     changeCount = pasteboard.changeCount
   }
 
-  /// Asked for once per launch, so a dismissed request doesn't come back on every Return.
-  private var hasAskedForAccessibility = false
-
   /// Presses ⌘V in the frontmost app. Without the Accessibility permission, asks for it and
   /// returns false, leaving the item copied.
   /// `left` presses ← that many times after, for a snippet's `{cursor}`.
   func pasteIntoFrontmostApp(thenLeft left: Int = 0) -> Bool {
-    // The key's name, spelled out: kAXTrustedCheckOptionPrompt is a global var Swift 6 rejects.
-    let options = ["AXTrustedCheckOptionPrompt": !hasAskedForAccessibility] as CFDictionary
-    hasAskedForAccessibility = true
-    guard AXIsProcessTrustedWithOptions(options) else { return false }
+    guard AccessibilityPermission.check().trusted else { return false }
     let source = CGEventSource(stateID: .combinedSessionState)
     // shortcut: ⌘ plus the key at V's position on a US layout; a Dvorak user needs a layout lookup.
     for isDown in [true, false] {
@@ -178,5 +172,22 @@ final class ClipboardMonitor {
       }
     }
     return true
+  }
+}
+
+/// macOS's Accessibility request, made once per launch by whichever feature needs it first, so a
+/// dismissed request doesn't come back on every paste or media key.
+@MainActor
+enum AccessibilityPermission {
+  private static var hasAsked = false
+
+  /// Whether Ripcord may post keys. `asked` is true when this call put up macOS's request.
+  static func check() -> (trusted: Bool, asked: Bool) {
+    let asking = !hasAsked
+    hasAsked = true
+    // The key's name, spelled out: kAXTrustedCheckOptionPrompt is a global var Swift 6 rejects.
+    let trusted = AXIsProcessTrustedWithOptions(
+      ["AXTrustedCheckOptionPrompt": asking] as CFDictionary)
+    return (trusted, asking && !trusted)
   }
 }

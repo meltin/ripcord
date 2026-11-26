@@ -217,6 +217,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Search, whose default is 90 seconds.
   private var leftOpen: (mode: LauncherMode, at: Date)?
   private static let popToRootAfter: TimeInterval = 90
+  /// The panel was opened by a hotkey just to ask a System Action's question.
+  private var openedForQuestion = false
 
   func toggle() {
     panel.isVisible ? hide(keepingMode: true) : show(resuming: true)
@@ -311,6 +313,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// `keepingMode` leaves a command's list or form as it is, to come back to (`leftOpen`).
   private func hide(keepingMode: Bool = false) {
     panel.orderOut(nil)
+    openedForQuestion = false
     model.menu = nil
     model.confirmation = nil
     restoreInputSource()
@@ -396,6 +399,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
         perform(confirmation.action)
       case .cancel, .back:
         model.confirmation = nil
+        // A panel opened only to ask goes away with the question.
+        if openedForQuestion { hide() }
       default: break
       }
       return
@@ -551,7 +556,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// otherwise hides the panel and runs it in the app the user was in.
   private func perform(_ action: SystemAction, confirmed: Bool) {
     if let warning = action.warning, !confirmed {
-      if !panel.isVisible { show() }
+      if !panel.isVisible {
+        show()
+        openedForQuestion = true
+      }
+      model.menu = nil
       model.confirmation = Confirmation(
         icon: .system(action), title: "\(action.title)?", message: warning,
         confirmTitle: action.title, action: .system(action, confirmed: true))
@@ -559,8 +568,13 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     // The app in front now: the panel never activates Ripcord, so it's still the user's.
     let frontmost = NSWorkspace.shared.frontmostApplication
-    hide()
-    if let message = SystemActions.run(action, frontmost: frontmost) { onError(message) }
+    // From a hotkey with the panel hidden, whatever was left open there stays to come back to.
+    if panel.isVisible { hide() }
+    if let message = SystemActions.run(
+      action, frontmost: frontmost, report: { [weak self] in self?.onError($0) })
+    {
+      onError(message)
+    }
   }
 
   /// Opens a command's own list, from its row or its hotkey.

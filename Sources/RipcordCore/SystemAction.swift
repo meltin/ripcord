@@ -5,9 +5,9 @@ public enum SystemAction: String, CaseIterable, Sendable {
   // Raw values are the settings keys' stable part, spelled out so a rename never strands them.
   case lockScreen = "lock-screen"
   case logOut = "log-out"
-  case restart
+  case restart = "restart"
   case shutDown = "shut-down"
-  case sleep
+  case sleep = "sleep"
   case sleepDisplays = "sleep-displays"
   case playPause = "play-pause"
   case nextTrack = "next-track"
