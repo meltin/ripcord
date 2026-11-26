@@ -101,7 +101,8 @@ struct SearchView: View {
     .overlay {
       if let editor = model.configureEditor {
         ZStack(alignment: .bottomTrailing) {
-          Color.clear.contentShape(Rectangle()).onTapGesture { onCommand(.cancel) }
+          // Closes it, where Esc in Set Hotkey… goes back to the menu.
+          Color.clear.contentShape(Rectangle()).onTapGesture { onCommand(.back) }
           ConfigureEditorCard(editor: editor, onCommand: onCommand).padding(8)
         }
       }
@@ -130,6 +131,7 @@ struct SearchView: View {
             ForEach(section.results) { result in
               ResultRow(
                 result: result, isSelected: result.id == selectedID,
+                hotkey: result.itemKey.flatMap { model.hotkeys[$0] },
                 showsKind: model.mode == .root
               )
               .id(result.id)
@@ -192,6 +194,8 @@ private struct EmptyState: View {
 private struct ResultRow: View {
   let result: SearchResult
   let isSelected: Bool
+  /// Shown after the alias while the row is selected, as Raycast does.
+  var hotkey: String? = nil
   /// Off in Clipboard History, whose narrow list has no room for it.
   var showsKind = true
 
@@ -211,6 +215,9 @@ private struct ResultRow: View {
           .padding(.horizontal, 7)
           .padding(.vertical, 2)
           .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+      }
+      if isSelected, let keycaps = hotkey.flatMap(Hotkey.init)?.keycaps {
+        HStack(spacing: 3) { ForEach(keycaps, id: \.self) { Keycap($0) } }
       }
       Spacer(minLength: 12)
       ForEach(result.tags, id: \.self) { tag in

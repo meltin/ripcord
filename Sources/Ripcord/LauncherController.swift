@@ -74,6 +74,8 @@ final class LauncherModel {
   /// A question asked over the panel before something that can't be undone.
   var confirmation: Confirmation?
   var configureEditor: ConfigureEditor?
+  /// Each row's hotkey by `SearchResult.itemKey`, shown on the selected row as Raycast does.
+  var hotkeys: [String: String] = [:]
   /// Bumped to remount the search field, which takes focus back as it appears.
   var searchFieldID = 0
   /// The config's snippets, for the preview of the selected one.
@@ -142,11 +144,16 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private static let positionKey = "panelTopLeft"
 
   var quicklinks: [Quicklink] = [] {
-    didSet { if quicklinks != oldValue { update(model.query) } }
+    didSet {
+      guard quicklinks != oldValue else { return }
+      model.hotkeys = SearchResult.hotkeys(items: items, quicklinks: quicklinks)
+      update(model.query)
+    }
   }
   var items: [String: ItemSettings] = [:] {
     didSet {
       guard items != oldValue else { return }
+      model.hotkeys = SearchResult.hotkeys(items: items, quicklinks: quicklinks)
       clipboard.isEnabled = items[BuiltinCommand.clipboardHistory.settingsKey]?.isEnabled ?? true
       update(model.query)
     }
@@ -464,8 +471,13 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if let editor = model.configureEditor {
       switch command {
       case .editAlias(let text): model.configureEditor?.alias = text
-      case .submit where editor.kind == .alias: saveAlias(editor)
+      case .submit where editor.kind == .alias:
+        // Only a fresh press: Return held from the menu item that opened the card mustn't save.
+        guard NSApp.currentEvent?.isARepeat != true else { return }
+        saveAlias(editor)
       case .cancel: closeEditor(backToMenu: editor.kind == .hotkey)
+      // A click outside the card.
+      case .back: closeEditor(backToMenu: false)
       default: break
       }
       return
@@ -545,8 +557,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
     // ⌃ too, for Raycast's ⌃X Delete.
     // Shortcuts would act behind a question; only its Return and Esc count.
     guard model.confirmation == nil, !flags.isDisjoint(with: [.command, .control]),
-      // Unshifted, so ⇧⌘, reads as "," where charactersIgnoringModifiers gives "<".
-      let key = event.characters(byApplyingModifiers: [])?.lowercased()
+      // ⇧⌘, by its key: charactersIgnoringModifiers keeps Shift and gives "<". The rest as
+      // before, which reads Latin letters under Kana or Dvorak-QWERTY ⌘ too.
+      let key =
+        event.keyCode == UInt16(kVK_ANSI_Comma)
+        ? "," : event.charactersIgnoringModifiers?.lowercased()
     else { return false }
     // An accessory app has no Edit menu, so ⌘X/C/V/A never reach the search field otherwise.
     let editing = [
@@ -556,13 +571,13 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if flags == .command, let selector = editing[key] {
       return NSApp.sendAction(selector, to: nil, from: panel)
     }
-    // Set Alias… keeps the keys to its field; the row's shortcuts would act behind it.
-    if model.configureEditor != nil { return false }
     // Undo and redo, for the same reason; they matter in Create Snippet's editor.
     if key == "z", flags == .command || flags == [.command, .shift] {
       return NSApp.sendAction(
         flags.contains(.shift) ? Selector(("redo:")) : Selector(("undo:")), to: nil, from: panel)
     }
+    // Set Alias… keeps the keys to its field; the row's shortcuts would act behind it.
+    if model.configureEditor != nil { return false }
     if flags == .command, key == "\r", model.mode == .snippetForm {
       saveDraft()
       return true
@@ -624,9 +639,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return
     }
     if let delete = deletion(action) {
+      // Read first: saving re-reads the settings, which starts the list over at its first row.
+      let id = model.selected?.id
       model.menu = nil
       if !editSettings(delete) { NSSound.beep() }
-      return refreshRows(selecting: model.selected?.id)
+      return refreshRows(selecting: id)
     }
     switch action {
     case .setHotkey(let key): return openEditor(.hotkey, for: key)
@@ -709,9 +726,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// Opens Set Hotkey… or Set Alias… over the panel for the selected row.
   private func openEditor(_ kind: ConfigureEditor.Kind, for key: String) {
-    guard let row = model.selected, let settings else { return NSSound.beep() }
+    guard let selected = model.selected, let settings else { return NSSound.beep() }
     settings.load()
-    guard settings.loadError == nil else { return NSSound.beep() }
+    if let error = settings.loadError { return onError(error) }
+    // In a command's own list the setting is the command's, not the clip's or snippet's.
+    let row =
+      model.mode.command.flatMap { $0.settingsKey == key ? Search.row(for: $0) : nil } ?? selected
     model.menu = nil
     model.configureEditor = ConfigureEditor(
       kind: kind, settingsKey: key, row: row, alias: items[key]?.alias ?? "",
@@ -736,6 +756,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       model.configureEditor?.modifiers = modifiers
       return
     }
+    // Return held from the menu item that opened the card.
+    guard !event.isARepeat else { return }
     let bare = modifiers.isEmpty
     switch Int(event.keyCode) {
     case kVK_Escape: return closeEditor(backToMenu: true)
@@ -743,12 +765,14 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case kVK_Delete where bare:
       settings.setHotkey(nil, for: .item(key))
       settings.saveIfChanged()
-      model.configureEditor?.hotkey = nil
-      model.configureEditor?.problem = nil
+      model.configureEditor?.problem = settings.loadError
     default:
-      model.configureEditor?.problem = settings.setHotkey(from: event, for: .item(key))
-      model.configureEditor?.hotkey = settings.hotkey(of: .item(key))
+      model.configureEditor?.problem =
+        settings.setHotkey(from: event, for: .item(key)) ?? settings.loadError
     }
+    // As the file holds it, so a save that failed doesn't show as set.
+    settings.load()
+    model.configureEditor?.hotkey = settings.hotkey(of: .item(key))
   }
 
   private func saveAlias(_ editor: ConfigureEditor) {
@@ -767,7 +791,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       settings?.onRecordingChange(false)
     }
     model.configureEditor = nil
-    refreshRows(selecting: model.selected?.id)
+    // Saving re-reads the settings, which starts the list over at its first row.
+    refreshRows(selecting: editor.row.id)
     if backToMenu {
       perform(.configureMenu(editor.settingsKey))
     } else if editor.kind == .alias {
@@ -787,6 +812,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// Opens a command's own list, from its row or its hotkey.
   private func open(_ mode: LauncherMode) {
+    // A command's hotkey would change the list under Set Alias…'s card.
+    closeEditor(backToMenu: false)
     // Its hotkey closes its own list, as the launcher hotkey closes the panel.
     if panel.isVisible, model.mode == mode { return hide() }
     closesOnCancel = !panel.isVisible

@@ -179,6 +179,18 @@ import Testing
     #expect(set.map(\.startsSection) == [false, true, false, true, false])
   }
 
+  @Test func rowsFindTheirHotkeyByItemKey() throws {
+    let key = BuiltinCommand.searchSnippets.settingsKey
+    let links = [Quicklink(name: "Google", url: "https://g.co/?q={query}", hotkey: "ctrl+g")]
+    let hotkeys = SearchResult.hotkeys(
+      items: [key: ItemSettings(hotkey: "cmd+shift+8"), "other": ItemSettings(alias: "o")],
+      quicklinks: links)
+    #expect(hotkeys == [key: "cmd+shift+8", "quicklink:Google": "ctrl+g"])
+    let command = try #require(
+      Search.results(for: "search snippets", apps: [], quicklinks: []).first)
+    #expect(command.itemKey.flatMap { hotkeys[$0] } == "cmd+shift+8")
+  }
+
   @Test func theCommandsAreFoundByTyping() {
     #expect(
       Search.results(for: "search snippets", apps: [], quicklinks: []).first?.action

@@ -227,6 +227,29 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   public var menu: [MenuAction]? = nil
   /// An app's key in the settings, for Configure Command…; commands carry theirs in `action`.
   public var settingsKey: String? = nil
+
+  /// What its alias and hotkey are kept under: an app's or a command's settings key, or a
+  /// Quicklink's row ID; nil for rows that take neither.
+  public var itemKey: String? {
+    if let settingsKey { return settingsKey }
+    switch action {
+    case .run(let command): return command.settingsKey
+    case .system(let action, _): return action.settingsKey
+    case .window(let layout): return layout.settingsKey
+    default: return kind == .quicklink ? id : nil
+    }
+  }
+
+  /// The hotkeys in the settings by `itemKey`, for showing a row's.
+  public static func hotkeys(items: [String: ItemSettings], quicklinks: [Quicklink])
+    -> [String: String]
+  {
+    let fromItems = items.compactMapValues(\.hotkey)
+    let fromLinks = quicklinks.compactMap { link in
+      link.hotkey.map { ("quicklink:\(link.name)", $0) }
+    }
+    return fromItems.merging(fromLinks) { first, _ in first }
+  }
   public var isPinned = false
 }
 
@@ -559,6 +582,11 @@ public enum Search {
     SearchResult(
       id: action.settingsKey, title: action.title, subtitle: "System Actions", keyword: alias,
       kind: .command, action: .system(action))
+  }
+
+  /// A command's own row, as the root search lists it.
+  public static func row(for command: BuiltinCommand) -> SearchResult {
+    result(for: command, alias: nil)
   }
 
   private static func result(for command: BuiltinCommand, alias: String?) -> SearchResult {
