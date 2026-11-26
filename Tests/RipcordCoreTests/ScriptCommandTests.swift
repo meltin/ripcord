@@ -43,12 +43,11 @@ import Testing
     #expect(script(base[0], base[1], "# @raycast.mode fullOutput")?.mode == .fullOutput)
     #expect(
       script(base[0], base[1], "# @raycast.mode inline", "# @raycast.refreshTime 1m") == nil)
-    #expect(
-      script(base[0], base[1], "# @raycast.mode silent", "# @raycast.needsConfirmation true")
-        == nil)
     let mode = "# @raycast.mode silent"
-    let dropdown = #"# @raycast.argument1 { "type": "dropdown", "placeholder": "q", "data": [] }"#
-    #expect(script(base[0], base[1], mode, dropdown) == nil)
+    let unknown = #"# @raycast.argument1 { "type": "date", "placeholder": "q" }"#
+    #expect(script(base[0], base[1], mode, unknown) == nil)
+    let empty = #"# @raycast.argument1 { "type": "dropdown", "placeholder": "q", "data": [] }"#
+    #expect(script(base[0], base[1], mode, empty) == nil)
     #expect(script(base[0], base[1], mode, "# @raycast.argument1 {broken") == nil)
     // argument2 without argument1.
     #expect(
@@ -107,6 +106,21 @@ import Testing
     #expect(found.processArguments(["New York & co", ""]) == ["New%20York%20%26%20co", ""])
     #expect(found.processArguments(["a"]) == ["a", ""])
     #expect(found.processArguments(["it's (fun)!"]) == ["it's%20(fun)!", ""])
+  }
+
+  @Test func readsDropdownsAndConfirmation() throws {
+    let found = try #require(
+      script(
+        "# @raycast.schemaVersion 1", "# @raycast.title T", "# @raycast.mode silent",
+        "# @raycast.needsConfirmation true",
+        #"# @raycast.argument1 { "type": "dropdown", "placeholder": "Size", "data": [{"title": "Small", "value": "s"}, {"title": "Large", "value": "l"}] }"#
+      ))
+    #expect(found.needsConfirmation)
+    #expect(found.arguments.first?.data?.map(\.title) == ["Small", "Large"])
+    // A dropdown left alone holds its first item, so it's never missing.
+    #expect(found.firstMissing(in: []) == nil)
+    #expect(found.processArguments([]) == ["s"])
+    #expect(found.processArguments(["l"]) == ["l"])
   }
 
   @Test func dropsColorCodes() {
