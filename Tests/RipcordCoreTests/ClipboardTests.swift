@@ -344,8 +344,12 @@ private func temporaryDirectory() -> URL {
     let id = history.items[0].id
     let row = try #require(Search.clipboardSections(for: "", history: history).first?.results.first)
     #expect(row.action == .clip(id, .paste))
-    #expect(row.actions.map(\.title) == ["Paste to App", "Copy to Clipboard", "Pin", "Delete"])
-    #expect(row.actions.map(\.shortcut) == ["↵", "⇧⌘C", "⇧⌘P", "⌃X"])
+    #expect(
+      row.actions.map(\.title) == [
+        "Paste to App", "Copy to Clipboard", "Pin", "Delete", "Configure Command…",
+      ])
+    #expect(row.actions.map(\.shortcut) == ["↵", "⇧⌘C", "⇧⌘P", "⌃X", "⇧⌘,"])
+    #expect(row.actions.last?.action == .configureMenu(BuiltinCommand.clipboardHistory.settingsKey))
     try history.togglePin(id)
     let pinned = try #require(
       Search.clipboardSections(for: "", history: history).first?.results.first)

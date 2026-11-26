@@ -14,6 +14,8 @@ final class SettingsModel {
   var loadError: String?
   var onSave: () -> Void = {}
   var onRecordingChange: (Bool) -> Void = { _ in }
+  /// A command's settings key whose page the window should turn to, from Configure Command.
+  var requestedKey: String?
   /// Hotkeys macOS refused at the last registration, shown on their rows.
   var failedHotkeys: Set<HotkeyTarget> = []
   /// Scanned when the Applications page first appears, so the window costs nothing until then.
@@ -85,23 +87,29 @@ final class SettingsModel {
   private func record(_ event: NSEvent) {
     guard let target = recordingTarget else { return }
     if event.keyCode == UInt16(kVK_Escape) { return stopRecording() }
+    if let problem = setHotkey(from: event, for: target) {
+      recorderMessage = (target, problem)
+      return
+    }
+    stopRecording()
+  }
+
+  /// Saves the keys `event` pressed as `target`'s hotkey; why it can't be one otherwise. The
+  /// panel's Set Hotkey… records through this too.
+  func setHotkey(from event: NSEvent, for target: HotkeyTarget) -> String? {
     guard
       let hotkey = Hotkey(
         keyCode: UInt32(event.keyCode), modifiers: carbonModifiers(event.modifierFlags))
     else {
-      recorderMessage = (
-        target, "Use ⌘, ⌥ or ⌃ (⇧ optional) with a letter, a digit, an arrow, Return or Space."
-      )
-      return
+      return "Use ⌘, ⌥ or ⌃ (⇧ optional) with a letter, a digit, an arrow, Return or Space."
     }
     if let owner = config.owner(of: hotkey, except: target) {
-      recorderMessage = (target, "Already used by \(name(of: owner)).")
-      return
+      return "Already used by \(name(of: owner))."
     }
     setHotkey(hotkey.spec, for: target)
     // Saved before re-registering, so the new hotkey is the one that comes back.
     saveIfChanged()
-    stopRecording()
+    return nil
   }
 
   private func carbonModifiers(_ flags: NSEvent.ModifierFlags) -> UInt32 {
@@ -253,7 +261,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
   /// Becomes a regular app while the window is open, as Raycast does: macOS 14 only lets an
   /// accessory app ask to come forward, and the request loses to the app the user was in.
-  func show() {
+  /// `configuring` turns to the page of the command or app with that settings key.
+  func show(configuring key: String? = nil) {
+    if let key { model.requestedKey = key }
     // On the screen the panel was on, the pointer's: `center()` alone uses the screen macOS
     // counts as main, which can be another display, and a closed window keeps its old place.
     if !window.isVisible,
@@ -510,6 +520,13 @@ struct SettingsView: View {
     .ignoresSafeArea()
     .frame(minWidth: 760, minHeight: 520)
     .onChange(of: model.config) { model.saveIfChanged() }
+    .onChange(of: model.requestedKey, initial: true) {
+      guard let key = model.requestedKey else { return }
+      // A key no page lists as a command is an app's.
+      page =
+        SettingsPage.allCases.first { $0.commandKeys?.contains(key) == true } ?? .applications
+      model.requestedKey = nil
+    }
     // A recording left running on a page no longer shown would swallow every key typed.
     .onChange(of: page) {
       model.stopRecording()
