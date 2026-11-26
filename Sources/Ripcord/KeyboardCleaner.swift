@@ -10,6 +10,8 @@ import os
 @MainActor
 final class KeyboardCleaner {
   private var tapThread: KeyTapThread?
+  /// Which run is on, so ⌃⌥⌘↩ caught by an earlier run's tap as it goes can't end this one.
+  private var session = UUID()
   private var timer: Timer?
   private var overlays: [NSWindow] = []
   private let countdown = Countdown()
@@ -31,8 +33,14 @@ final class KeyboardCleaner {
     if !isActive {
       // Keys would reach that field or app anyway, while the screen says they're off.
       guard !IsSecureEventInputEnabled() else { throw .secureInput }
+      let session = UUID()
+      self.session = session
       let thread = KeyTapThread { [weak self] in
-        DispatchQueue.main.async { self?.stop() }
+        DispatchQueue.main.async {
+          MainActor.assumeIsolated {
+            if self?.session == session { self?.stop() }
+          }
+        }
       }
       guard thread.startTap() else { throw .noAccess }
       tapThread = thread
@@ -202,10 +210,11 @@ private struct CleanKeyboardOverlay: View {
           Text("Secure input is on in another app, so keys get through. Stop wiping.")
             .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(.yellow)
+        } else {
+          Text("Keys are off until then. ⌃⌥⌘↩ or the menu bar ends it now.")
+            .font(.system(size: 15))
+            .foregroundStyle(.white.opacity(0.75))
         }
-        Text("Keys are off until then. ⌃⌥⌘↩ ends it now.")
-          .font(.system(size: 15))
-          .foregroundStyle(.white.opacity(0.75))
       }
       .foregroundStyle(.white)
     }

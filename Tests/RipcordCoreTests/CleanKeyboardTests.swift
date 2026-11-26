@@ -30,6 +30,15 @@ import Testing
       !offersClean("ck", [BuiltinCommand.cleanKeyboard.settingsKey: ItemSettings(alias: "ck")]))
   }
 
+  @Test func readsDecimalsAsSecondsAndToleratesALeadingSpace() {
+    #expect(
+      Search.results(for: "clean keyboard 2.5", apps: [], quicklinks: []).first?.action
+        == .cleanKeyboard(2.5))
+    #expect(
+      Search.results(for: " clean keyboard 30", apps: [], quicklinks: []).first?.action
+        == .cleanKeyboard(30))
+  }
+
   @Test func readsABareNumberAsSeconds() {
     #expect(
       Search.results(for: "clean keyboard 30", apps: [], quicklinks: []).first?.action

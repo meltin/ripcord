@@ -445,13 +445,15 @@ public enum Search {
     // "clean keyboard 30s", or the usual times while none is typed yet.
     // The usual times only once the command put its title and a space in the field: the title or
     // an alias typed alone must not offer a row that turns the keyboard off on Return.
-    let cleanArguments = typedArguments(after: .cleanKeyboard, in: query, items: items)
+    let cleanArguments = typedArguments(
+      after: .cleanKeyboard, in: String(query.drop(while: \.isWhitespace)), items: items)
     let cleanTimes: [TimeInterval] =
       cleanArguments.contains("")
       ? [15, 30, 60, 120]
       : cleanArguments.lazy.compactMap { text in
-        // A bare number is seconds here, as the usual times are.
-        text.allSatisfy(\.isNumber) ? Double(text) : Coffee.duration(from: text)
+        // A number without a unit is seconds here, as the usual times are, decimals too.
+        text.allSatisfy { $0.isASCII && ($0.isNumber || $0 == ".") }
+          ? Double(text) : Coffee.duration(from: text)
       }.first.map { [$0] } ?? []
     let cleanFor: [SearchResult] = cleanTimes.filter { $0 > 0 && $0 <= longestClean }.map {
       seconds in
