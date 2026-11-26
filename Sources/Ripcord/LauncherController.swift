@@ -3,7 +3,6 @@ import Carbon
 import RipcordCore
 import SwiftUI
 
-/// The ⌘K actions of a row, or the root menu behind the footer's left button.
 /// Raycast's in-panel alert: Return runs `action`, Esc cancels.
 struct Confirmation {
   let title: String
@@ -12,6 +11,7 @@ struct Confirmation {
   let action: SearchResult.Action
 }
 
+/// The ⌘K actions of a row, or the root menu behind the footer's left button.
 struct OpenMenu {
   let title: String
   let items: [MenuAction]
@@ -53,6 +53,9 @@ final class LauncherModel {
   /// What Create Snippet's form holds; `editing` is the snippet's index when it's an edit.
   var draft = Snippet(name: "", text: "")
   var editing: Int?
+  /// The snippet as it was when the edit began, so a save never overwrites another one that
+  /// took its place in the file meanwhile, even after the panel hid and the config was re-read.
+  var editingOriginal: Snippet?
   var isPickingIcon = false
   /// The snippet the form was opened on from Search Snippets (edit or duplicate), selected again
   /// when it goes back there; nil for Create Snippet.
@@ -227,6 +230,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       model.mode = resumed
       refreshRows(selecting: model.selected?.id)
     } else {
+      // What was left open is dropped, filter included.
+      model.snippetTag = nil
       model.mode = mode
       update("")
     }
@@ -297,14 +302,15 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// `keepingMode` leaves a command's list or form as it is, to come back to (`leftOpen`).
   private func hide(keepingMode: Bool = false) {
     panel.orderOut(nil)
-    model.isPickingIcon = false
     model.menu = nil
     model.confirmation = nil
     restoreInputSource()
+    // A kept form keeps its icon list too, so closing it doesn't move the caret to Name.
     if keepingMode, model.mode != .root {
       leftOpen = (model.mode, .now)
       return
     }
+    model.isPickingIcon = false
     leftOpen = nil
     // A filter left on would hide snippets the next time, unasked.
     model.snippetTag = nil
@@ -334,6 +340,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.sections = sections(for: query)
     model.selection = 0
     model.menu = nil
+    // A question belongs to the rows it was asked over; once they change it goes too.
+    model.confirmation = nil
   }
 
   private func sections(for query: String) -> [SearchSection] {
@@ -370,6 +378,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if let confirmation = model.confirmation {
       switch command {
       case .submit:
+        // Only a fresh press: a Return held down from the menu that opened the question
+        // mustn't answer it.
+        guard NSApp.currentEvent.map({ $0.type == .keyDown && $0.isARepeat }) != true else {
+          return
+        }
         model.confirmation = nil
         perform(confirmation.action)
       case .cancel, .back:
@@ -550,6 +563,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     let source = index.flatMap { snippets.indices.contains($0) ? $0 : nil }
     model.formSource = source
     model.editing = duplicate ? nil : source
+    model.editingOriginal = model.editing.map { snippets[$0] }
     if let source {
       let snippet = snippets[source]
       model.draft = snippet
@@ -579,9 +593,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       icon: model.draft.icon, tags: Snippet.tags(from: model.tagsText))
     guard !draft.name.isEmpty, !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else { return NSSound.beep() }
-    // The list can shrink while the form is open; an edit then has nothing left to replace.
-    if let editing = model.editing, !snippets.indices.contains(editing) { return NSSound.beep() }
-    let editing = model.editing.map { ($0, snippets[$0]) }
+    let editing = model.editing.flatMap { index in model.editingOriginal.map { (index, $0) } }
     var index = 0
     let saved = editSnippets { current in
       guard let (at, original) = editing else {
@@ -597,6 +609,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.draft = Snippet(name: "", text: "")
     model.tagsText = ""
     model.editing = nil
+    model.editingOriginal = nil
     model.formSource = nil
     model.isPickingIcon = false
     // A filter that would hide the saved snippet is dropped.

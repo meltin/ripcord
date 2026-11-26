@@ -165,7 +165,8 @@ final class ClipboardMonitor {
     // Queued after ⌘V, so the app moves the caret back once the text is in.
     // shortcut: counts the snippet's characters, so an app that reformats a paste (re-indents,
     // turns tabs into spaces) ends off by that much, and ← doesn't cross lines in a terminal;
-    // set the caret through Accessibility (kAXSelectedTextRange) if that bites.
+    // set the caret through Accessibility (kAXSelectedTextRange) if that bites. Past 2,000
+    // characters after {cursor} it stops pressing, rather than flood the app with events.
     for _ in 0..<min(left, 2_000) {
       for isDown in [true, false] {
         let event = CGEvent(

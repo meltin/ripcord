@@ -564,14 +564,17 @@ extension View {
   fileprivate func tabs(
     from field: SnippetForm.Field, focus: FocusState<SnippetForm.Field?>.Binding
   ) -> some View {
-    onKeyPress(.tab, phases: .down) { press in
-      // A Japanese input method uses Tab to pick a prediction while it's composing.
-      if (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true {
+    // Held keys repeat; ⇧Tab may arrive as backtab (U+0019) rather than Tab with ⇧.
+    onKeyPress(keys: [.tab, KeyEquivalent("\u{19}")], phases: [.down, .repeat]) { press in
+      // A Japanese input method uses Tab to pick a prediction while it's composing. The panel
+      // is looked up: it takes keys without activating Ripcord, so NSApp.keyWindow can be nil.
+      if (launcherPanel()?.firstResponder as? NSTextView)?.hasMarkedText() == true {
         return .ignored
       }
       let fields = SnippetForm.Field.allCases
       let index = fields.firstIndex(of: field) ?? 0
-      let step = press.modifiers.contains(.shift) ? fields.count - 1 : 1
+      let backward = press.modifiers.contains(.shift) || press.key == KeyEquivalent("\u{19}")
+      let step = backward ? fields.count - 1 : 1
       focus.wrappedValue = fields[(index + step) % fields.count]
       return .handled
     }
@@ -606,7 +609,7 @@ final class PlaceholderHighlighter: NSObject, NSTextStorageDelegate {
   /// SwiftUI's TextEditor leaves its text storage's delegate unset, so this takes it.
   @MainActor func attach() {
     guard storage == nil,
-      let panel = NSApp.windows.first(where: { $0 is LauncherPanel && $0.isVisible }),
+      let panel = launcherPanel(),
       let content = panel.contentView, let storage = snippetTextView(in: content)?.textStorage,
       storage.delegate == nil
     else { return }
@@ -632,6 +635,11 @@ final class PlaceholderHighlighter: NSObject, NSTextStorageDelegate {
       storage.addAttribute(.foregroundColor, value: NSColor.controlAccentColor, range: match.range)
     }
   }
+}
+
+/// The panel, found among the app's windows: it takes keys without activating Ripcord.
+@MainActor private func launcherPanel() -> NSWindow? {
+  NSApp.windows.first { $0 is LauncherPanel && $0.isVisible }
 }
 
 /// The form's one multi-line editor; single-line fields edit through a shared field editor.
