@@ -39,6 +39,19 @@ import Testing
     #expect(Search.httpStatusSections(for: "zzzz").isEmpty)
   }
 
+  @Test func listsTheBestMatchFirst() {
+    func titles(_ query: String) -> [String] {
+      Search.httpStatusSections(for: query).flatMap(\.results).map(\.title)
+    }
+    #expect(titles("not").prefix(3) == ["304 Not Modified", "404 Not Found", "406 Not Acceptable"])
+    #expect(titles("auth").first == "407 Proxy Authentication Required")
+    #expect(!titles("time").contains("501 Not Implemented"))
+    // Full-width digits, and the hundreds' headings.
+    #expect(titles("４０４") == ["404 Not Found"])
+    #expect(titles("4xx").count == HTTPStatus.all.filter { $0.code / 100 == 4 }.count)
+    #expect(titles("redirection").allSatisfy { $0.hasPrefix("3") })
+  }
+
   @Test func opensMDNAndCopiesTheCodeOrName() throws {
     let row = try #require(Search.httpStatusSections(for: "404").first?.results.first)
     #expect(

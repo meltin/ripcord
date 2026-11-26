@@ -96,20 +96,39 @@ public struct HTTPStatus: Equatable, Sendable {
 }
 
 extension Search {
-  /// The codes by hundred, as Raycast lists them: digits match from the start of the code,
-  /// anything else the name.
+  /// The codes by hundred, as Raycast lists them. A query lists the matches best first instead:
+  /// digits from the start of the code, words in the name or its hundred's heading.
   public static func httpStatusSections(for query: String) -> [SearchSection] {
-    let trimmed = query.trimmingCharacters(in: .whitespaces)
-    let matches = HTTPStatus.all.filter { status in
-      guard !trimmed.isEmpty else { return true }
-      if trimmed.allSatisfy(\.isNumber) { return String(status.code).hasPrefix(trimmed) }
-      return Fuzzy.score(trimmed, in: status.name) != nil
-        || "\(status.code) \(status.name)".localizedStandardContains(trimmed)
+    // Full-width digits, as a Japanese input method may type them, read as plain ones.
+    let trimmed =
+      query.applyingTransform(.fullwidthToHalfwidth, reverse: false)?
+      .trimmingCharacters(in: .whitespaces) ?? ""
+    guard !trimmed.isEmpty else {
+      let groups = Dictionary(grouping: HTTPStatus.all, by: \.group)
+      return groups.keys.sorted().map { group in
+        SearchSection(title: group, results: (groups[group] ?? []).map(result(for:)))
+      }
     }
-    let groups = Dictionary(grouping: matches, by: \.group)
-    return groups.keys.sorted().map { group in
-      SearchSection(title: group, results: (groups[group] ?? []).map(result(for:)))
+    let ranked = HTTPStatus.all.compactMap { status -> (score: Int, status: HTTPStatus)? in
+      score(trimmed, for: status).map { ($0, status) }
     }
+    .sorted { ($0.score, -$0.status.code) > ($1.score, -$1.status.code) }
+    let results = ranked.map { result(for: $0.status) }
+    return results.isEmpty ? [] : [SearchSection(title: "Results", results: results)]
+  }
+
+  /// How well `query` matches: the code's start, then the name's start, a word's start, or
+  /// anywhere in the name or heading; nil for no match.
+  private static func score(_ query: String, for status: HTTPStatus) -> Int? {
+    if query.allSatisfy({ $0.isASCII && $0.isNumber }) {
+      return String(status.code).hasPrefix(query) ? 3 : nil
+    }
+    let name = status.name.lowercased()
+    let lowered = query.lowercased()
+    if name.hasPrefix(lowered) { return 3 }
+    if name.split(separator: " ").contains(where: { $0.hasPrefix(lowered) }) { return 2 }
+    let text = "\(status.code) \(status.name) \(status.group)"
+    return text.localizedStandardContains(query) ? 1 : nil
   }
 
   private static func result(for status: HTTPStatus) -> SearchResult {
