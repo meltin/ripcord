@@ -279,6 +279,12 @@ private struct MarkdownEditor: NSViewRepresentable {
     // A thin scroller shown while scrolling, as the rest of Ripcord draws them.
     scrollView.scrollerStyle = .overlay
     scrollView.autohidesScrollers = true
+    // macOS puts its own style back when the scroll bar setting changes.
+    context.coordinator.scrollerObserver = NotificationCenter.default.addObserver(
+      forName: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil, queue: .main
+    ) { [weak scrollView] _ in
+      MainActor.assumeIsolated { scrollView?.scrollerStyle = .overlay }
+    }
     guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
     textView.delegate = context.coordinator
     textView.drawsBackground = false
@@ -297,10 +303,15 @@ private struct MarkdownEditor: NSViewRepresentable {
   func updateNSView(_ scrollView: NSScrollView, context: Context) {
     context.coordinator.parent = self
     guard let textView = scrollView.documentView as? NSTextView else { return }
-    // Another note shown, or reloaded: not while an input method is composing.
-    if textView.string != text, !textView.hasMarkedText() {
+    // Another note shown, or reloaded: what was being composed for the old one is dropped, and
+    // so is its undo history, which would replay its edits on this text.
+    if textView.string != text {
+      context.coordinator.isReplacing = true
+      if textView.hasMarkedText() { textView.inputContext?.discardMarkedText() }
       textView.string = text
+      textView.undoManager?.removeAllActions()
       Self.format(textView)
+      context.coordinator.isReplacing = false
     }
     if context.coordinator.focusRequest != focusRequest {
       context.coordinator.focusRequest = focusRequest
@@ -313,6 +324,13 @@ private struct MarkdownEditor: NSViewRepresentable {
   final class Coordinator: NSObject, NSTextViewDelegate {
     var parent: MarkdownEditor
     var focusRequest: Int
+    /// The editor is being given another note's text: no change of the user's to pass on.
+    var isReplacing = false
+    var scrollerObserver: NSObjectProtocol?
+
+    deinit {
+      if let scrollerObserver { NotificationCenter.default.removeObserver(scrollerObserver) }
+    }
 
     init(parent: MarkdownEditor) {
       self.parent = parent
@@ -320,7 +338,7 @@ private struct MarkdownEditor: NSViewRepresentable {
     }
 
     func textDidChange(_ notification: Notification) {
-      guard let textView = notification.object as? NSTextView else { return }
+      guard !isReplacing, let textView = notification.object as? NSTextView else { return }
       parent.text = textView.string
       parent.onChange()
       if !textView.hasMarkedText() { MarkdownEditor.format(textView) }

@@ -21,6 +21,14 @@ import Testing
     #expect(styled("an *it* word") == ["italic:it", "mark:*", "mark:*"])
     #expect(styled("`**x**`") == ["code:**x**", "mark:`", "mark:`"])
     #expect(styled("2 * 3 * 4").isEmpty)
+    // Underscores inside a word aren't emphasis.
+    #expect(styled("foo__bar__baz").isEmpty)
+    #expect(styled("__strong__") == ["bold:strong", "mark:__", "mark:__"])
+    // Code inside emphasis keeps both.
+    #expect(
+      styled("**run `make` first**") == [
+        "code:make", "mark:`", "mark:`", "bold:run `make` first", "mark:**", "mark:**",
+      ])
   }
 
   @Test func readsListsTasksQuotesAndLinks() {

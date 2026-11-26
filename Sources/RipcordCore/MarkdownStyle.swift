@@ -78,22 +78,21 @@ public struct MarkdownSpan: Equatable, Sendable {
       spans.append(MarkdownSpan(shifted(open), .mark))
       spans.append(MarkdownSpan(shifted(close), .mark))
     }
-    for (pattern, style) in [(bold, MarkdownSpan.Style.bold), (italic, .italic)] {
-      for match in all(pattern, in: line) where !inCode(match.range) {
+    let emphasis = [
+      (boldStars, MarkdownSpan.Style.bold), (boldUnderscores, .bold), (italic, .italic),
+    ]
+    for (pattern, style) in emphasis {
+      for match in all(pattern, in: line) {
         let inner = match.range(at: 2)
+        // Marks inside code aren't emphasis; code inside emphasis is fine.
+        let opening = NSRange(
+          location: match.range.location, length: inner.location - match.range.location)
+        let closing = NSRange(
+          location: inner.upperBound, length: match.range.upperBound - inner.upperBound)
+        guard !inCode(opening), !inCode(closing) else { continue }
         spans.append(MarkdownSpan(shifted(inner), style))
-        spans.append(
-          MarkdownSpan(
-            shifted(
-              NSRange(location: match.range.location, length: inner.location - match.range.location)
-            ),
-            .mark))
-        spans.append(
-          MarkdownSpan(
-            shifted(
-              NSRange(location: inner.upperBound, length: match.range.upperBound - inner.upperBound)
-            ),
-            .mark))
+        spans.append(MarkdownSpan(shifted(opening), .mark))
+        spans.append(MarkdownSpan(shifted(closing), .mark))
       }
     }
     for match in all(link, in: line) where !inCode(match.range) {
@@ -116,7 +115,9 @@ public struct MarkdownSpan: Equatable, Sendable {
   private static let listItem = regex(#"^\s*(?:[-*+]|\d+\.)\s"#)
   /// `code`: group 1 the opening tick, 2 the closing one; the text between is the code.
   private static let inlineCode = regex(#"(`)[^`]+(`)"#)
-  private static let bold = regex(#"(\*\*|__)(?=\S)(.+?)(?<=\S)\1"#)
+  private static let boldStars = regex(#"(\*\*)(?=\S)(.+?)(?<=\S)\*\*"#)
+  /// Not inside a word, as in `foo__bar__baz`.
+  private static let boldUnderscores = regex(#"(?<!\w)(__)(?=\S)(.+?)(?<=\S)__(?!\w)"#)
   private static let italic = regex(#"(?<![*_\w])([*_])(?=\S)([^*_]+?)(?<=\S)\1(?![*_\w])"#)
   private static let link = regex(#"\[([^\]]+)\]\([^)\s]+\)"#)
 
