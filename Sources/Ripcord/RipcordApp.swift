@@ -357,8 +357,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       statusItem.length = NSStatusItem.squareLength
       return
     }
-    let image = NSImage(systemSymbolName: shown.symbol, accessibilityDescription: shown.label)
+    let image =
+      Tabler.image(shown.symbol, size: 18)
+      ?? NSImage(systemSymbolName: shown.symbol, accessibilityDescription: shown.label)
     image?.isTemplate = true
+    image?.accessibilityDescription = shown.label
     button.image = image
     button.imagePosition = .imageLeading
     button.title = shown.remaining.map { " " + Coffee.format($0, seconds: false) } ?? ""

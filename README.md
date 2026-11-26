@@ -170,3 +170,5 @@ Ripcord is licensed under [MIT](./LICENSE).
 
 The GitHub icon in the panel's actions comes from [it-icons](https://github.com/ouka-lab/it-icons), under
 [MIT](./Resources/ThirdParty/GitHub-LICENSE.txt).
+The other icons are [Tabler Icons](https://github.com/tabler/tabler-icons), under
+[MIT](./Resources/ThirdParty/Tabler-LICENSE.txt).

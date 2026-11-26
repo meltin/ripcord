@@ -680,8 +680,7 @@ private struct PageIcon: View {
   let size: CGFloat
 
   var body: some View {
-    Image(systemName: page.symbol)
-      .font(.system(size: size * 0.55, weight: .semibold))
+    Glyph(page.symbol, pointSize: size * 0.55)
       .foregroundStyle(.white)
       .frame(width: size, height: size)
       .background(page.color.gradient, in: RoundedRectangle(cornerRadius: size / 4))
@@ -730,9 +729,13 @@ private struct LoadErrorBanner: View {
 
   var body: some View {
     if let loadError = model.loadError {
-      Label(loadError, systemImage: "exclamationmark.triangle.fill")
-        .font(.system(size: 12))
-        .foregroundStyle(.red)
+      Label {
+        Text(loadError)
+      } icon: {
+        Glyph("exclamationmark.triangle.fill", pointSize: 12)
+      }
+      .font(.system(size: 12))
+      .foregroundStyle(.red)
     }
   }
 }
@@ -811,8 +814,14 @@ private struct QuicklinksPage: View {
   var body: some View {
     HStack {
       Spacer()
-      Button("Add Quicklink", systemImage: "plus") {
+      Button {
         model.config.quicklinks.append(Quicklink(name: "", url: ""))
+      } label: {
+        Label {
+          Text("Add Quicklink")
+        } icon: {
+          Glyph("plus", pointSize: 12)
+        }
       }
       .buttonStyle(.borderedProminent)
     }
@@ -886,7 +895,7 @@ private struct QuicklinkRow: View {
       TextField("https://example.com/search?q={query}", text: $link.url)
         .font(.system(size: 12, design: .monospaced))
       Button(action: onDelete) {
-        Image(systemName: "minus.circle")
+        Glyph("minus.circle")
       }
       .buttonStyle(.borderless)
       .foregroundStyle(.secondary)
@@ -1107,8 +1116,7 @@ private struct Checkbox: View {
 
   var body: some View {
     Button(action: onToggle) {
-      Image(systemName: isOn ? "checkmark.square.fill" : "square")
-        .font(.system(size: 15))
+      Glyph(isOn ? "checkmark.square.fill" : "square", pointSize: 15)
         .foregroundStyle(isOn ? Color.accentColor : .secondary)
         .contentShape(Rectangle())
     }
@@ -1153,14 +1161,14 @@ private struct HotkeyRecorder: View {
           Button {
             model.setHotkey(nil, for: target)
           } label: {
-            Image(systemName: "xmark.circle.fill")
+            Glyph("xmark.circle.fill")
           }
           .buttonStyle(.borderless)
           .foregroundStyle(.tertiary)
           .accessibilityLabel("Remove hotkey")
         }
         if model.failedHotkeys.contains(target) {
-          Image(systemName: "exclamationmark.triangle.fill")
+          Glyph("exclamationmark.triangle.fill")
             .foregroundStyle(.orange)
             .help("macOS refused this hotkey.")
             .accessibilityLabel("macOS refused this hotkey")
@@ -1190,14 +1198,14 @@ private struct RepositoriesSettings: View {
       ForEach(Array(settings.folders.enumerated()), id: \.offset) { index, folder in
         Divider()
         HStack {
-          Image(systemName: "folder").foregroundStyle(.secondary)
+          Glyph("folder").foregroundStyle(.secondary)
           Text(folder).font(.system(size: 13, design: .monospaced))
           Spacer()
           Button {
             model.config.repositories.folders = settings.folders.enumerated()
               .filter { $0.offset != index }.map(\.element)
           } label: {
-            Image(systemName: "minus.circle")
+            Glyph("minus.circle")
           }
           .buttonStyle(.borderless)
           .foregroundStyle(.secondary)
@@ -1292,7 +1300,7 @@ private struct OpenWithRow: View {
           } else {
             Text(key == .plain ? "Finder" : "–").foregroundStyle(.secondary)
           }
-          Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold))
+          Glyph("chevron.up.chevron.down", pointSize: 10)
             .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 10)
@@ -1463,8 +1471,7 @@ private struct PermissionRow: View {
 
   var body: some View {
     HStack(spacing: 12) {
-      Image(systemName: permission.symbol)
-        .font(.system(size: 12, weight: .semibold))
+      Glyph(permission.symbol, pointSize: 12)
         .foregroundStyle(.white)
         .frame(width: 26, height: 26)
         .background(Color.gray.gradient, in: RoundedRectangle(cornerRadius: 6))
@@ -1510,10 +1517,14 @@ private struct PermissionRow: View {
   }
 
   private func state(_ text: String, _ symbol: String, _ color: Color) -> some View {
-    Label(text, systemImage: symbol)
-      .font(.system(size: 12))
-      .foregroundStyle(color)
-      .padding(.trailing, 4)
+    Label {
+      Text(text)
+    } icon: {
+      Glyph(symbol, pointSize: 12)
+    }
+    .font(.system(size: 12))
+    .foregroundStyle(color)
+    .padding(.trailing, 4)
   }
 }
 

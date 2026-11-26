@@ -31,6 +31,9 @@ sips -s format png -z 36 46 Resources/MenuBarIcon.svg --out "$app/Contents/Resou
 sips -s format png -z 18 18 Resources/ThirdParty/GitHub.svg --out "$app/Contents/Resources/GitHub.png" >/dev/null
 sips -s format png -z 36 36 Resources/ThirdParty/GitHub.svg --out "$app/Contents/Resources/GitHub@2x.png" >/dev/null
 cp Resources/ThirdParty/GitHub-LICENSE.txt "$app/Contents/Resources/"
+# Tabler Icons, drawn from their SVGs at any size.
+cp -R Resources/Tabler "$app/Contents/Resources/"
+cp Resources/ThirdParty/Tabler-LICENSE.txt "$app/Contents/Resources/"
 # Signed with the certificate from scripts/create-signing-certificate.sh when it's in the keychain,
 # so macOS keeps permissions across builds; ad hoc otherwise (Nix, CI, a fresh clone).
 identity="Ripcord Self-Signed"
