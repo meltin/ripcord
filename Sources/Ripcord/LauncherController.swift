@@ -100,13 +100,14 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
     let glass = NSGlassEffectView()
     glass.cornerRadius = 22
-    // Nearly solid, as Raycast's panel: bare glass turns muddy over dark or busy windows, and a
-    // glass tint comes out white, so a fixed gray goes inside it instead.
+    // A gray over the glass, as see-through as Raycast's panel: bare glass turns muddy over dark
+    // or busy windows, and a glass tint comes out white. Measured on screen against Raycast: Light
+    // matches over white and dark windows; Dark over dark windows only, as the dark glass is
+    // brighter than Raycast and a gray over it can't match both.
     let background = NSColor(name: nil) { appearance in
       appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        ? NSColor(srgbRed: 0.14, green: 0.14, blue: 0.14, alpha: 0.97)
-        // Raycast's #ECEEEE once the 3% of glass behind it is mixed in.
-        : NSColor(srgbRed: 0.923, green: 0.935, blue: 0.935, alpha: 0.97)
+        ? NSColor(srgbRed: 0.031, green: 0.051, blue: 0.049, alpha: 0.70)
+        : NSColor(srgbRed: 0.902, green: 0.918, blue: 0.918, alpha: 0.52)
     }
     glass.contentView = NSHostingView(
       rootView: SearchView(
