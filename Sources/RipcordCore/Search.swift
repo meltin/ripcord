@@ -66,6 +66,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case clip(UUID, ClipAction)
     /// The snippet at this index in the config.
     case snippet(Int, SnippetAction)
+    /// `confirmed` once its warning has been answered, or for one with none.
+    case system(SystemAction, confirmed: Bool = false)
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -241,7 +243,12 @@ public enum Search {
       guard settings.isEnabled else { return nil }
       return ([command.title], settings.alias, result(for: command, alias: settings.alias))
     }
-    let ranked = (appCandidates + linkCandidates + commandCandidates)
+    let systemCandidates: [Candidate] = SystemAction.allCases.compactMap { action in
+      let settings = items[action.settingsKey] ?? ItemSettings()
+      guard settings.isEnabled else { return nil }
+      return ([action.title], settings.alias, result(for: action, alias: settings.alias))
+    }
+    let ranked = (appCandidates + linkCandidates + commandCandidates + systemCandidates)
       .compactMap { candidate -> (score: Int, result: SearchResult)? in
         let names = candidate.names + [candidate.alias].compactMap { $0 }
         guard let score = names.compactMap({ Fuzzy.score(trimmed, in: $0) }).max() else {
@@ -352,7 +359,7 @@ public enum Search {
     return results.isEmpty ? [] : [SearchSection(title: "Snippets", results: results)]
   }
 
-  /// Every app, Quicklink and command the Shortcuts page lists, in its three sections. Disabled
+  /// Every app, Quicklink, command and system action the Shortcuts page lists, by section. Disabled
   /// items are included so they can be turned back on; an app found twice is listed once.
   public static func catalog(apps: [AppEntry], quicklinks: [Quicklink]) -> [CatalogSection] {
     let uniqueApps = Dictionary(apps.map { ($0.settingsKey, $0) }) { first, _ in first }.values
@@ -375,6 +382,11 @@ public enum Search {
         entries: BuiltinCommand.allCases.map {
           CatalogEntry(target: .item($0.settingsKey), title: $0.title, kind: .command, appURL: nil)
         }),
+      CatalogSection(
+        title: "System Actions",
+        entries: SystemAction.allCases.map {
+          CatalogEntry(target: .item($0.settingsKey), title: $0.title, kind: .command, appURL: nil)
+        }),
     ]
   }
 
@@ -390,6 +402,12 @@ public enum Search {
         id: "quicklink:\(link.name)", title: link.name, subtitle: url.host() ?? "",
         keyword: link.keyword, kind: .quicklink, action: .open(url))
     }
+  }
+
+  private static func result(for action: SystemAction, alias: String?) -> SearchResult {
+    SearchResult(
+      id: action.settingsKey, title: action.title, subtitle: "System", keyword: alias,
+      kind: .command, action: .system(action))
   }
 
   private static func result(for command: BuiltinCommand, alias: String?) -> SearchResult {

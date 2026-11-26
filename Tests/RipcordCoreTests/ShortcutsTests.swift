@@ -155,9 +155,9 @@ import Testing
     #expect(fallback.flatMap(\.results).map(\.title) == ["GitHub"])
   }
 
-  @Test func catalogListsEveryItemInThreeSections() {
+  @Test func catalogListsEveryItemBySection() {
     let catalog = Search.catalog(apps: [remotePlay, photoshop], quicklinks: links)
-    #expect(catalog.map(\.title) == ["Applications", "Quicklinks", "Ripcord"])
+    #expect(catalog.map(\.title) == ["Applications", "Quicklinks", "Ripcord", "System Actions"])
     #expect(catalog[0].entries.map(\.title) == ["Adobe Photoshop 2026", "PS Remote Play"])
     #expect(catalog[0].entries[0].target == .item("com.adobe.Photoshop"))
     // The Shortcuts page lists disabled Quicklinks too, so they can be turned back on.

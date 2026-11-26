@@ -105,6 +105,7 @@ final class SettingsModel {
     case .launcher: "the Ripcord hotkey"
     case .item(let key):
       BuiltinCommand.allCases.first { $0.settingsKey == key }?.title
+        ?? SystemAction.allCases.first { $0.settingsKey == key }?.title
         ?? apps.first { $0.settingsKey == key }?.names[0]
         // Before the Shortcuts page has scanned the apps, ask Launch Services.
         ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: key).map {
