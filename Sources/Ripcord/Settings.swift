@@ -899,10 +899,9 @@ private struct ApplicationsPage: View {
   @State private var filter = ""
   /// The one app shown, by settings key, until the search is edited; the field shows its name.
   @State private var onlyApp: String?
-  /// An app asked for that the scan hasn't listed yet. Kept here, not on the model, so leaving
-  /// the page drops it; `rescanned` allows one fresh scan for an app installed since.
+  /// An app asked for, until the scan has listed the apps. Kept here, not on the model, so
+  /// leaving the page drops it.
   @State private var pendingApp: String?
-  @State private var rescanned = false
 
   private var entries: [CatalogEntry] {
     if let onlyApp { return model.appEntries.filter { $0.target == .item(onlyApp) } }
@@ -949,7 +948,6 @@ private struct ApplicationsPage: View {
       guard let key = model.requestedApp else { return }
       model.requestedApp = nil
       pendingApp = key
-      rescanned = false
       showRequestedApp()
     }
     .onChange(of: model.appEntries) { showRequestedApp() }
@@ -966,27 +964,21 @@ private struct ApplicationsPage: View {
   /// Shows the app Configure Command asked for alone, once the scan has listed it.
   private func showRequestedApp() {
     guard let key = pendingApp, !model.appEntries.isEmpty else { return }
+    pendingApp = nil
+    // One the scan doesn't list (run from Downloads, or installed since): the whole list,
+    // not an empty one nor the app asked for before.
     guard let entry = model.appEntries.first(where: { $0.target == .item(key) }) else {
-      // The whole list, not an empty one nor the app asked for before, while it isn't found.
       onlyApp = nil
       filter = ""
-      // Installed since the last scan, perhaps: look once more. A scan with nothing new sends
-      // no change, so the request ends here either way unless the app turns up.
-      if !rescanned {
-        rescanned = true
-        model.loadApps()
-      } else {
-        pendingApp = nil
-      }
       return
     }
-    pendingApp = nil
     // An edit on a row about to be hidden would go on unseen, a recording swallowing keys.
     model.stopRecording()
     model.editingAlias = nil
     onlyApp = key
     filter = entry.title
   }
+
 }
 
 private struct ShortcutRow: View {
