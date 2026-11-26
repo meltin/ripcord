@@ -701,7 +701,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       let draft = model.bookmarkDraft
       // A new bookmark's draft survives the panel closing, and an edit in between, as Create
       // Snippet's does, as when clicking the browser to copy its URL; it's cleared once saved.
-      if let kept = draft.original == nil && draft.isStarted ? draft : model.addDraft {
+      if let kept = model.addDraft ?? (draft.original == nil && draft.isStarted ? draft : nil) {
         model.bookmarkDraft = rebased(kept)
         model.addDraft = nil
       } else {
@@ -1091,7 +1091,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       )
     }
     // A new bookmark being typed waits for Add Bookmark.
-    if model.bookmarkDraft.original == nil, model.bookmarkDraft.isStarted {
+    if model.addDraft == nil, model.bookmarkDraft.original == nil, model.bookmarkDraft.isStarted {
       model.addDraft = model.bookmarkDraft
     }
     // The URL as written, not percent-encoded, so an edit leaves it alone.

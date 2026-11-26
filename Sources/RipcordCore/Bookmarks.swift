@@ -100,6 +100,11 @@ public struct BookmarkFile: Equatable, Sendable {
     var fence: String?
     for (index, line) in lines.enumerated() {
       let trimmed = line.text.trimmingCharacters(in: Self.blank)
+      // YAML front matter at the top is the file's settings, its `#` lines comments.
+      if index == 0, trimmed == "---" {
+        fence = "---"
+        continue
+      }
       if let open = fence {
         if trimmed.hasPrefix(open) { fence = nil }
         continue
@@ -144,13 +149,28 @@ public struct BookmarkFile: Equatable, Sendable {
   private func block(of bookmark: Bookmark) -> Range<Int> {
     let indent = bookmark.prefix.prefix(while: \.isWhitespace).count
     var end = bookmark.line + 1
-    while end < lines.count {
-      let text = lines[end].text
-      let trimmed = text.trimmingCharacters(in: Self.blank)
-      // A heading or code block, however indented, starts something else.
-      guard !trimmed.isEmpty, text.prefix(while: \.isWhitespace).count > indent,
-        Self.heading(trimmed) == nil, !trimmed.hasPrefix("```"), !trimmed.hasPrefix("~~~")
-      else { break }
+    let indented = { (line: Int) in
+      let text = self.lines[line].text
+      return !text.allSatisfy(\.isWhitespace) && text.prefix(while: \.isWhitespace).count > indent
+    }
+    while end < lines.count, indented(end) {
+      let trimmed = lines[end].text.trimmingCharacters(in: Self.blank)
+      // A heading, or a bookmark of its own however indented, isn't part of this one.
+      if Self.heading(trimmed) != nil
+        || Self.bookmark(lines[end].text, group: .init(title: "", line: -1), line: end) != nil
+      {
+        break
+      }
+      // An indented code block goes with it whole, if it closes while still indented.
+      if let marker = ["```", "~~~"].first(where: trimmed.hasPrefix) {
+        guard
+          let close = lines.indices.dropFirst(end + 1).first(where: {
+            !indented($0) || lines[$0].text.trimmingCharacters(in: Self.blank).hasPrefix(marker)
+          }), indented(close)
+        else { break }
+        end = close + 1
+        continue
+      }
       end += 1
     }
     return bookmark.line..<end
@@ -231,8 +251,10 @@ public struct BookmarkFile: Equatable, Sendable {
     }
     if let original, let target, original.groupLine == target.line {
       var file = self
-      file.lines[original.line].text = text
-      return (file, original.line, text)
+      // Spaces it ended with stay: two make a line break in Markdown.
+      let trailing = original.text.reversed().prefix(while: \.isWhitespace).reversed()
+      file.lines[original.line].text = text + String(trailing)
+      return (file, original.line, file.lines[original.line].text)
     }
     var file = self
     var placed = [text]
@@ -256,8 +278,10 @@ public struct BookmarkFile: Equatable, Sendable {
       after.bookmarks.last { $0.line > headingLine && $0.line < next }
       .map { file.block(of: $0).upperBound - 1 }
       // No group with nothing there yet: just above the first heading, below a title, front
-      // matter or prose that opens the file.
-      ?? (headingLine == -1 ? next - 1 : headingLine)
+      // matter or prose that opens the file; at the top when the file ends in an open code
+      // block, which the end would be inside.
+      ?? (headingLine == -1 && !(after.headings.isEmpty && after.endsInFence)
+        ? next - 1 : headingLine)
     for (offset, line) in placed.enumerated() { file.insert(line, after: last + offset) }
     return (file, last + 1, text)
   }

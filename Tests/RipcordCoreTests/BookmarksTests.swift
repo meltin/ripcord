@@ -293,4 +293,34 @@ import Testing
     let file = BookmarkFile(text: "- [A](https://a.example)  \n")
     #expect(try #require(file.bookmarks.first).isEditable)
   }
+
+  @Test func keepsNestedBookmarksAndIndentedCodeApart() throws {
+    let nested = BookmarkFile(text: "# Dev\n- [A](https://a.example)\n  - [B](https://b.example)\n")
+    let a = try #require(nested.bookmarks.first)
+    #expect(
+      nested.deleting(line: a.line, text: a.text)?.text == "# Dev\n  - [B](https://b.example)\n")
+    let code = BookmarkFile(text: "# Dev\n- [A](https://a.example)\n  ```\n  code\n  ```\n")
+    let dev = try #require(code.headings.first)
+    #expect(
+      try save(code, "N", "https://n.example", under: .heading(dev)).file.text
+        == "# Dev\n- [A](https://a.example)\n  ```\n  code\n  ```\n- [N](https://n.example)\n")
+  }
+
+  @Test func addsToNoGroupClearOfCodeAndFrontMatter() throws {
+    let open = BookmarkFile(text: "Notes\n```\ncode\n")
+    #expect(
+      try save(open, "N", "https://n.example", under: .heading(.init(title: "", line: -1))).file
+        .text == "- [N](https://n.example)\nNotes\n```\ncode\n")
+    let front = BookmarkFile(text: "---\n# generated\ntitle: x\n---\n# Dev\n")
+    #expect(front.headings.map(\.title) == ["Dev"])
+  }
+
+  @Test func keepsTrailingSpacesOnAnEditedLine() throws {
+    let file = BookmarkFile(text: "# A\n- [A](https://a.example)  \n")
+    let a = try #require(file.bookmarks.first)
+    let heading = try #require(file.headings.first)
+    #expect(
+      try save(file, "A2", "https://a.example", replacing: a, under: .heading(heading)).file.text
+        == "# A\n- [A2](https://a.example)  \n")
+  }
 }
