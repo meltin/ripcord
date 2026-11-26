@@ -446,7 +446,9 @@ private struct SnippetForm: View {
     // Clear of the floating footer, with the same gap the sides have.
     .padding(.bottom, LauncherController.footerHeight + 12)
     .frame(maxHeight: .infinity, alignment: .top)
-    .onAppear { focus = .text }
+    // On the next pass: as the form appears, the search field it replaces is still first
+    // responder, and a panel opened straight into the form isn't key yet.
+    .onAppear { DispatchQueue.main.async { focus = .text } }
     // Back to the name once the icon list closes, however it closed.
     .onChange(of: model.isPickingIcon) { if !model.isPickingIcon { focus = .name } }
   }
