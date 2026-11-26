@@ -35,6 +35,9 @@
   it, as in `caffeinate 1h 30m`, to stop on its own. A cup with the time left shows in the menu bar
 - Sleep Timer: type a time after it, as in `sleep timer 30m`, then pick Sleep or Turn Off Display;
   a moon with the time left shows in the menu bar until it fires or Stop Sleep Timer
+- Color Picker: Pick Color copies a color from anywhere on screen in the format set on its
+  settings page (HEX, RGB, HSL, SwiftUI or NSColor); Color History lists the colors picked, to copy
+  in any format
 - HTTP Status Codes: look a code up by number or name, grouped by hundred; Return opens its MDN
   page and ⌘K copies the code or its name
 - CleanShot X: Capture Area, Window, Fullscreen and Previous Area, Scrolling Capture, Record
@@ -119,6 +122,7 @@ the settings window opens. The settings window writes every change back to it.
     "folders": ["~/dev"], "depth": 3,
     "openWith": { "return": "/Applications/Visual Studio Code.app", "cmd": "/Applications/Ghostty.app" }
   },
+  "colorFormat": "hex",
   "snippets": [
     { "name": "Address", "keyword": "addr", "text": "1 Infinite Loop\nCupertino", "icon": "house",
       "tags": ["home"] }

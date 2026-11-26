@@ -48,7 +48,7 @@ struct OpenMenu {
 
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
-  case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes
+  case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors
 
   /// The command whose list this is; nil for the root search.
   var command: BuiltinCommand? {
@@ -59,6 +59,7 @@ enum LauncherMode {
     case .snippetForm: .createSnippet
     case .repositories: .searchRepositories
     case .httpStatusCodes: .httpStatusCodes
+    case .colors: .colorHistory
     }
   }
 }
@@ -232,6 +233,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private var isPlacing = false
   private let clipboard = ClipboardMonitor(
     directory: URL.applicationSupportDirectory.appending(path: "Ripcord/Clipboard"))
+  private var colors = ColorHistory(
+    fileURL: URL.applicationSupportDirectory.appending(path: "Ripcord/colors.json"))
+  /// What Pick Color copies, and Color History lists first.
+  var colorFormat = ColorFormat.hex {
+    didSet { if colorFormat != oldValue, model.mode == .colors { refreshRows() } }
+  }
   /// Opened straight into a command by its hotkey, so Esc closes the panel instead of going
   /// back to the root search.
   private var closesOnCancel = false
@@ -439,6 +446,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return Search.clipboardSections(for: query, history: clipboard.history)
     }
     if model.mode == .httpStatusCodes { return Search.httpStatusSections(for: query) }
+    if model.mode == .colors {
+      return Search.colorSections(for: query, history: colors, format: colorFormat)
+    }
     if model.mode == .repositories {
       return Search.repositorySections(
         for: query, repositories: repositories, settings: repositorySettings)
@@ -631,6 +641,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.clipboardHistory) { return open(.clipboard) }
     if action == .run(.searchSnippets) { return open(.snippets) }
     if action == .run(.httpStatusCodes) { return open(.httpStatusCodes) }
+    if action == .run(.colorHistory) { return open(.colors) }
+    if case .deleteColor(let hex) = action {
+      model.menu = nil
+      do { try colors.delete(hex: hex) } catch { onError(error.localizedDescription) }
+      return refreshRows(selecting: model.selected?.id)
+    }
     if action == .run(.sleepTimer) {
       // As Raycast asks for its argument: the title in the field, the time to be typed after it.
       // Set Alias…'s card would stay up over rows that changed under it.
@@ -717,8 +733,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onSleepTimer(seconds, displayOnly)
     case .run(.stopSleepTimer):
       onStopSleepTimer()
+    case .run(.pickColor):
+      pickColor()
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
-      .run(.searchRepositories), .run(.httpStatusCodes), .run(.sleepTimer),
+      .run(.searchRepositories), .run(.httpStatusCodes), .run(.sleepTimer), .run(.colorHistory),
+      .deleteColor,
       .run(.createSnippet), .clip, .snippet, .system, .window:
       break  // Handled above, without hiding the panel.
     case .run(.quit):
@@ -842,6 +861,22 @@ final class LauncherController: NSObject, NSWindowDelegate {
     } else if editor.kind == .alias {
       // The alias field had the focus.
       model.searchFieldID += 1
+    }
+  }
+
+  /// Shows macOS's loupe; the color clicked is copied in the default format and kept in Color
+  /// History. Esc cancels it.
+  private func pickColor() {
+    NSColorSampler().show { [weak self] picked in
+      guard let picked, let rgb = picked.usingColorSpace(.sRGB) else { return }
+      MainActor.assumeIsolated {
+        guard let self else { return }
+        let color = PickedColor(
+          red: Double(rgb.redComponent), green: Double(rgb.greenComponent),
+          blue: Double(rgb.blueComponent))
+        do { try self.colors.add(color) } catch { self.onError(error.localizedDescription) }
+        self.perform(.copy(self.colorFormat.string(for: color)))
+      }
     }
   }
 

@@ -12,11 +12,13 @@ public struct Config: Codable, Equatable, Sendable {
   public var inputSource: String?
   public var snippets: [Snippet]
   public var repositories: RepositorySettings
+  /// What Pick Color copies, and Color History lists first.
+  public var colorFormat: ColorFormat
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
     items: [String: ItemSettings] = [:], inputSource: String? = nil, snippets: [Snippet] = [],
-    repositories: RepositorySettings = RepositorySettings()
+    repositories: RepositorySettings = RepositorySettings(), colorFormat: ColorFormat = .hex
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
@@ -25,6 +27,7 @@ public struct Config: Codable, Equatable, Sendable {
     self.inputSource = inputSource
     self.snippets = snippets
     self.repositories = repositories
+    self.colorFormat = colorFormat
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -39,6 +42,7 @@ public struct Config: Codable, Equatable, Sendable {
     repositories =
       try container.decodeIfPresent(RepositorySettings.self, forKey: .repositories)
       ?? RepositorySettings()
+    colorFormat = try container.decodeIfPresent(ColorFormat.self, forKey: .colorFormat) ?? .hex
   }
 
   public static let `default` = Config(
