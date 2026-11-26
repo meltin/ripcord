@@ -469,6 +469,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if let resumed {
       // The query, selection and any draft are as they were; only the rows are re-read.
       if resumed == .bookmarks, !loadBookmarks() { return show() }
+      // Notes may have been written or changed in the window meanwhile.
+      if resumed == .notes { notes = noteStore.list() }
       model.mode = resumed
       refreshRows(selecting: model.selected?.id)
     } else {
@@ -1324,6 +1326,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return open(.notes)
     }
     if case .deleteNote(let url) = action {
+      let id = model.selected?.id
       model.menu = nil
       do {
         if let note = noteStore.read(url) { try noteStore.trash(note) }
@@ -1332,7 +1335,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
         onError(error.localizedDescription)
       }
       notes = noteStore.list()
-      return update(model.query)
+      return refreshRows(selecting: id)
     }
     if case .clip(let id, let clipAction) = action { return perform(clipAction, on: id) }
     if case .snippet(let index, let snippetAction) = action {

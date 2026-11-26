@@ -47,7 +47,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     window.contentView = NSHostingView(
       rootView: NotesView(
         model: model, onCreate: { [weak self] in self?.create() },
-        onBrowse: { [weak self] in self?.onBrowse() },
+        onBrowse: { [weak self] in self?.browse() },
         onTextChange: { [weak self] in self?.scheduleSave() },
         onReload: { [weak self] in self?.reload() },
         onSaveAsNew: { [weak self] in self?.saveAsNew() }))
@@ -80,15 +80,34 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
       }
     case .create: create()
     case .open(let url):
-      guard let note = store.read(url) else { return NSSound.beep() }
-      flush()
+      // Saved first, so the note read back is what's typed when it's this one.
+      guard flushed(), let note = store.read(url) else { return NSSound.beep() }
       show(note)
     case .deleted(let url):
       guard model.note.url == url else { return }
-      // Its text is in the Trash now; nothing is left to save.
+      // Its text is in the Trash now; nothing is left to save. The launcher keeps the keys.
       pendingSave?.cancel()
-      show(store.list().first ?? store.newNote(), focusing: window.isVisible)
+      show(store.list().first ?? store.newNote(), focusing: false)
     }
+  }
+
+  /// Saves first, so Search Notes lists what's typed.
+  private func browse() {
+    flush()
+    onBrowse()
+  }
+
+  /// Saves what's typed; false when it couldn't be, so the note isn't left and the text lost.
+  private func flushed() -> Bool {
+    flush()
+    if model.problem != nil { bringForward() }
+    return model.problem == nil
+  }
+
+  /// On quitting: what couldn't be saved over a note changed outside is kept as a new one.
+  func flushForQuit() {
+    flush()
+    if model.problem != nil { saveAsNew() }
   }
 
   /// Saves what's typed now, as on switching notes, closing the window or quitting.
@@ -108,7 +127,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   }
 
   private func create() {
-    flush()
+    guard flushed() else { return NSSound.beep() }
     show(store.newNote())
   }
 
@@ -169,6 +188,25 @@ final class NotesPanel: NSPanel {
 
   override func cancelOperation(_ sender: Any?) {
     onEscape()
+  }
+
+  /// Ripcord has no Edit menu in front, so ⌘X/C/V/A/Z are passed to the editor by hand, as the
+  /// launcher passes them to its fields.
+  override func performKeyEquivalent(with event: NSEvent) -> Bool {
+    let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+    let key = event.charactersIgnoringModifiers?.lowercased()
+    let editing = [
+      "x": #selector(NSText.cut(_:)), "c": #selector(NSText.copy(_:)),
+      "v": #selector(NSText.paste(_:)), "a": #selector(NSText.selectAll(_:)),
+    ]
+    if flags == .command, let selector = key.flatMap({ editing[$0] }) {
+      return NSApp.sendAction(selector, to: nil, from: self)
+    }
+    if key == "z", flags == .command || flags == [.command, .shift] {
+      return NSApp.sendAction(
+        flags.contains(.shift) ? Selector(("redo:")) : Selector(("undo:")), to: nil, from: self)
+    }
+    return super.performKeyEquivalent(with: event)
   }
 }
 

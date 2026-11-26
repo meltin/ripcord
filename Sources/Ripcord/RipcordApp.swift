@@ -108,7 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   /// What's typed in a note is saved before quitting, as its autosave may not have run yet.
   func applicationWillTerminate(_ notification: Notification) {
-    notes.flush()
+    notes.flushForQuit()
   }
 
   /// Opening Ripcord.app again shows the panel, a way in when the hotkey or menu bar icon fails.

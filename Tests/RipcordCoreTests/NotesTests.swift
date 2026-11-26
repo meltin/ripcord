@@ -38,13 +38,14 @@ import Testing
   }
 
   @Test func neverCreatesOverAnExistingFile() throws {
-    let new = store.newNote()
+    let date = Date(timeIntervalSince1970: 1_800_000_000)
+    let new = store.newNote(at: date)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     try "already here".write(to: new.url, atomically: true, encoding: .utf8)
     #expect(throws: NoteStore.SaveError.exists) { try store.save("new", over: new) }
     #expect(try String(contentsOf: new.url, encoding: .utf8) == "already here")
-    // A name picked now steps past the taken one.
-    #expect(store.newNote(at: Date(timeIntervalSince1970: 0)).url != new.url)
+    // A name picked at the same second steps past the taken one.
+    #expect(store.newNote(at: date).url.lastPathComponent.hasSuffix(" 2.md"))
   }
 
   @Test func listsUTF8MarkdownOnlyNewestFirst() throws {
