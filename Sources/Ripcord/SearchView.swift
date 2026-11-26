@@ -256,7 +256,10 @@ private struct ResultRow: View {
         Text(result.subtitle).font(.system(size: 13)).foregroundStyle(.secondary)
           .lineLimit(1).truncationMode(.head)
       } else if showsKind {
-        Text(result.kind.label).font(.system(size: 13)).foregroundStyle(.secondary)
+        // Raycast's Draft label is green.
+        Text(result.kind.label).font(.system(size: 13))
+          .foregroundStyle(
+            result.kind == .draft ? AnyShapeStyle(Color.green) : AnyShapeStyle(.secondary))
       }
     }
     .padding(.horizontal, 12)
@@ -345,6 +348,10 @@ private struct ResultIcon: View {
       tile("bookmark.fill", .yellow)
     case .toggleFavorite, .moveFavorite:
       tile("star", .yellow)
+    case .openDraft(let form), .discardDraft(let form):
+      tile(
+        (form == .snippet ? BuiltinCommand.createSnippet : .addBookmark).symbol,
+        (form == .snippet ? BuiltinCommand.createSnippet : .addBookmark).color)
     case .emoji, .emojiSkinToneMenu, .setEmojiSkinTone:
       tile(BuiltinCommand.searchEmoji.symbol, BuiltinCommand.searchEmoji.color)
     case .cleanKeyboard:
@@ -1707,6 +1714,7 @@ extension SearchResult.Kind {
     case .color: "Color"
     case .bookmark: "Bookmark"
     case .emoji: "Emoji"
+    case .draft: "Draft"
     }
   }
 }
