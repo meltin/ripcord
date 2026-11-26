@@ -185,7 +185,9 @@ import Testing
     let hotkeys = SearchResult.hotkeys(
       items: [key: ItemSettings(hotkey: "cmd+shift+8"), "other": ItemSettings(alias: "o")],
       quicklinks: links)
-    #expect(hotkeys == [key: "cmd+shift+8", "quicklink:Google": "ctrl+g"])
+    #expect(hotkeys == [key: "cmd+shift+8", links[0].rowID: "ctrl+g"])
+    let link = try #require(Search.results(for: "google", apps: [], quicklinks: links).first)
+    #expect(link.itemKey.flatMap { hotkeys[$0] } == "ctrl+g")
     let command = try #require(
       Search.results(for: "search snippets", apps: [], quicklinks: []).first)
     #expect(command.itemKey.flatMap { hotkeys[$0] } == "cmd+shift+8")

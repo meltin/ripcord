@@ -246,7 +246,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   {
     let fromItems = items.compactMapValues(\.hotkey)
     let fromLinks = quicklinks.compactMap { link in
-      link.hotkey.map { ("quicklink:\(link.name)", $0) }
+      link.hotkey.map { (link.rowID, $0) }
     }
     return fromItems.merging(fromLinks) { first, _ in first }
   }
@@ -567,7 +567,7 @@ public enum Search {
   private static func result(for link: Quicklink) -> SearchResult? {
     link.url(for: "").map { url in
       SearchResult(
-        id: "quicklink:\(link.name)", title: link.name, subtitle: url.host() ?? "",
+        id: link.rowID, title: link.name, subtitle: url.host() ?? "",
         keyword: link.keyword, kind: .quicklink, action: .open(url))
     }
   }

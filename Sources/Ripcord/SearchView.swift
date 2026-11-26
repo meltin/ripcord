@@ -139,6 +139,8 @@ struct SearchView: View {
             }
           }
         }
+        // Built afresh when the settings change; see LauncherModel.settingsVersion.
+        .id(model.settingsVersion)
         .padding(.horizontal, 8)
         .padding(.bottom, LauncherController.footerHeight)
       }

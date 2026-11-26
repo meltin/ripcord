@@ -26,6 +26,9 @@ struct ConfigureEditor {
   let settingsKey: String
   /// The row it's for, named with its icon at the bottom of the card.
   let row: SearchResult
+  /// The row selected when it opened, selected again when it closes: in a command's own list
+  /// that's a clip or snippet, where `row` is the command.
+  let selectedID: String
   var alias = ""
   /// The hotkey set, shown as keycaps; nil when there's none yet.
   var hotkey: String?
@@ -76,6 +79,9 @@ final class LauncherModel {
   var configureEditor: ConfigureEditor?
   /// Each row's hotkey by `SearchResult.itemKey`, shown on the selected row as Raycast does.
   var hotkeys: [String: String] = [:]
+  /// Bumped when the settings change, so the list is built afresh: the lazy stack kept drawing
+  /// a row whose ID stayed the same with its old alias.
+  var settingsVersion = 0
   /// Bumped to remount the search field, which takes focus back as it appears.
   var searchFieldID = 0
   /// The config's snippets, for the preview of the selected one.
@@ -147,6 +153,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     didSet {
       guard quicklinks != oldValue else { return }
       model.hotkeys = SearchResult.hotkeys(items: items, quicklinks: quicklinks)
+      model.settingsVersion += 1
       update(model.query)
     }
   }
@@ -154,6 +161,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     didSet {
       guard items != oldValue else { return }
       model.hotkeys = SearchResult.hotkeys(items: items, quicklinks: quicklinks)
+      model.settingsVersion += 1
       clipboard.isEnabled = items[BuiltinCommand.clipboardHistory.settingsKey]?.isEnabled ?? true
       update(model.query)
     }
@@ -473,7 +481,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
       case .editAlias(let text): model.configureEditor?.alias = text
       case .submit where editor.kind == .alias:
         // Only a fresh press: Return held from the menu item that opened the card mustn't save.
-        guard NSApp.currentEvent?.isARepeat != true else { return }
+        guard NSApp.currentEvent.map({ $0.type == .keyDown && $0.isARepeat }) != true else {
+          return
+        }
         saveAlias(editor)
       case .cancel: closeEditor(backToMenu: editor.kind == .hotkey)
       // A click outside the card.
@@ -557,11 +567,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     // ⌃ too, for Raycast's ⌃X Delete.
     // Shortcuts would act behind a question; only its Return and Esc count.
     guard model.confirmation == nil, !flags.isDisjoint(with: [.command, .control]),
-      // ⇧⌘, by its key: charactersIgnoringModifiers keeps Shift and gives "<". The rest as
-      // before, which reads Latin letters under Kana or Dvorak-QWERTY ⌘ too.
-      let key =
-        event.keyCode == UInt16(kVK_ANSI_Comma)
-        ? "," : event.charactersIgnoringModifiers?.lowercased()
+      // As ⌘ alone types it: Shift left out, so ⇧⌘, reads as "," (charactersIgnoringModifiers
+      // keeps Shift and gives "<"), and ⌘ kept, so Kana and Dvorak-QWERTY ⌘ give Latin letters.
+      let key = event.characters(byApplyingModifiers: .command)?.lowercased()
     else { return false }
     // An accessory app has no Edit menu, so ⌘X/C/V/A never reach the search field otherwise.
     let editing = [
@@ -734,7 +742,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       model.mode.command.flatMap { $0.settingsKey == key ? Search.row(for: $0) : nil } ?? selected
     model.menu = nil
     model.configureEditor = ConfigureEditor(
-      kind: kind, settingsKey: key, row: row, alias: items[key]?.alias ?? "",
+      kind: kind, settingsKey: key, row: row, selectedID: selected.id,
+      alias: items[key]?.alias ?? "",
       hotkey: items[key]?.hotkey)
     guard kind == .hotkey else { return }
     // Ripcord's hotkeys would fire instead of being recorded.
@@ -792,7 +801,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     model.configureEditor = nil
     // Saving re-reads the settings, which starts the list over at its first row.
-    refreshRows(selecting: editor.row.id)
+    refreshRows(selecting: editor.selectedID)
     if backToMenu {
       perform(.configureMenu(editor.settingsKey))
     } else if editor.kind == .alias {

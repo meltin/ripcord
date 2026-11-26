@@ -4,6 +4,9 @@ import Foundation
 /// The keyword doubles as its alias, and the link keeps its own hotkey and on/off switch, so a
 /// rename never strands them.
 public struct Quicklink: Codable, Equatable, Sendable {
+  /// Its row's ID in the panel, which its hotkey is shown by too.
+  public var rowID: String { "quicklink:\(name)" }
+
   public var name: String
   public var url: String
   public var keyword: String?
