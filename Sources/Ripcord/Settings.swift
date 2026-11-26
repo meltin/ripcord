@@ -246,7 +246,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     DispatchQueue.main.async { NSApp.activate() }
   }
 
-  /// Closes the window on Esc while it's open, as Raycast's settings do.
+  /// Closes the window on Esc and steps through the pages on ↑ and ↓ while it's open, as
+  /// Raycast's settings do. An AppKit monitor, since SwiftUI's key handlers missed held keys.
   private var escMonitor: Any?
 
   init(model: SettingsModel) { self.model = model }
@@ -261,7 +262,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     window.makeKey()
     if escMonitor == nil {
       escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-        guard let self, event.keyCode == UInt16(kVK_Escape), event.window === window,
+        guard let self else { return event }
+        if let step = pageStep(event) {
+          NotificationCenter.default.post(name: Self.stepPage, object: step)
+          return nil
+        }
+        guard event.keyCode == UInt16(kVK_Escape), event.window === window,
           // Esc stops a recording, and cancels Japanese input that's still being composed.
           model.recordingTarget == nil,
           // Esc in an alias being typed ends the edit instead.
@@ -275,6 +281,24 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     // The policy change lands on the next run loop pass; asking before it is asking as an
     // accessory app.
     DispatchQueue.main.async { NSApp.activate() }
+  }
+
+  /// Posted with +1 or -1 for the sidebar to move to the next or previous page.
+  static let stepPage = Notification.Name("RipcordSettingsStepPage")
+
+  /// +1 for ↓ and -1 for ↑, held down too, unless a field, an alias or a hotkey recording has
+  /// the keys.
+  private func pageStep(_ event: NSEvent) -> Int? {
+    guard event.window === window,
+      event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
+      model.recordingTarget == nil, model.editingAlias == nil,
+      !(window.firstResponder is NSText)
+    else { return nil }
+    switch Int(event.keyCode) {
+    case kVK_DownArrow: return 1
+    case kVK_UpArrow: return -1
+    default: return nil
+    }
   }
 
   func windowWillClose(_ notification: Notification) {
@@ -447,6 +471,7 @@ struct SettingsView: View {
 }
 
 /// The pages, on the translucent sidebar material: General, then a gap, then the extensions.
+/// ↑ and ↓ step through the pages, as in Raycast's settings.
 private struct Sidebar: View {
   @Binding var page: SettingsPage
 
@@ -465,11 +490,22 @@ private struct Sidebar: View {
     }
     .scrollIndicators(.never)
     .background(SidebarMaterial())
+    .onReceive(NotificationCenter.default.publisher(for: SettingsWindowController.stepPage)) {
+      if let offset = $0.object as? Int { step(offset) }
+    }
+  }
+
+  private func step(_ offset: Int) {
+    let pages = SettingsPage.allCases
+    guard let index = pages.firstIndex(of: page) else { return }
+    page = pages[min(max(index + offset, 0), pages.count - 1)]
   }
 
   private func row(_ item: SettingsPage) -> some View {
     Button {
       page = item
+      // Out of a field on the page, so the arrows step through pages again.
+      NSApp.keyWindow?.makeFirstResponder(nil)
     } label: {
       HStack(spacing: 10) {
         PageIcon(page: item, size: 22)
@@ -549,6 +585,7 @@ private struct PageScroll<Content: View>: View {
       .padding(.bottom, 28)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
+    .thinScroller()
   }
 }
 
@@ -607,7 +644,6 @@ private struct GeneralPage: View {
         .fixedSize()
         // Read on each visit, so a source enabled meanwhile shows up.
         .onAppear { inputSources = InputSource.selectable() }
-    .thinScroller()
       }
     }
     Card {
@@ -814,6 +850,7 @@ private struct ApplicationsPage: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .thinScroller()
       }
       .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
       .clipShape(RoundedRectangle(cornerRadius: 14))
@@ -873,7 +910,6 @@ private struct AliasField: View {
 
   private var isEditing: Bool { model.editingAlias == target }
 
-        .thinScroller()
   var body: some View {
     let alias = model.alias(of: target)
     Group {
@@ -1132,6 +1168,8 @@ private struct OpenWithRow: View {
           model.config.repositories.openWith[key.rawValue] = picked?.path
           isPicking = false
         }
+        // Frosted, between the default glass that let what's behind wash out the names and opaque.
+        .presentationBackground(.regularMaterial)
       }
     }
     .font(.system(size: 13))
@@ -1192,14 +1230,9 @@ private struct AppPicker: View {
         .padding(.horizontal, 14)
         .frame(height: 40)
         .onChange(of: query) { highlighted = 0 }
-        // Frosted, between the default glass that let what's behind wash out the names and opaque.
-        .presentationBackground(.regularMaterial)
-        .onKeyPress(.downArrow) {
-          highlighted = min(highlighted + 1, max(rows.count - 1, 0))
-          return .handled
-        }
-        .onKeyPress(.upArrow) {
-          highlighted = max(highlighted - 1, 0)
+        .onKeyPress(keys: [.downArrow, .upArrow], phases: [.down, .repeat]) { press in
+          let next = highlighted + (press.key == .downArrow ? 1 : -1)
+          highlighted = min(max(next, 0), max(rows.count - 1, 0))
           return .handled
         }
         .onSubmit { if rows.indices.contains(highlighted) { onPick(rows[highlighted]?.url) } }
