@@ -42,7 +42,9 @@ public struct Config: Codable, Equatable, Sendable {
     repositories =
       try container.decodeIfPresent(RepositorySettings.self, forKey: .repositories)
       ?? RepositorySettings()
-    colorFormat = try container.decodeIfPresent(ColorFormat.self, forKey: .colorFormat) ?? .hex
+    // An unknown value (say "SwiftUI", as Settings titles it) reads as HEX rather than leaving
+    // the whole file unreadable.
+    colorFormat = (try? container.decodeIfPresent(ColorFormat.self, forKey: .colorFormat)) ?? .hex
   }
 
   public static let `default` = Config(

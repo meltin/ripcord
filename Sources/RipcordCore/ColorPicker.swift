@@ -90,30 +90,38 @@ public struct ColorHistory: Sendable {
   /// Older picks beyond this are dropped.
   public static let limit = 100
 
-  /// Reads `fileURL`, or starts empty.
+  /// Reads `fileURL`, or starts empty. A file that can't be read is moved aside rather than
+  /// overwritten by the next pick, as Clipboard History does.
   public init(fileURL: URL) {
     self.fileURL = fileURL
-    colors =
-      (try? Data(contentsOf: fileURL))
-      .flatMap { try? JSONDecoder().decode([PickedColor].self, from: $0) } ?? []
+    guard let data = try? Data(contentsOf: fileURL) else { return }
+    do {
+      colors = try JSONDecoder().decode([PickedColor].self, from: data)
+    } catch {
+      try? FileManager.default.moveItem(
+        at: fileURL,
+        to: fileURL.deletingLastPathComponent().appending(
+          path: "colors-unreadable-\(UUID().uuidString).json"))
+    }
   }
 
   /// Puts `color` first; picking the same color again moves it up instead of listing it twice.
   public mutating func add(_ color: PickedColor) throws {
-    colors = Array(([color] + colors.filter { $0.hex != color.hex }).prefix(Self.limit))
-    try save()
+    try save(Array(([color] + colors.filter { $0.hex != color.hex }).prefix(Self.limit)))
   }
 
   public mutating func delete(hex: String) throws {
-    colors = colors.filter { $0.hex != hex }
-    try save()
+    try save(colors.filter { $0.hex != hex })
   }
 
-  private func save() throws {
+  /// Writes `new`, and only then shows it, so the list never differs from the file.
+  private mutating func save(_ new: [PickedColor]) throws {
     try FileManager.default.createDirectory(
       at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try JSONEncoder().encode(colors).write(to: fileURL, options: .atomic)
+    try JSONEncoder().encode(new).write(to: fileURL, options: .atomic)
+    colors = new
   }
+
 }
 
 extension Search {
@@ -122,11 +130,11 @@ extension Search {
     for query: String, history: ColorHistory, format: ColorFormat
   ) -> [SearchSection] {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
+    // HEX, RGB and HSL only: the code formats' labels ("red:", "Color") would match every color.
+    let searched: [ColorFormat] = [.hex, .rgb, .hsl]
     let results = history.colors.filter { color in
       trimmed.isEmpty
-        || ColorFormat.allCases.contains {
-          $0.string(for: color).localizedStandardContains(trimmed)
-        }
+        || searched.contains { $0.string(for: color).localizedStandardContains(trimmed) }
     }
     .map { color in
       // The default format first, on Return; the others after it.

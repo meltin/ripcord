@@ -41,6 +41,23 @@ import Testing
     #expect(ColorHistory(fileURL: file).colors.map(\.hex) == ["#000000"])
   }
 
+  @Test func movesAnUnreadableHistoryAsideRatherThanOverwritingIt() throws {
+    let folder = FileManager.default.temporaryDirectory.appending(path: "\(UUID())")
+    defer { try? FileManager.default.removeItem(at: folder) }
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let file = folder.appending(path: "colors.json")
+    try Data("not json".utf8).write(to: file)
+    var history = ColorHistory(fileURL: file)
+    try history.add(orange)
+    let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+    #expect(names.contains { $0.hasPrefix("colors-unreadable-") })
+  }
+
+  @Test func readsAnUnknownFormatAsHex() throws {
+    let data = Data(#"{"hotkey": "ctrl+space", "quicklinks": [], "colorFormat": "SwiftUI"}"#.utf8)
+    #expect(try JSONDecoder().decode(Config.self, from: data).colorFormat == .hex)
+  }
+
   @Test func listsInTheDefaultFormatAndCopiesTheRest() throws {
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: file) }
@@ -57,6 +74,8 @@ import Testing
     #expect(row.actions.last?.action == .deleteColor("#FF8000"))
     // Any format matches the search.
     #expect(!Search.colorSections(for: "ff80", history: history, format: .rgb).isEmpty)
+    // The code formats' labels don't match every color.
+    #expect(Search.colorSections(for: "red", history: history, format: .rgb).isEmpty)
     #expect(Search.colorSections(for: "zzz", history: history, format: .rgb).isEmpty)
   }
 }
