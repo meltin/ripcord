@@ -47,10 +47,16 @@ struct OpenMenu {
   var selection = 0
   /// "Search for actions…", typed while the menu is open; `selection` indexes `shown`.
   var filter = ""
+  /// The app a paste goes to, which the card names ("Paste to Rex"), so the filter matches it.
+  var pasteTarget: String?
 
   var shown: [MenuAction] {
     let typed = filter.trimmingCharacters(in: .whitespaces)
-    return typed.isEmpty ? items : items.filter { $0.title.localizedStandardContains(typed) }
+    return typed.isEmpty
+      ? items
+      : items.filter {
+        Ripcord.title(of: $0.action, else: $0.title, pasteTarget).localizedStandardContains(typed)
+      }
   }
 }
 
@@ -718,16 +724,40 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Letters typed while a menu is open go to its "Search for actions…", and Delete takes the
   /// last one back; arrows, Return and Esc still reach the field, and shortcuts still fire.
   private func typeIntoMenu(_ event: NSEvent) -> Bool {
-    guard model.menu != nil, model.configureEditor == nil, model.confirmation == nil,
-      event.modifierFlags.isDisjoint(with: [.command, .control])
-    else { return false }
-    if event.keyCode == UInt16(kVK_Delete) {
-      // Read first: reading the menu while writing it in one statement traps.
-      let filter = model.menu?.filter ?? ""
-      model.menu?.filter = String(filter.dropLast())
+    guard model.menu != nil, model.configureEditor == nil, model.confirmation == nil else {
+      return false
+    }
+    // Read first: reading the menu while writing it in one statement traps.
+    let filter = model.menu?.filter ?? ""
+    if event.keyCode == UInt16(kVK_Delete) || event.keyCode == UInt16(kVK_ForwardDelete) {
+      // Nothing typed: the key does nothing, and the selection stays.
+      guard !filter.isEmpty else { return true }
+      let flags = event.modifierFlags
+      // ⌘⌫ clears it, ⌥⌫ takes the last word, ⌫ the last letter, as a field does.
+      let kept =
+        flags.contains(.command)
+        ? ""
+        : flags.contains(.option)
+          ? String(
+            filter.trimmingCharacters(in: .whitespaces).reversed()
+              .drop { !$0.isWhitespace }.reversed())
+          : String(filter.dropLast())
+      model.menu?.filter = kept
       model.menu?.selection = 0
       return true
     }
+    // ⌘V pastes into the filter, one line of it.
+    if event.modifierFlags.intersection([.command, .control, .option]) == .command,
+      event.charactersIgnoringModifiers?.lowercased() == "v"
+    {
+      let pasted = NSPasteboard.general.string(forType: .string) ?? ""
+      model.menu?.filter =
+        filter + (pasted.split(whereSeparator: \.isNewline).first.map(String.init) ?? "")
+      model.menu?.selection = 0
+      return true
+    }
+    // Other ⌘ and ⌃ keys are shortcuts, for the menu's actions.
+    guard event.modifierFlags.isDisjoint(with: [.command, .control]) else { return false }
     // Printable text only: arrows and the like come as function-key characters.
     guard let text = event.characters, !text.isEmpty,
       text.unicodeScalars.allSatisfy({
@@ -782,7 +812,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return
     }
     if !wantsRoot, let selected = model.selected {
-      model.menu = OpenMenu(title: selected.title, items: selected.actions, isRoot: false)
+      model.menu = OpenMenu(
+        title: selected.title, items: selected.actions, isRoot: false,
+        pasteTarget: model.pasteTarget)
     } else {
       let version =
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
