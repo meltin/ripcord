@@ -108,12 +108,14 @@ struct SearchView: View {
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 0) {
           ForEach(model.sections) { section in
-            Text(section.title)
-              .font(.system(size: 12, weight: .medium))
-              .foregroundStyle(.secondary)
-              .padding(.horizontal, 12)
-              .padding(.top, 10)
-              .padding(.bottom, 4)
+            if !section.title.isEmpty {
+              Text(section.title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
+            }
             ForEach(section.results) { result in
               ResultRow(
                 result: result, isSelected: result.id == selectedID,
@@ -186,7 +188,8 @@ private struct ResultRow: View {
     HStack(spacing: 12) {
       ResultIcon(result: result)
       Text(result.title).font(.system(size: 14)).lineLimit(1)
-      if !result.subtitle.isEmpty {
+      // A repository's path goes on the right, as Raycast lines them up.
+      if !result.subtitle.isEmpty, result.kind != .repository {
         Text(result.subtitle).font(.system(size: 14)).foregroundStyle(.secondary).lineLimit(1)
       }
       if let keyword = result.keyword {
@@ -206,7 +209,10 @@ private struct ResultRow: View {
           .padding(.vertical, 2)
           .background(.quaternary, in: Capsule())
       }
-      if showsKind {
+      if result.kind == .repository {
+        Text(result.subtitle).font(.system(size: 13)).foregroundStyle(.secondary)
+          .lineLimit(1).truncationMode(.head)
+      } else if showsKind {
         Text(result.kind.label).font(.system(size: 13)).foregroundStyle(.secondary)
       }
     }
@@ -227,8 +233,18 @@ private struct ResultIcon: View {
   var body: some View {
     switch result.action {
     case _ where result.kind == .repository:
-      // Whichever app it opens in, a repository looks like one.
-      tile("arrow.triangle.branch", .orange)
+      // Whichever app it opens in, a repository looks like one: a diamond in Git's red-orange,
+      // as Raycast shows Git's logo.
+      ZStack {
+        RoundedRectangle(cornerRadius: 4)
+          .fill(Color(red: 0.94, green: 0.31, blue: 0.2).gradient)
+          .frame(width: 18, height: 18)
+          .rotationEffect(.degrees(45))
+        Image(systemName: "arrow.triangle.branch")
+          .font(.system(size: 10, weight: .bold))
+          .foregroundStyle(.white)
+      }
+      .frame(width: 24, height: 24)
     case .openWith:
       tile("arrow.up.forward.app", .gray)
     case .open(let url) where url.isFileURL:
@@ -1175,10 +1191,15 @@ private struct MenuCard: View {
           onCommand(.runMenuItem(index))
         } label: {
           HStack(spacing: 10) {
-            Image(systemName: item.symbol)
-              .font(.system(size: 13, weight: .light))
-              .frame(width: 18)
+            if let icon = menuIcon(item) {
+              Image(nsImage: icon).resizable().frame(width: 18, height: 18)
+            } else {
+              Image(systemName: item.symbol)
+                .font(.system(size: 13, weight: .light))
+                .frame(width: 18)
+            }
             Text(title(of: item.action, else: item.title, pasteTarget))
+              .lineLimit(1)
             Spacer(minLength: 16)
             HStack(spacing: 3) {
               ForEach(Array(item.shortcut.map(String.init).enumerated()), id: \.offset) {
@@ -1201,8 +1222,22 @@ private struct MenuCard: View {
       }
     }
     .padding(6)
-    .frame(width: 300)
+    // Room for "Open in Visual Studio Code" and its keys on one line.
+    .frame(width: 340)
     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+  }
+}
+
+/// The picture for a menu item that has one, as Raycast shows them: the app it opens in, Finder
+/// for the Finder items, GitHub's mark for a page there; nil keeps its SF Symbol.
+private func menuIcon(_ item: MenuAction) -> NSImage? {
+  switch item.action {
+  case .openWith(_, let app): return appIcon(app)
+  case .open(let url) where url.host() == "github.com":
+    return Bundle.main.image(forResource: "GitHub")
+  case _ where item.symbol == "folder":
+    return appIcon(URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app"))
+  default: return nil
   }
 }
 
@@ -1218,6 +1253,17 @@ struct Keycap: View {
   let label: String
 
   init(_ label: String) { self.label = label }
+
+  /// ↵ drawn as SF Symbols' return: the font's ↵ sits above ⌘ and the other modifiers.
+  private var text: Text {
+    label.reduce(Text("")) { text, character in
+      let piece =
+        character == "↵"
+        ? Text(Image(systemName: "return")).font(.system(size: 9, weight: .semibold))
+        : Text(String(character))
+      return Text("\(text)\(piece)")
+    }
+  }
 
   var body: some View {
     // Filled and softly edged, like Raycast's keycaps.
@@ -1254,17 +1300,6 @@ struct SearchField: NSViewRepresentable {
   let placeholder: String
   var fontSize: CGFloat = 18
   let onChange: (String) -> Void
-  /// ↵ drawn as SF Symbols' return: the font's ↵ sits above ⌘ and the other modifiers.
-  private var text: Text {
-    label.reduce(Text("")) { text, character in
-      let piece =
-        character == "↵"
-        ? Text(Image(systemName: "return")).font(.system(size: 9, weight: .semibold))
-        : Text(String(character))
-      return Text("\(text)\(piece)")
-    }
-  }
-
   let onCommand: (SearchCommand) -> Void
   /// When the field stops being edited, as when another control is clicked.
   var onEnd: () -> Void = {}

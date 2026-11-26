@@ -136,3 +136,6 @@ CleanShot X commands and more small tools that replace Raycast extensions.
 ## License
 
 Ripcord is licensed under [MIT](./LICENSE).
+
+The GitHub icon in the panel's actions comes from [it-icons](https://github.com/ouka-lab/it-icons), under
+[MIT](./Resources/ThirdParty/GitHub-LICENSE.txt).

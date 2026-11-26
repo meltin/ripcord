@@ -422,13 +422,13 @@ public enum Search {
           MenuAction(
             title: "Copy Path", symbol: "doc.on.doc", shortcut: "⇧⌘C", action: .copy(url.path)),
         ]
-      let path = url.deletingLastPathComponent().path
       return SearchResult(
         id: "repo:\(url.path)", title: repository.name,
-        subtitle: tildePath(path, home: home), keyword: nil,
+        subtitle: tildePath(url.path, home: home), keyword: nil,
         kind: .repository, action: menu[0].action, menu: menu)
     }
-    return results.isEmpty ? [] : [SearchSection(title: "Repositories", results: results)]
+    // Untitled: the list is all repositories, as Raycast's shows it.
+    return results.isEmpty ? [] : [SearchSection(title: "", results: results)]
   }
 
   /// `path` with the home folder written `~`; a sibling such as /Users/alex for /Users/al is

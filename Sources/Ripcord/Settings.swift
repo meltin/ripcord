@@ -1137,7 +1137,7 @@ private struct RepositoriesSettings: View {
 /// rendered off the main thread before a list needs them.
 nonisolated(unsafe) private let appIcons = NSCache<NSString, NSImage>()
 
-nonisolated private func appIcon(_ app: URL) -> NSImage {
+nonisolated func appIcon(_ app: URL) -> NSImage {
   if let cached = appIcons.object(forKey: app.path as NSString) { return cached }
   let full = NSWorkspace.shared.icon(forFile: app.path)
   // 2× for Retina.
