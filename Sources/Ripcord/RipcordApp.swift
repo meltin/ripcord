@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     .appending(path: ".config/ripcord/config.json")
   private let launcher = LauncherController()
   private lazy var settings = SettingsWindowController(model: SettingsModel(configURL: configURL))
+  private lazy var notes = NotesWindowController(store: NoteStore(folder: NoteStore.userFolder))
   private var statusItem: NSStatusItem?
   /// What's registered now, so re-reading an unchanged config skips the work and the alerts.
   private var registeredHotkeys: [String]?
@@ -79,6 +80,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       self?.caffeinator.decaffeinate()
     }
     launcher.onOpenSettings = { [weak self] in self?.openSettings() }
+    launcher.onNotes = { [weak self] in self?.notes.handle($0) }
+    notes.onBrowse = { [weak self] in self?.launcher.perform(.run(.searchNotes)) }
     launcher.onConfigure = { [weak self] in self?.settings.show(configuring: $0) }
     launcher.settings = settings.model
     launcher.onError = { [weak self] in self?.showError($0) }
@@ -101,6 +104,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let firstLaunch = !FileManager.default.fileExists(atPath: configURL.path)
     applyConfig()
     settings.showWelcomeIfNew(firstLaunch: firstLaunch)
+  }
+
+  /// What's typed in a note is saved before quitting, as its autosave may not have run yet.
+  func applicationWillTerminate(_ notification: Notification) {
+    notes.flushForQuit()
   }
 
   /// Opening Ripcord.app again shows the panel, a way in when the hotkey or menu bar icon fails.

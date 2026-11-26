@@ -404,6 +404,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case colorPicker = "Color Picker"
   case cleanKeyboard = "Clean Keyboard"
   case bookmarks = "Bookmarks"
+  case notes = "Notes"
   case scripts = "Script Commands"
   case emoji = "Emoji & Symbols"
   case cleanShot = "CleanShot X"
@@ -428,6 +429,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .colorPicker: "eyedropper"
     case .cleanKeyboard: "keyboard"
     case .bookmarks: "bookmark.fill"
+    case .notes: "note.text"
     case .emoji: "face.smiling"
     case .scripts: "terminal"
     case .cleanShot: "camera.viewfinder"
@@ -449,6 +451,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .colorPicker: .pink
     case .cleanKeyboard: .cyan
     case .bookmarks: .yellow
+    case .notes: .orange
     case .emoji: .orange
     case .scripts: .gray
     case .cleanShot: .purple
@@ -490,6 +493,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       "Search emoji and symbols by their English or Japanese names, and paste or copy one."
     case .bookmarks:
       "Your bookmarks, kept in ~/.config/ripcord/bookmarks.md as Markdown links under # headings."
+    case .notes:
+      "Notes in a floating window, each kept as a Markdown file in ~/.config/ripcord/notes."
     case .cleanKeyboard:
       "Turn the keyboard off for a while to wipe it, as in “clean keyboard 30s”; ⌃⌥⌘↩ turns it back on early."
     case .colorPicker:
@@ -502,7 +507,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   var commandKeys: Set<String>? {
     switch self {
     case .clipboardHistory, .snippets, .repositories, .coffee, .sleepTimer, .httpStatusCodes,
-      .colorPicker, .cleanKeyboard, .bookmarks, .emoji, .ripcord:
+      .colorPicker, .cleanKeyboard, .bookmarks, .notes, .emoji, .ripcord:
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
@@ -524,6 +529,7 @@ extension BuiltinCommand {
     case .pickColor, .colorHistory: .colorPicker
     case .cleanKeyboard: .cleanKeyboard
     case .searchBookmarks, .addBookmark: .bookmarks
+    case .ripcordNotes, .createNote, .searchNotes: .notes
     case .searchEmoji: .emoji
     case .httpStatusCodes: .httpStatusCodes
     case .settings, .resetWindowPosition, .quit: .ripcord

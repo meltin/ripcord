@@ -87,10 +87,20 @@ struct BookmarkDraft {
   }
 }
 
+/// What the launcher asks of the notes window.
+enum NotesRequest {
+  /// Ripcord Notes: shows the window on the last note, or hides it.
+  case toggle
+  case create
+  case open(URL)
+  /// Search Notes moved this note to the Trash: the window lets go of it.
+  case deleted(URL)
+}
+
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
   case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, bookmarks
-  case bookmarkForm, emoji, scriptOutput
+  case bookmarkForm, emoji, scriptOutput, notes
 
   /// A form, with no query or rows: the footer names it, and ⌘↵ saves it.
   var isForm: Bool { self == .snippetForm || self == .bookmarkForm }
@@ -109,6 +119,7 @@ enum LauncherMode {
     case .bookmarkForm: .addBookmark
     case .emoji: .searchEmoji
     case .scriptOutput: nil
+    case .notes: .searchNotes
     }
   }
 }
@@ -357,6 +368,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
   static let emojiColumns = 8
   /// Read each time Search Bookmarks opens, so edits made by hand show up.
   private var bookmarks = BookmarkFile(text: "")
+  /// The notes folder, and its notes as Search Notes last read them.
+  private let noteStore = NoteStore(folder: NoteStore.userFolder)
+  private var notes: [Note] = []
+  /// Hands the notes window what it's asked to do.
+  var onNotes: (NotesRequest) -> Void = { _ in }
   static let bookmarksURL = URL.homeDirectory.appending(path: ".config/ripcord/bookmarks.md")
   /// What Pick Color copies, and Color History lists first.
   var colorFormat = ColorFormat.hex {
@@ -453,6 +469,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if let resumed {
       // The query, selection and any draft are as they were; only the rows are re-read.
       if resumed == .bookmarks, !loadBookmarks() { return show() }
+      // Notes may have been written or changed in the window meanwhile.
+      if resumed == .notes { notes = noteStore.list() }
       model.mode = resumed
       refreshRows(selecting: model.selected?.id)
     } else {
@@ -593,6 +611,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     if model.mode == .httpStatusCodes { return Search.httpStatusSections(for: query) }
     if model.mode == .bookmarks { return Search.bookmarkSections(for: query, file: bookmarks) }
+    if model.mode == .notes { return Search.noteSections(for: query, notes: notes) }
     if model.mode == .emoji, let emojiCatalog {
       return Search.emojiSections(
         for: query, catalog: emojiCatalog, history: emojiHistory, category: model.emojiCategory)
@@ -1302,6 +1321,22 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return open(.repositories)
     }
     if action == .run(.createSnippet) { return edit(nil) }
+    if action == .run(.searchNotes) {
+      notes = noteStore.list()
+      return open(.notes)
+    }
+    if case .deleteNote(let url) = action {
+      let id = model.selected?.id
+      model.menu = nil
+      do {
+        if let note = noteStore.read(url) { try noteStore.trash(note) }
+        onNotes(.deleted(url))
+      } catch {
+        onError(error.localizedDescription)
+      }
+      notes = noteStore.list()
+      return refreshRows(selecting: id)
+    }
     if case .clip(let id, let clipAction) = action { return perform(clipAction, on: id) }
     if case .snippet(let index, let snippetAction) = action {
       return perform(snippetAction, on: index)
@@ -1362,6 +1397,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
       }
     case .run(.exportSnippets):
       onExportSnippets()
+    case .run(.ripcordNotes):
+      onNotes(.toggle)
+    case .run(.createNote):
+      onNotes(.create)
+    case .openNote(let url):
+      onNotes(.open(url))
     case .run(.importSnippets):
       onImportSnippets()
     case .run(.caffeinate):
@@ -1383,7 +1424,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       .run(.cleanKeyboard), .run(.searchBookmarks), .run(.addBookmark), .deleteBookmark,
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,
-      .openDraft, .discardDraft, .runScript,
+      .openDraft, .discardDraft, .runScript, .run(.searchNotes), .deleteNote,
       .moveFavorite,
       .deleteColor,
       .run(.createSnippet), .clip, .snippet, .system, .window:

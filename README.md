@@ -50,6 +50,11 @@
   URL or title, edits it, moves it to another group or deletes it. Add Bookmark opens a form for
   a new one, filled with the tab you're on in Safari, Chrome or Arc. Only the lines a change
   touches are rewritten; the rest stays as you wrote it
+- Notes: Ripcord Notes opens a window floating over your apps, without taking them out of front,
+  on one note at a time; ⌘N starts another and ⌘P searches them. Each note is a Markdown file in
+  `~/.config/ripcord/notes`, titled by its first line and saved as you type; one changed outside
+  Ripcord is never saved over. Search Notes finds notes by their text, and ⌃X moves one to the
+  Trash
 - Emoji & Symbols: Search Emoji & Symbols shows emoji and symbols (→ ° ⌘ and the like) in a grid by
   category, Frequently Used first; search in English or Japanese (`cat`, `ねこ`), Return pastes,
   ⌘↵ copies, and ⌘K picks a skin tone that's remembered

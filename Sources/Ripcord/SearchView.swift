@@ -74,7 +74,8 @@ struct SearchView: View {
         EmptyState(query: model.query, mode: model.mode)
       } else if model.mode == .emoji {
         EmojiGrid(model: model, onCommand: onCommand)
-      } else if [.repositories, .httpStatusCodes, .colors, .bookmarks].contains(model.mode) {
+      } else if [.repositories, .httpStatusCodes, .colors, .bookmarks, .notes].contains(model.mode)
+      {
         resultList
       } else if model.mode != .root {
         // Raycast's layout: the list on the left, the selected item and its details on the right.
@@ -209,6 +210,10 @@ private struct EmptyState: View {
       "Repositories in the folders set under Settings › Git Repositories show up here."
     case .repositories:
       "No repository matches “\(query)”."
+    case .notes where query.trimmingCharacters(in: .whitespaces).isEmpty:
+      "Notes you write with Create Note show up here."
+    case .notes:
+      "No note contains “\(query)”."
     case .httpStatusCodes:
       "No status code matches “\(query)”."
     case .colors where query.trimmingCharacters(in: .whitespaces).isEmpty:
@@ -309,6 +314,8 @@ private struct ResultIcon: View {
     switch result.action {
     case _ where result.kind == .bookmark:
       tile("bookmark.fill", .yellow)
+    case _ where result.kind == .note:
+      tile("note.text", .orange)
     case _ where result.kind == .color:
       // The color itself, from the row's ID ("color:#RRGGBB").
       let hex = UInt32(result.id.dropFirst("color:#".count), radix: 16) ?? 0
@@ -386,6 +393,8 @@ private struct ResultIcon: View {
       tile(BuiltinCommand.searchEmoji.symbol, BuiltinCommand.searchEmoji.color)
     case .cleanKeyboard:
       tile(BuiltinCommand.cleanKeyboard.symbol, BuiltinCommand.cleanKeyboard.color)
+    case .openNote, .deleteNote:
+      tile("note.text", .orange)
     case .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey, .deleteAlias:
       tile("gearshape", .gray)
     case .snippet:
@@ -488,6 +497,8 @@ extension BuiltinCommand {
     case .cleanKeyboard: "keyboard"
     case .searchBookmarks: "bookmark.fill"
     case .searchEmoji: "face.smiling"
+    case .ripcordNotes, .searchNotes: "note.text"
+    case .createNote: "doc.badge.plus"
     case .addBookmark: "bookmark.circle.fill"
     case .resetWindowPosition: "macwindow"
     case .quit: "power"
@@ -505,6 +516,7 @@ extension BuiltinCommand {
     case .cleanKeyboard: .cyan
     case .searchBookmarks, .addBookmark: .yellow
     case .searchEmoji: .orange
+    case .ripcordNotes, .createNote, .searchNotes: .orange
     case .httpStatusCodes: .teal
     case .settings, .resetWindowPosition: .gray
     }
@@ -1919,6 +1931,7 @@ extension SearchResult.Kind {
     case .emoji: "Emoji"
     case .draft: "Draft"
     case .script: "Script Command"
+    case .note: "Note"
     }
   }
 }
@@ -2056,6 +2069,7 @@ extension LauncherMode {
     case .colors: "Search Colors…"
     case .bookmarks: "Search Bookmarks…"
     case .emoji: "Search Emoji & Symbols…"
+    case .notes: "Search Notes…"
     case .snippetForm, .bookmarkForm: ""
     case .scriptOutput: "Script Output"
     }
