@@ -40,7 +40,7 @@ import Testing
   @Test func leavesOutWhatItDoesntRunYet() {
     let base = ["# @raycast.schemaVersion 1", "# @raycast.title T"]
     #expect(script(base[0], base[1]) == nil)  // no mode
-    #expect(script(base[0], base[1], "# @raycast.mode fullOutput") == nil)
+    #expect(script(base[0], base[1], "# @raycast.mode fullOutput")?.mode == .fullOutput)
     #expect(
       script(base[0], base[1], "# @raycast.mode inline", "# @raycast.refreshTime 1m") == nil)
     #expect(
@@ -86,6 +86,10 @@ import Testing
     #expect(row.action == .runScript("/tmp/Tools/hello.sh"))
     #expect(row.subtitle == "Tools")
     #expect(row.itemKey == hello.settingsKey)
+  }
+
+  @Test func dropsColorCodes() {
+    #expect(ScriptCommand.plain("\u{1B}[31;42mred\u{1B}[0m plain") == "red plain")
   }
 
   @Test func findsTheLastLineWithText() {

@@ -89,7 +89,7 @@ struct BookmarkDraft {
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
   case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, bookmarks
-  case bookmarkForm, emoji
+  case bookmarkForm, emoji, scriptOutput
 
   /// A form, with no query or rows: the footer names it, and ⌘↵ saves it.
   var isForm: Bool { self == .snippetForm || self == .bookmarkForm }
@@ -107,6 +107,7 @@ enum LauncherMode {
     case .bookmarks: .searchBookmarks
     case .bookmarkForm: .addBookmark
     case .emoji: .searchEmoji
+    case .scriptOutput: nil
     }
   }
 }
@@ -153,6 +154,8 @@ final class LauncherModel {
   /// Search Emoji & Symbols' categories, and the one picked; nil shows them all.
   var emojiGroups: [String] = []
   var emojiCategory: Int?
+  /// A fullOutput Script Command's title and output; nil output while it runs.
+  var scriptOutput: (title: String, output: String?, failed: Bool) = ("", nil, false)
   /// A compact Script Command's last line, shown over the footer for a moment.
   var toast: (text: String, failed: Bool)?
   /// A new bookmark's draft, kept while an edit has the form.
@@ -357,7 +360,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     panel.typingHandler = { [weak self] in self?.typeIntoMenu($0) ?? false }
     panel.escapeHandler = { [weak self] in
       // Only the form: the search field turns Esc into .cancel itself.
-      guard let self, model.mode.isForm else { return false }
+      // The output view has no field either.
+      guard let self, model.mode.isForm || model.mode == .scriptOutput else { return false }
       // An open icon list closes first, as a menu does.
       if model.isPickingIcon {
         model.isPickingIcon = false
@@ -575,7 +579,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return Search.snippetSections(for: query, snippets: snippets, tag: model.snippetTag)
     }
     // No rows behind the form, so ⌘K and row shortcuts have nothing to act on.
-    if model.mode.isForm { return [] }
+    if model.mode.isForm || model.mode == .scriptOutput { return [] }
     let running = NSWorkspace.shared.runningApplications
       .filter { $0.activationPolicy == .regular }
       .compactMap { app in
@@ -765,6 +769,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     // Hidden already when its hotkey ran it: what was left open there stays.
     if script.mode == .silent, panel.isVisible { hide() }
+    if script.mode == .fullOutput {
+      model.scriptOutput = (script.title, nil, false)
+      open(.scriptOutput)
+    }
     ScriptRunner.run(script) { [weak self] result in
       DispatchQueue.main.async {
         MainActor.assumeIsolated { self?.finish(script, result) }
@@ -774,6 +782,14 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   private func finish(_ script: ScriptCommand, _ result: ScriptRunner.Result) {
     let failed = result.status != 0
+    if script.mode == .fullOutput {
+      // Shown only while its view is still the one open for it.
+      guard model.mode == .scriptOutput, model.scriptOutput.title == script.title else { return }
+      let shown = ScriptCommand.plain(
+        result.output + (failed ? "\n\(result.errors)\nExit code \(result.status)" : ""))
+      model.scriptOutput = (script.title, shown, failed)
+      return
+    }
     let line =
       failed
       ? "“\(script.title)” failed (exit \(result.status)): "

@@ -18,14 +18,16 @@ public struct ScriptCommand: Equatable, Sendable {
     case compact
     /// The last line of output over the screen after the panel closes.
     case silent
+    /// All of the output in the panel, as a terminal shows it.
+    case fullOutput
   }
 
   /// The settings key for its alias, hotkey and favorite: its path.
   public var settingsKey: String { "script:\(url.path)" }
 
   /// Reads the metadata from the first lines of `text`; nil for a file that isn't a Script
-  /// Command, or one using what Ripcord doesn't run yet (arguments, fullOutput, inline with a
-  /// refresh time, a confirmation), which is left out rather than run differently.
+  /// Command, or one using what Ripcord doesn't run yet (arguments, inline with a refresh time,
+  /// a confirmation), which is left out rather than run differently.
   public static func parse(_ text: String, url: URL) -> ScriptCommand? {
     var values: [String: String] = [:]
     // Comments starting `#` or `//`, as Raycast's README requires.
@@ -50,6 +52,7 @@ public struct ScriptCommand: Equatable, Sendable {
       switch modeText {
       case "compact": .compact
       case "silent": .silent
+      case "fullOutput": .fullOutput
       case "inline" where values["refreshTime"] == nil: .compact
       default: nil
       }
@@ -97,6 +100,12 @@ public struct ScriptCommand: Equatable, Sendable {
         return parse(String(decoding: head, as: UTF8.self), url: url)
       }
     }
+  }
+
+  /// `output` without terminal color codes, which fullOutput would show as junk: colors aren't
+  /// drawn yet.
+  public static func plain(_ output: String) -> String {
+    output.replacing(/\u{1B}\[[0-9;?]*[A-Za-z]/, with: "")
   }
 
   /// The last line of `output` with text, for a toast; nil for none.

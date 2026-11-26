@@ -23,7 +23,7 @@ struct SearchView: View {
         } else if let logo = Bundle.main.image(forResource: "MenuBarIcon") {
           Image(nsImage: logo).renderingMode(.template).foregroundStyle(.secondary)
         }
-        if model.mode.isForm {
+        if model.mode.isForm || model.mode == .scriptOutput {
           // Only the way back, as Raycast's forms have: the footer names the command.
           Spacer()
         } else {
@@ -61,6 +61,8 @@ struct SearchView: View {
         SnippetForm(model: model)
       } else if model.mode == .bookmarkForm {
         BookmarkForm(model: model)
+      } else if model.mode == .scriptOutput {
+        ScriptOutputView(output: model.scriptOutput)
       } else if model.sections.isEmpty {
         EmptyState(query: model.query, mode: model.mode)
       } else if model.mode == .emoji {
@@ -194,7 +196,7 @@ private struct EmptyState: View {
       "Save text you type again and again with Create Snippet."
     case .snippets:
       "No snippet contains “\(query)”."
-    case .snippetForm, .bookmarkForm:
+    case .snippetForm, .bookmarkForm, .scriptOutput:
       ""
     case .repositories where query.trimmingCharacters(in: .whitespaces).isEmpty:
       "Repositories in the folders set under Settings › Git Repositories show up here."
@@ -1085,6 +1087,32 @@ private struct IconPicker: View {
   }
 }
 
+/// A fullOutput Script Command's output, all of it, as a terminal shows it: monospaced and
+/// selectable, so ⌘C copies a part.
+private struct ScriptOutputView: View {
+  let output: (title: String, output: String?, failed: Bool)
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 10) {
+        Text(output.title).font(.system(size: 13, weight: .semibold))
+          .foregroundStyle(output.failed ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+        Text(output.output ?? "Running…")
+          .font(.system(size: 12, design: .monospaced))
+          .foregroundStyle(
+            output.output == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary)
+          )
+          .textSelection(.enabled)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .padding(.horizontal, 20)
+      .padding(.top, 12)
+      .padding(.bottom, LauncherController.footerHeight + 12)
+    }
+    .thinScroller()
+  }
+}
+
 /// Search Emoji & Symbols' grid, as Raycast lays it out: each section's name and count over
 /// rows of rounded tiles.
 private struct EmojiGrid: View {
@@ -1893,6 +1921,7 @@ extension LauncherMode {
     case .bookmarks: "Search Bookmarks…"
     case .emoji: "Search Emoji & Symbols…"
     case .snippetForm, .bookmarkForm: ""
+    case .scriptOutput: "Script Output"
     }
   }
 }
