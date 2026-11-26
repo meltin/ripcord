@@ -43,6 +43,13 @@ public struct MenuAction: Equatable, Sendable {
   /// Modifiers in ⌃⌥⇧⌘ order, then the key, e.g. "⇧⌘C"; "↵" for the primary action.
   public let shortcut: String
   public let action: SearchResult.Action
+
+  public init(title: String, symbol: String, shortcut: String, action: SearchResult.Action) {
+    self.title = title
+    self.symbol = symbol
+    self.shortcut = shortcut
+    self.action = action
+  }
 }
 
 public struct SearchResult: Identifiable, Equatable, Sendable {
@@ -57,7 +64,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   }
 
   public enum SnippetAction: Equatable, Sendable {
-    case paste, copy, edit, delete
+    /// `delete` asks; `confirmDelete` deletes.
+    case paste, copy, edit, delete, confirmDelete
   }
 
   public enum ClipAction: Equatable, Sendable {

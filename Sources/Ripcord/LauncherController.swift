@@ -107,7 +107,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
   }
   /// Saves a change to the config's snippets; false when the file couldn't be written.
-  var editSnippets: (_ change: (inout [Snippet]) -> Void) -> Bool = { _ in false }
+  /// `change` gets the list as the file holds it now and returns the new one, or nil to refuse.
+  var editSnippets: (_ change: ([Snippet]) -> [Snippet]?) -> Bool = { _ in false }
   /// The input source selected while the panel is open, by TIS ID; nil leaves it alone.
   var inputSource: String?
   /// What the panel switched away from, put back when it closes.
@@ -286,6 +287,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return Search.clipboardSections(for: query, history: clipboard.history)
     }
     if model.mode == .snippets { return Search.snippetSections(for: query, snippets: snippets) }
+    // No rows behind the form, so ⌘K and row shortcuts have nothing to act on.
+    if model.mode == .snippetForm { return [] }
     let running = NSWorkspace.shared.runningApplications
       .filter { $0.activationPolicy == .regular }
       .compactMap { app in
@@ -324,6 +327,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .down: model.selection = min(model.selection + 1, max(count - 1, 0))
     case .submit: model.selected.map { perform($0.action) } ?? NSSound.beep()
     case .cancel:
+      // An edit always goes back to its list, even one its hotkey opened.
+      if model.mode == .snippetForm, model.editing != nil { return goBack() }
       // Like Raycast: Esc leaves a command's list for the root search first.
       guard model.mode != .root, !closesOnCancel else { return hide() }
       goBack()
@@ -370,11 +375,16 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if flags == .command, let selector = editing[key] {
       return NSApp.sendAction(selector, to: nil, from: panel)
     }
+    // Undo and redo, for the same reason; they matter in Create Snippet's editor.
+    if key == "z", flags == .command || flags == [.command, .shift] {
+      return NSApp.sendAction(
+        flags.contains(.shift) ? Selector(("redo:")) : Selector(("undo:")), to: nil, from: panel)
+    }
     if flags == .command, key == "\r", model.mode == .snippetForm {
       saveDraft()
       return true
     }
-    if flags == .command, key == "k" {
+    if flags == .command, key == "k", model.mode != .snippetForm {
       toggleMenu(root: false)
       return true
     }
@@ -382,7 +392,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
       (.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘"),
     ]
     let shortcut = symbols.filter { flags.contains($0.0) }.map(\.1).joined() + key.uppercased()
-    let candidates = (model.selected?.actions ?? []) + BuiltinCommand.rootMenu
+    // ⌘N creates a snippet even when Search Snippets lists none.
+    let create = MenuAction(
+      title: "Create Snippet", symbol: "plus", shortcut: "⌘N", action: .run(.createSnippet))
+    let candidates =
+      (model.selected?.actions ?? []) + BuiltinCommand.rootMenu
+      + (model.mode == .snippets ? [create] : [])
     guard let match = candidates.first(where: { $0.shortcut == shortcut }) else { return false }
     perform(match.action)
     return true
@@ -436,15 +451,23 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// An edit goes back to Search Snippets, where it started; anything else to the root search.
   private func goBack() {
-    let fromList = model.mode == .snippetForm && model.editing != nil
-    model.mode = fromList ? .snippets : .root
+    let editing = model.mode == .snippetForm ? model.editing : nil
+    model.mode = editing == nil ? .root : .snippets
     update("")
+    if let editing { refreshRows(selecting: "snippet:\(editing)") }
   }
 
   /// Opens the form on a new snippet, or on the one at `index`.
+  /// A new snippet's draft survives the panel closing, as when clicking another app to copy
+  /// something into it; it's cleared once saved.
   private func edit(_ index: Int?) {
+    let wasEditing = model.editing != nil
     model.editing = index.flatMap { snippets.indices.contains($0) ? $0 : nil }
-    model.draft = model.editing.map { snippets[$0] } ?? Snippet(name: "", text: "")
+    if let editing = model.editing {
+      model.draft = snippets[editing]
+    } else if wasEditing {
+      model.draft = Snippet(name: "", text: "")
+    }
     if index != nil {
       model.mode = .snippetForm
       return update("")
@@ -455,21 +478,28 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Saves the form, then shows the snippet in Search Snippets. A name and text are required.
   private func saveDraft() {
     let draft = Snippet(
-      name: model.draft.name.trimmingCharacters(in: .whitespaces), text: model.draft.text,
+      name: model.draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
+      text: model.draft.text,
       keyword: model.draft.keyword?.trimmingCharacters(in: .whitespaces).nilIfEmpty)
-    guard !draft.name.isEmpty, !draft.text.isEmpty else { return NSSound.beep() }
-    let editing = model.editing
+    guard !draft.name.isEmpty, !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else { return NSSound.beep() }
+    // The list can shrink while the form is open; an edit then has nothing left to replace.
+    if let editing = model.editing, !snippets.indices.contains(editing) { return NSSound.beep() }
+    let editing = model.editing.map { ($0, snippets[$0]) }
     var index = 0
-    let saved = editSnippets { snippets in
-      if let editing, snippets.indices.contains(editing) {
-        snippets[editing] = draft
-        index = editing
-      } else {
-        snippets.append(draft)
-        index = snippets.count - 1
+    let saved = editSnippets { current in
+      guard let (at, original) = editing else {
+        index = current.count
+        return current + [draft]
       }
+      // The file may have changed since the list was read; never overwrite another snippet.
+      guard current.indices.contains(at), current[at] == original else { return nil }
+      index = at
+      return current.enumerated().map { $0.offset == at ? draft : $0.element }
     }
     guard saved else { return NSSound.beep() }
+    model.draft = Snippet(name: "", text: "")
+    model.editing = nil
     model.mode = .snippets
     update("")
     refreshRows(selecting: "snippet:\(index)")
@@ -481,9 +511,21 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .paste, .copy: paste(snippets[index].text, copyOnly: action == .copy)
     case .edit: edit(index)
     case .delete:
+      // Asked first, as Raycast does by default: a deleted snippet has no undo.
+      model.menu = OpenMenu(
+        title: "Delete “\(snippets[index].name)”?",
+        items: [
+          MenuAction(
+            title: "Delete Snippet", symbol: "trash", shortcut: "↵",
+            action: .snippet(index, .confirmDelete))
+        ], isRoot: false)
+    case .confirmDelete:
       model.menu = nil
-      let saved = editSnippets { snippets in
-        if snippets.indices.contains(index) { snippets.remove(at: index) }
+      let original = snippets[index]
+      let saved = editSnippets { current in
+        // As in saveDraft: only the snippet that was shown, never one that took its place.
+        guard current.indices.contains(index), current[index] == original else { return nil }
+        return current.enumerated().filter { $0.offset != index }.map(\.element)
       }
       if !saved { NSSound.beep() }
     }

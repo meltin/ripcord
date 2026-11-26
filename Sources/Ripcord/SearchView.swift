@@ -338,7 +338,9 @@ private struct ClipPreview: View {
 /// right. ⌘↵ saves; Return types a new line.
 private struct SnippetForm: View {
   @Bindable var model: LauncherModel
-  @FocusState private var isTextFocused: Bool
+  @FocusState private var focus: Field?
+
+  private enum Field { case text, name, keyword }
 
   var body: some View {
     HStack(alignment: .top, spacing: 24) {
@@ -349,7 +351,12 @@ private struct SnippetForm: View {
           .scrollContentBackground(.hidden)
           .padding(8)
           .field()
-          .focused($isTextFocused)
+          .focused($focus, equals: .text)
+          // Tab moves on to Name, as in Raycast, instead of typing a tab into the snippet.
+          .onKeyPress(.tab) {
+            focus = .name
+            return .handled
+          }
         Text("{date} and {clipboard} are filled in with today's date and the copied text.")
           .font(.system(size: 11))
           .foregroundStyle(.secondary)
@@ -357,6 +364,7 @@ private struct SnippetForm: View {
       VStack(alignment: .leading, spacing: 8) {
         label("Name")
         TextField("Snippet name", text: $model.draft.name)
+          .focused($focus, equals: .name)
           .textFieldStyle(.plain)
           .padding(.horizontal, 10)
           .frame(height: 32)
@@ -370,6 +378,7 @@ private struct SnippetForm: View {
             model.draft.keyword = $0.isEmpty ? nil : $0
           }
         )
+        .focused($focus, equals: .keyword)
         .textFieldStyle(.plain)
         .padding(.horizontal, 10)
         .frame(height: 32)
@@ -382,7 +391,7 @@ private struct SnippetForm: View {
     .padding(.horizontal, 24)
     .padding(.top, 16)
     .padding(.bottom, LauncherController.footerHeight + 12)
-    .onAppear { isTextFocused = true }
+    .onAppear { focus = .text }
   }
 
   private func label(_ text: String) -> some View {

@@ -64,16 +64,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   /// Through the settings window's model, so an open window shows the change and can't write
   /// back a list from before it. Read first, so edits made to the file meanwhile are kept.
-  private func editSnippets(_ change: (inout [Snippet]) -> Void) -> Bool {
+  private func editSnippets(_ change: ([Snippet]) -> [Snippet]?) -> Bool {
     let model = settings.model
     model.load()
     guard model.loadError == nil else {
       showError(model.loadError ?? "")
       return false
     }
-    change(&model.config.snippets)
+    guard let snippets = change(model.config.snippets) else {
+      // The file changed under the panel; show what it holds now.
+      applyConfig()
+      return false
+    }
+    model.config.snippets = snippets
     // Saving calls applyConfig, which hands the launcher the new list.
     model.saveIfChanged()
+    if let error = model.loadError { showError(error) }
     return model.loadError == nil
   }
 
