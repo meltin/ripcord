@@ -12,7 +12,7 @@ struct SearchView: View {
   var body: some View {
     VStack(spacing: 0) {
       HStack(spacing: 12) {
-        if model.mode == .clipboard {
+        if model.mode != .root {
           HoverButton {
             onCommand(.back)
           } label: {
@@ -26,8 +26,7 @@ struct SearchView: View {
         }
         SearchField(
           text: model.query,
-          placeholder: model.mode == .clipboard
-            ? "Search Clipboard History…" : "Search apps, calculate, open Quicklinks…",
+          placeholder: model.mode.placeholder,
           onChange: onQueryChange, onCommand: onCommand)
       }
       .padding(.horizontal, 20)
@@ -36,7 +35,7 @@ struct SearchView: View {
       Divider().opacity(0.5)
       if model.sections.isEmpty {
         EmptyState(query: model.query, mode: model.mode)
-      } else if model.mode == .clipboard {
+      } else if model.mode != .root {
         // Raycast's layout: the list on the left, the selected item and its details on the right.
         HStack(spacing: 0) {
           resultList.frame(width: 300)
@@ -45,6 +44,8 @@ struct SearchView: View {
             let item = history.item(id)
           {
             ClipPreview(item: item, imageURL: history.imageURL(of: item))
+          } else if let selected = model.selected, case .snippet(let text, _) = selected.action {
+            SnippetPreview(result: selected, text: text)
           } else {
             Spacer()
           }
@@ -116,6 +117,10 @@ private struct EmptyState: View {
       "Text and images you copy show up here."
     case .clipboard:
       "Nothing copied contains “\(query)”."
+    case .snippets where query.trimmingCharacters(in: .whitespaces).isEmpty:
+      "Add snippets in Settings, then paste them from here."
+    case .snippets:
+      "No snippet contains “\(query)”."
     }
   }
 
@@ -186,16 +191,12 @@ private struct ResultIcon: View {
       tile("plus.forwardslash.minus", .orange)
     case .open:
       tile("link", .blue)
-    case .run(.settings):
-      tile("gearshape.fill", .gray)
-    case .run(.resetWindowPosition):
-      tile("macwindow", .gray)
-    case .run(.quit):
-      tile("power", .red)
+    case .run(let command):
+      tile(command.symbol, command.color)
     case .reveal:
       tile("folder", .gray)
-    case .run(.clipboardHistory):
-      tile("list.clipboard.fill", .red)
+    case .snippet:
+      tile("text.quote", .gray)
     case .clip:
       if let thumbnail = result.thumbnail {
         // Cropped to a rounded square, as Raycast draws them.
@@ -214,6 +215,27 @@ private struct ResultIcon: View {
       .foregroundStyle(.white)
       .frame(width: 24, height: 24)
       .background(color.gradient, in: RoundedRectangle(cornerRadius: 6))
+  }
+}
+
+extension BuiltinCommand {
+  /// Its icon: a white SF Symbol on a tile of this color.
+  fileprivate var symbol: String {
+    switch self {
+    case .clipboardHistory: "list.clipboard.fill"
+    case .searchSnippets: "text.quote"
+    case .settings: "gearshape.fill"
+    case .resetWindowPosition: "macwindow"
+    case .quit: "power"
+    }
+  }
+
+  fileprivate var color: Color {
+    switch self {
+    case .clipboardHistory, .quit: .red
+    case .searchSnippets: .orange
+    case .settings, .resetWindowPosition: .gray
+    }
   }
 }
 
@@ -282,50 +304,88 @@ private struct ClipPreview: View {
       // A fixed share for the clip; the details scroll under the footer, as in Raycast.
       .frame(height: 210)
       Divider().opacity(0.5)
-      ScrollView {
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Information")
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.bottom, 4)
-          if let sourceApp {
-            detailRow("Source", index: 0) {
-              HStack(spacing: 6) {
-                Image(nsImage: NSWorkspace.shared.icon(forFile: sourceApp.path)).resizable()
-                  .frame(width: 16, height: 16)
-                Text(FileManager.default.displayName(atPath: sourceApp.path))
-              }
+      Information {
+        if let sourceApp {
+          detailRow("Source", index: 0) {
+            HStack(spacing: 6) {
+              Image(nsImage: NSWorkspace.shared.icon(forFile: sourceApp.path)).resizable()
+                .frame(width: 16, height: 16)
+              Text(FileManager.default.displayName(atPath: sourceApp.path))
             }
           }
-          ForEach(Array(details.enumerated()), id: \.offset) { index, row in
-            detailRow(row.label, index: index + (sourceApp == nil ? 0 : 1)) { Text(row.value) }
-          }
         }
-        .font(.system(size: 12))
-        .padding(.horizontal, 8)
-        .padding(.top, 10)
-        // Clear of the floating footer.
-        .padding(.bottom, LauncherController.footerHeight)
+        ForEach(Array(details.enumerated()), id: \.offset) { index, row in
+          detailRow(row.label, index: index + (sourceApp == nil ? 0 : 1)) { Text(row.value) }
+        }
       }
-      .scrollIndicators(.never)
     }
   }
+}
 
-  private func detailRow<Value: View>(
-    _ label: String, index: Int, @ViewBuilder value: () -> Value
-  ) -> some View {
-    HStack {
-      Text(label).foregroundStyle(.secondary)
-      Spacer()
-      value()
+/// The selected snippet's text as saved, placeholders and all, then its details.
+private struct SnippetPreview: View {
+  let result: SearchResult
+  let text: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      ScrollView {
+        Text(text)
+          .font(.system(size: 12))
+          .textSelection(.enabled)
+          .frame(maxWidth: .infinity, alignment: .topLeading)
+          .padding(16)
+      }
+      .frame(height: 210)
+      Divider().opacity(0.5)
+      Information {
+        detailRow("Name", index: 0) { Text(result.title) }
+        if let keyword = result.keyword {
+          detailRow("Keyword", index: 1) { Text(keyword) }
+        }
+      }
     }
-    .padding(.horizontal, 8)
-    .frame(height: 24)
-    .background(
-      index.isMultiple(of: 2) ? Color.primary.opacity(0.025) : .clear,
-      in: RoundedRectangle(cornerRadius: 6))
   }
+}
+
+/// A preview's "Information" rows, scrolling under the floating footer as in Raycast.
+private struct Information<Rows: View>: View {
+  @ViewBuilder let rows: Rows
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 2) {
+        Text("Information")
+          .font(.system(size: 12, weight: .medium))
+          .foregroundStyle(.secondary)
+          .padding(.horizontal, 8)
+          .padding(.bottom, 4)
+        rows
+      }
+      .font(.system(size: 12))
+      .padding(.horizontal, 8)
+      .padding(.top, 10)
+      // Clear of the floating footer.
+      .padding(.bottom, LauncherController.footerHeight)
+    }
+    .scrollIndicators(.never)
+  }
+}
+
+/// One striped label-and-value row of a preview's details.
+private func detailRow<Value: View>(
+  _ label: String, index: Int, @ViewBuilder value: () -> Value
+) -> some View {
+  HStack {
+    Text(label).foregroundStyle(.secondary)
+    Spacer()
+    value()
+  }
+  .padding(.horizontal, 8)
+  .frame(height: 24)
+  .background(
+    index.isMultiple(of: 2) ? Color.primary.opacity(0.025) : .clear,
+    in: RoundedRectangle(cornerRadius: 6))
 }
 
 /// A clipboard image, decoded off the main thread at `maxPixelSize` and cached, so a screenshot
@@ -387,15 +447,15 @@ private struct Footer: View {
 
   var body: some View {
     HStack {
-      if mode == .clipboard {
+      if let command = mode.command {
         // Names the command the panel is in, as Raycast's footer does.
         HStack(spacing: 8) {
-          Image(systemName: "list.clipboard.fill")
+          Image(systemName: command.symbol)
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(.white)
             .frame(width: 18, height: 18)
-            .background(Color.red.gradient, in: RoundedRectangle(cornerRadius: 5))
-          Text("Clipboard History")
+            .background(command.color.gradient, in: RoundedRectangle(cornerRadius: 5))
+          Text(command.title)
         }
         .padding(.horizontal, 10)
         .frame(height: 32)
@@ -527,7 +587,7 @@ private struct MenuCard: View {
 private func title(
   of action: SearchResult.Action, else fallback: String, _ pasteTarget: String?
 ) -> String {
-  guard case .clip(_, .paste) = action, let pasteTarget else { return fallback }
+  guard action.isPaste, let pasteTarget else { return fallback }
   return "Paste to \(pasteTarget)"
 }
 
@@ -557,6 +617,7 @@ extension SearchResult.Kind {
     case .command: "Command"
     case .text: "Text"
     case .image: "Image"
+    case .snippet: "Snippet"
     }
   }
 }
@@ -629,5 +690,24 @@ final class FocusingTextField: NSTextField {
     (currentEditor() as? NSTextView)?.insertionPointColor = NSColor(
       red: 1, green: 0.353, blue: 0.122, alpha: 1)
     return became
+  }
+}
+
+extension SearchResult.Action {
+  fileprivate var isPaste: Bool {
+    switch self {
+    case .clip(_, .paste), .snippet(_, .paste): true
+    default: false
+    }
+  }
+}
+
+extension LauncherMode {
+  fileprivate var placeholder: String {
+    switch self {
+    case .root: "Search apps, calculate, open Quicklinks…"
+    case .clipboard: "Search Clipboard History…"
+    case .snippets: "Search Snippets…"
+    }
   }
 }

@@ -106,6 +106,43 @@ final class ClipboardMonitor {
     return written
   }
 
+  /// Puts a snippet's `text` on the pasteboard without recording it, as its {clipboard} may hold
+  /// what a password manager kept out of the history. The markers tell other clipboard managers
+  /// the same: `transient` for a paste that's undone right after, `concealed` for a password.
+  func write(_ text: String, transient: Bool, concealed: Bool) -> Bool {
+    pasteboard.clearContents()
+    let written = pasteboard.setString(text, forType: .string)
+    pasteboard.setString(
+      Bundle.main.bundleIdentifier ?? "", forType: .init("org.nspasteboard.source"))
+    if transient { pasteboard.setString("", forType: .init("org.nspasteboard.TransientType")) }
+    if concealed { pasteboard.setString("", forType: .init("org.nspasteboard.ConcealedType")) }
+    changeCount = pasteboard.changeCount
+    return written
+  }
+
+  /// Whether what's copied now is a password manager's, by the nspasteboard.org convention.
+  var isConcealed: Bool {
+    pasteboard.types?.contains(.init("org.nspasteboard.ConcealedType")) ?? false
+  }
+
+  /// Everything on the pasteboard, every type of every item, to put back after a paste.
+  func snapshot() -> [NSPasteboardItem] {
+    (pasteboard.pasteboardItems ?? []).map { item in
+      let copy = NSPasteboardItem()
+      for type in item.types {
+        if let data = item.data(forType: type) { copy.setData(data, forType: type) }
+      }
+      return copy
+    }
+  }
+
+  /// Puts back a `snapshot()`, again without recording it.
+  func restore(_ items: [NSPasteboardItem]) {
+    pasteboard.clearContents()
+    if !items.isEmpty { pasteboard.writeObjects(items) }
+    changeCount = pasteboard.changeCount
+  }
+
   /// Asked for once per launch, so a dismissed request doesn't come back on every Return.
   private var hasAskedForAccessibility = false
 

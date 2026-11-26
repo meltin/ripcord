@@ -73,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.quicklinks = config.quicklinks
       launcher.items = config.items
       launcher.inputSource = config.inputSource
+      launcher.snippets = config.snippets
       applyLaunchAtLogin(config.launchAtLogin)
       // Saving mid-recording must not bring back the hotkeys the recorder turned off.
       if !isRecording { applyHotkeys(config) }
@@ -119,6 +120,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       toggleLauncher()
     case .item(let key):
       if let command = BuiltinCommand.allCases.first(where: { $0.settingsKey == key }) {
+        // Read now, as opening the panel does, so a snippet added to the file is listed.
+        if !launcher.isVisible { applyConfig() }
         launcher.perform(.run(command))
       } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: key)
         ?? (key.hasPrefix("/") ? URL(fileURLWithPath: key) : nil)

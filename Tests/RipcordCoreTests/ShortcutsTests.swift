@@ -176,6 +176,7 @@ import Testing
   @Test func commandSettingsKeysAreFixed() {
     // Saved in config.json: changing one strands the user's alias and hotkey.
     #expect(BuiltinCommand.clipboardHistory.settingsKey == "command:clipboard-history")
+    #expect(BuiltinCommand.searchSnippets.settingsKey == "command:search-snippets")
     #expect(BuiltinCommand.settings.settingsKey == "command:settings")
     #expect(BuiltinCommand.resetWindowPosition.settingsKey == "command:reset-window-position")
     #expect(BuiltinCommand.quit.settingsKey == "command:quit")

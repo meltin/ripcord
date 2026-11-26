@@ -251,6 +251,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case general = "General"
   case shortcuts = "Shortcuts"
   case quicklinks = "Quicklinks"
+  case snippets = "Snippets"
 
   var id: Self { self }
 
@@ -259,6 +260,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .general: "slider.horizontal.3"
     case .shortcuts: "command"
     case .quicklinks: "link"
+    case .snippets: "text.quote"
     }
   }
 
@@ -267,6 +269,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .general: .gray
     case .shortcuts: .indigo
     case .quicklinks: .blue
+    case .snippets: .orange
     }
   }
 }
@@ -303,6 +306,7 @@ struct SettingsView: View {
           case .general: GeneralPage(model: model)
           case .shortcuts: ShortcutsPage(model: model)
           case .quicklinks: QuicklinksPage(model: model)
+          case .snippets: SnippetsPage(model: model)
           case nil: EmptyView()
           }
         }
@@ -475,6 +479,94 @@ private struct QuicklinkRow: View {
     .font(.system(size: 13))
     .padding(.horizontal, 16)
     .padding(.vertical, 8)
+  }
+}
+
+private struct SnippetsPage: View {
+  @Bindable var model: SettingsModel
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline) {
+      Text(
+        "Paste them with Search Snippets. {date} and {clipboard} are filled in when pasted."
+      )
+      .font(.system(size: 12))
+      .foregroundStyle(.secondary)
+      Spacer()
+      Button("Add Snippet", systemImage: "plus") {
+        model.config.snippets.append(Snippet(name: "", text: ""))
+      }
+      .buttonStyle(.borderedProminent)
+    }
+    if model.config.snippets.isEmpty {
+      Card {
+        Text("No snippets yet. Add one for text you type again and again.")
+          .font(.system(size: 13))
+          .foregroundStyle(.secondary)
+          .padding(16)
+      }
+    }
+    ForEach(model.config.snippets.indices, id: \.self) { index in
+      Card {
+        SnippetRow(snippet: snippet(at: index)) {
+          if model.config.snippets.indices.contains(index) {
+            model.config.snippets.remove(at: index)
+          }
+        }
+      }
+    }
+  }
+
+  /// Bounds-checked, because SwiftUI can still render a row for a snippet that was just removed.
+  private func snippet(at index: Int) -> Binding<Snippet> {
+    Binding {
+      model.config.snippets.indices.contains(index)
+        ? model.config.snippets[index] : Snippet(name: "", text: "")
+    } set: { newValue in
+      if model.config.snippets.indices.contains(index) {
+        model.config.snippets[index] = newValue
+      }
+    }
+  }
+}
+
+private struct SnippetRow: View {
+  @Binding var snippet: Snippet
+  let onDelete: () -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 10) {
+        TextField("Name", text: $snippet.name)
+        TextField(
+          "Keyword",
+          text: Binding {
+            snippet.keyword ?? ""
+          } set: {
+            snippet.keyword = $0.isEmpty ? nil : $0
+          }
+        )
+        .frame(width: 120)
+        Button(action: onDelete) {
+          Image(systemName: "minus.circle")
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel("Delete \(snippet.name.isEmpty ? "Snippet" : snippet.name)")
+        .frame(width: 24)
+      }
+      .textFieldStyle(.roundedBorder)
+      TextEditor(text: $snippet.text)
+        .font(.system(size: 12, design: .monospaced))
+        .scrollContentBackground(.hidden)
+        .padding(6)
+        .frame(height: 80)
+        .background(.background, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary))
+        .accessibilityLabel("Snippet text")
+    }
+    .font(.system(size: 13))
+    .padding(16)
   }
 }
 

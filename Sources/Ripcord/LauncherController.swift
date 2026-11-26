@@ -13,7 +13,16 @@ struct OpenMenu {
 
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
-  case root, clipboard
+  case root, clipboard, snippets
+
+  /// The command whose list this is; nil for the root search.
+  var command: BuiltinCommand? {
+    switch self {
+    case .root: nil
+    case .clipboard: .clipboardHistory
+    case .snippets: .searchSnippets
+    }
+  }
 }
 
 @MainActor
@@ -70,6 +79,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
       clipboard.isEnabled = items[BuiltinCommand.clipboardHistory.settingsKey]?.isEnabled ?? true
       update(model.query)
     }
+  }
+  var snippets: [Snippet] = [] {
+    didSet { if snippets != oldValue, model.mode == .snippets { refreshRows() } }
   }
   /// The input source selected while the panel is open, by TIS ID; nil leaves it alone.
   var inputSource: String?
@@ -242,6 +254,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       model.clipboard = clipboard.history
       return Search.clipboardSections(for: query, history: clipboard.history)
     }
+    if model.mode == .snippets { return Search.snippetSections(for: query, snippets: snippets) }
     let running = NSWorkspace.shared.runningApplications
       .filter { $0.activationPolicy == .regular }
       .compactMap { app in
@@ -345,8 +358,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
   func perform(_ action: SearchResult.Action) {
     // Like Raycast, the panel stays open and glides home, so the reset is visible at once.
     if action == .run(.resetWindowPosition) { return resetPosition() }
-    if action == .run(.clipboardHistory) { return openClipboardHistory() }
+    if action == .run(.clipboardHistory) { return open(.clipboard) }
+    if action == .run(.searchSnippets) { return open(.snippets) }
     if case .clip(let id, let clipAction) = action { return perform(clipAction, on: id) }
+    if case .snippet(let text, let snippetAction) = action {
+      return perform(snippetAction, with: text)
+    }
     // Open Settings while the panel still holds the key press, so macOS treats it as the
     // user's request to bring Ripcord forward.
     if action == .run(.settings) { onOpenSettings() }
@@ -364,20 +381,45 @@ final class LauncherController: NSObject, NSWindowDelegate {
       NSWorkspace.shared.activateFileViewerSelecting([url])
     case .run(.settings):
       break  // Opened before hide(), above.
-    case .run(.resetWindowPosition), .run(.clipboardHistory), .clip:
+    case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets), .clip,
+      .snippet:
       break  // Handled above, without hiding the panel.
     case .run(.quit):
       NSApp.terminate(nil)
     }
   }
 
-  private func openClipboardHistory() {
+  /// Opens a command's own list, from its row or its hotkey.
+  private func open(_ mode: LauncherMode) {
     // Its hotkey closes its own list, as the launcher hotkey closes the panel.
-    if panel.isVisible, model.mode == .clipboard { return hide() }
+    if panel.isVisible, model.mode == mode { return hide() }
     closesOnCancel = !panel.isVisible
-    guard panel.isVisible else { return show(.clipboard) }
-    model.mode = .clipboard
+    guard panel.isVisible else { return show(mode) }
+    model.mode = mode
     update("")
+  }
+
+  /// Paste borrows the pasteboard and puts back what the user had copied; Copy replaces it.
+  private func perform(_ action: SearchResult.SnippetAction, with text: String) {
+    let date = Date.now.formatted(date: .abbreviated, time: .omitted)
+    // Read before writing, which replaces what {clipboard} stands for.
+    let copied = NSPasteboard.general.string(forType: .string) ?? ""
+    let expanded = Snippet.expand(text, date: date, clipboard: copied)
+    let concealed = clipboard.isConcealed && text.contains("{clipboard}")
+    let saved = action == .paste ? clipboard.snapshot() : []
+    let written = clipboard.write(expanded, transient: action == .paste, concealed: concealed)
+    hide()
+    guard written else { return NSSound.beep() }
+    guard action == .paste else { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [clipboard] in
+      guard clipboard.pasteIntoFrontmostApp() else {
+        // Not pasted: leave the snippet copied so Return still did something, and say so.
+        return NSSound.beep()
+      }
+      // shortcut: the app reads the pasteboard when it handles ⌘V, which 0.5 s covers for
+      // ordinary apps; a hung app would paste what was copied before. Wait for it if one does.
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { clipboard.restore(saved) }
+    }
   }
 
   private func perform(_ action: SearchResult.ClipAction, on id: UUID) {
