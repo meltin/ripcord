@@ -401,6 +401,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case windowManagement = "Window Management"
   case coffee = "Coffee"
   case sleepTimer = "Sleep Timer"
+  case colorPicker = "Color Picker"
   case cleanShot = "CleanShot X"
   case repositories = "Git Repositories"
   case httpStatusCodes = "HTTP Status Codes"
@@ -420,6 +421,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .windowManagement: "rectangle.split.2x1.fill"
     case .coffee: "cup.and.saucer.fill"
     case .sleepTimer: "moon.zzz.fill"
+    case .colorPicker: "eyedropper"
     case .cleanShot: "camera.viewfinder"
     case .repositories: "arrow.triangle.branch"
     case .httpStatusCodes: "network"
@@ -436,6 +438,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .windowManagement: .indigo
     case .coffee: .brown
     case .sleepTimer: .indigo
+    case .colorPicker: .pink
     case .cleanShot: .purple
     case .repositories: .orange
     case .httpStatusCodes: .teal
@@ -469,6 +472,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       "Find the Git repositories in your folders and open each in the app you pick for its Return."
     case .httpStatusCodes:
       "Look up a status code by number or name, open its MDN page, or copy it."
+    case .colorPicker:
+      "Pick a color anywhere on screen and copy it; Color History keeps the colors picked."
     case .ripcord: "Ripcord's own commands."
     }
   }
@@ -477,7 +482,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   var commandKeys: Set<String>? {
     switch self {
     case .clipboardHistory, .snippets, .repositories, .coffee, .sleepTimer, .httpStatusCodes,
-      .ripcord:
+      .colorPicker, .ripcord:
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
@@ -496,6 +501,7 @@ extension BuiltinCommand {
     case .searchRepositories: .repositories
     case .caffeinate, .decaffeinate: .coffee
     case .sleepTimer, .stopSleepTimer: .sleepTimer
+    case .pickColor, .colorHistory: .colorPicker
     case .httpStatusCodes: .httpStatusCodes
     case .settings, .resetWindowPosition, .quit: .ripcord
     }
@@ -526,6 +532,23 @@ struct SettingsView: View {
           PageScroll(model: model) {
             PageHeader(page: .quicklinks)
             QuicklinksPage(model: model)
+          }
+        case .colorPicker:
+          PageScroll(model: model) {
+            PageHeader(page: .colorPicker)
+            Card {
+              SettingRow(
+                title: "Format",
+                description: "What Pick Color copies, and Color History copies with Return."
+              ) {
+                Picker("Format", selection: $model.config.colorFormat) {
+                  ForEach(ColorFormat.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .labelsHidden()
+                .fixedSize()
+              }
+            }
+            CommandsList(model: model, page: .colorPicker)
           }
         case .repositories:
           PageScroll(model: model) {

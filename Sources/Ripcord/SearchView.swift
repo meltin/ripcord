@@ -58,7 +58,7 @@ struct SearchView: View {
         SnippetForm(model: model)
       } else if model.sections.isEmpty {
         EmptyState(query: model.query, mode: model.mode)
-      } else if model.mode == .repositories || model.mode == .httpStatusCodes {
+      } else if [.repositories, .httpStatusCodes, .colors].contains(model.mode) {
         resultList
       } else if model.mode != .root {
         // Raycast's layout: the list on the left, the selected item and its details on the right.
@@ -180,6 +180,10 @@ private struct EmptyState: View {
       "No repository matches “\(query)”."
     case .httpStatusCodes:
       "No status code matches “\(query)”."
+    case .colors where query.trimmingCharacters(in: .whitespaces).isEmpty:
+      "Colors you pick with Pick Color show up here."
+    case .colors:
+      "No color matches “\(query)”."
     }
   }
 
@@ -264,6 +268,17 @@ private struct ResultIcon: View {
 
   var body: some View {
     switch result.action {
+    case _ where result.kind == .color:
+      // The color itself, from the row's ID ("color:#RRGGBB").
+      let hex = UInt32(result.id.dropFirst("color:#".count), radix: 16) ?? 0
+      RoundedRectangle(cornerRadius: 6)
+        .fill(
+          Color(
+            red: Double(hex >> 16 & 0xFF) / 255, green: Double(hex >> 8 & 0xFF) / 255,
+            blue: Double(hex & 0xFF) / 255)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.15)))
+        .frame(width: 24, height: 24)
     case _ where result.kind == .statusCode:
       // Colored by its hundred, so a 5xx stands apart from a 2xx at a glance.
       let colors: [Character: Color] = ["1": .gray, "2": .green, "3": .blue, "4": .orange]
@@ -311,6 +326,8 @@ private struct ResultIcon: View {
       } else {
         tile("camera.viewfinder", .purple)
       }
+    case .deleteColor:
+      tile("trash", .gray)
     case .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey, .deleteAlias:
       tile("gearshape", .gray)
     case .snippet:
@@ -410,6 +427,8 @@ extension BuiltinCommand {
     case .decaffeinate: "cup.and.saucer"
     case .sleepTimer: "moon.zzz.fill"
     case .stopSleepTimer: "moon.zzz"
+    case .pickColor: "eyedropper"
+    case .colorHistory: "swatchpalette.fill"
     case .resetWindowPosition: "macwindow"
     case .quit: "power"
     }
@@ -422,6 +441,7 @@ extension BuiltinCommand {
     case .searchRepositories: .orange
     case .caffeinate, .decaffeinate: .brown
     case .sleepTimer, .stopSleepTimer: .indigo
+    case .pickColor, .colorHistory: .pink
     case .httpStatusCodes: .teal
     case .settings, .resetWindowPosition: .gray
     }
@@ -1447,6 +1467,7 @@ extension SearchResult.Kind {
     case .snippet: "Snippet"
     case .repository: "Repository"
     case .statusCode: "Status Code"
+    case .color: "Color"
     }
   }
 }
@@ -1555,6 +1576,7 @@ extension LauncherMode {
     case .snippets: "Search Snippets…"
     case .repositories: "Search Repositories…"
     case .httpStatusCodes: "Search HTTP Status Codes…"
+    case .colors: "Search Colors…"
     case .snippetForm: ""
     }
   }

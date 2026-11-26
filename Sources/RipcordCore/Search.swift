@@ -6,6 +6,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case searchRepositories, httpStatusCodes, settings
   case caffeinate, decaffeinate
   case sleepTimer, stopSleepTimer
+  case pickColor, colorHistory
   case resetWindowPosition, quit
 
   public var title: String {
@@ -22,6 +23,8 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .decaffeinate: "Decaffeinate"
     case .sleepTimer: "Sleep Timer"
     case .stopSleepTimer: "Stop Sleep Timer"
+    case .pickColor: "Pick Color"
+    case .colorHistory: "Color History"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .quit: "Quit Ripcord"
     }
@@ -32,6 +35,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     switch self {
     case .caffeinate, .decaffeinate: "Coffee"
     case .sleepTimer, .stopSleepTimer: "Sleep Timer"
+    case .pickColor, .colorHistory: "Color Picker"
     default: "Ripcord"
     }
   }
@@ -51,6 +55,8 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .decaffeinate: "command:decaffeinate"
     case .sleepTimer: "command:sleep-timer"
     case .stopSleepTimer: "command:stop-sleep-timer"
+    case .pickColor: "command:pick-color"
+    case .colorHistory: "command:color-history"
     case .resetWindowPosition: "command:reset-window-position"
     case .quit: "command:quit"
     }
@@ -153,6 +159,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case caffeinate(TimeInterval?)
     /// Sleeps the Mac, or only turns its display off, after this many seconds.
     case sleepTimer(TimeInterval, displayOnly: Bool)
+    /// Removes the picked color with this hex from Color History.
+    case deleteColor(String)
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -166,6 +174,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
 
   public enum Kind: Equatable, Sendable {
     case application, calculator, quicklink, command, text, image, snippet, repository, statusCode
+    case color
 
     public var primaryAction: String {
       switch self {
@@ -174,6 +183,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
       case .application, .quicklink, .command: "Open Command"
       case .repository: "Open"
       case .statusCode: "Open in Browser"
+      case .color: "Copy"
       }
     }
   }
