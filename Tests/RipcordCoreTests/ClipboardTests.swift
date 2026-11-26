@@ -100,7 +100,8 @@ private func temporaryDirectory() -> URL {
     withPasteboard { pasteboard in
       pasteboard.writeObjects([file as NSURL])
       #expect(
-        ClipCapture.read(pasteboard) == .image(data, fileExtension: "png", width: 5, height: 4))
+        ClipCapture.read(pasteboard)
+          == .image(data, fileExtension: "png", width: 5, height: 4, name: "CleanShot.png"))
     }
     // A capture whose file is gone still comes through as the PNG copied alongside it.
     let missing = directory.appending(path: "Gone.png")
@@ -117,6 +118,20 @@ private func temporaryDirectory() -> URL {
     withPasteboard { pasteboard in
       pasteboard.writeObjects([file as NSURL, notes as NSURL])
       #expect(ClipCapture.read(pasteboard) == nil)
+    }
+  }
+
+  @Test func readsTheCopyingAppWhenItNamesItself() {
+    withPasteboard { pasteboard in
+      pasteboard.declareTypes([.string, .init("org.nspasteboard.source")], owner: nil)
+      pasteboard.setString("x", forType: .string)
+      pasteboard.setString("com.example.app", forType: .init("org.nspasteboard.source"))
+      #expect(ClipCapture.source(pasteboard) == "com.example.app")
+    }
+    withPasteboard { pasteboard in
+      pasteboard.declareTypes([.string], owner: nil)
+      pasteboard.setString("x", forType: .string)
+      #expect(ClipCapture.source(pasteboard) == nil)
     }
   }
 
@@ -297,6 +312,21 @@ private func temporaryDirectory() -> URL {
       for: "", history: history, now: now, calendar: calendar)
     #expect(sections.map(\.title) == ["Today", "Yesterday", "Earlier"])
     #expect(sections.map { $0.results.map(\.title) } == [["today"], ["yesterday"], ["last week"]])
+  }
+
+  @Test func listsACopiedImageFileByItsNameAndFindsItByName() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var history = ClipboardHistory(directory: directory)
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    let data = try png(width: 2, height: 2)
+    try history.add(
+      .image(data, fileExtension: "png", width: 2, height: 2, name: "CleanShot 1.png"), at: now)
+    let row = try #require(
+      Search.clipboardSections(for: "cleanshot", history: history, now: now).first?.results.first)
+    #expect(row.title == "CleanShot 1.png")
+    #expect(row.subtitle.isEmpty)
+    #expect(ClipboardHistory(directory: directory).items.first?.name == "CleanShot 1.png")
   }
 
   @Test func offersPasteCopyPinAndDelete() throws {

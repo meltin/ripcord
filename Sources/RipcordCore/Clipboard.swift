@@ -23,6 +23,8 @@ public struct ClipItem: Codable, Identifiable, Equatable, Sendable {
   public var source: String?
   public var timesCopied: Int?
   public var firstCopied: Date?
+  /// The file name of a copied image file, shown in place of "Image".
+  public var name: String?
 
   public var copies: Int { timesCopied ?? 1 }
   public var firstDate: Date { firstCopied ?? date }
@@ -31,7 +33,7 @@ public struct ClipItem: Codable, Identifiable, Equatable, Sendable {
 /// What the pasteboard held, before it's in the history.
 public enum ClipCapture: Equatable, Sendable {
   case text(String)
-  case image(Data, fileExtension: String, width: Int, height: Int)
+  case image(Data, fileExtension: String, width: Int, height: Int, name: String? = nil)
 
   /// Text wins over an image, so a spreadsheet cell (offered as both) is kept as its text.
   /// One copied image file, as CleanShot X puts a capture on the pasteboard, is kept as that
@@ -54,7 +56,8 @@ public enum ClipCapture: Equatable, Sendable {
       // Size first, so a huge or not-yet-downloaded file is never read on the main thread.
       if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
         size <= maxImageBytes, let data = try? Data(contentsOf: url),
-        let capture = image(data, fileExtension: url.pathExtension.lowercased())
+        let capture = image(
+          data, fileExtension: url.pathExtension.lowercased(), name: url.lastPathComponent)
       {
         return capture
       }
@@ -84,13 +87,21 @@ public enum ClipCapture: Equatable, Sendable {
     return nil
   }
 
-  private static func image(_ data: Data, fileExtension: String) -> ClipCapture? {
+  private static func image(_ data: Data, fileExtension: String, name: String? = nil)
+    -> ClipCapture?
+  {
     guard data.count <= maxImageBytes,
       let source = CGImageSourceCreateWithData(data as CFData, nil),
       // Decoded lazily: reading the size doesn't unpack the pixels.
       let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
     else { return nil }
-    return .image(data, fileExtension: fileExtension, width: image.width, height: image.height)
+    return .image(
+      data, fileExtension: fileExtension, width: image.width, height: image.height, name: name)
+  }
+
+  /// The app that says it made the copy, by the nspasteboard.org convention; few apps do.
+  public static func source(_ pasteboard: NSPasteboard) -> String? {
+    pasteboard.string(forType: .init("org.nspasteboard.source")).flatMap { $0.isEmpty ? nil : $0 }
   }
 
   static let maxTextBytes = 1 << 20
@@ -100,7 +111,7 @@ public enum ClipCapture: Equatable, Sendable {
     let bytes =
       switch self {
       case .text(let text): Data(text.utf8)
-      case .image(let data, _, _, _): data
+      case .image(let data, _, _, _, _): data
       }
     return SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
   }
@@ -142,10 +153,12 @@ public struct ClipboardHistory: Sendable {
     }
     let id = UUID()
     let content: ClipItem.Content
+    var name: String?
     switch capture {
     case .text(let text):
       content = .text(text)
-    case .image(let data, let fileExtension, let width, let height):
+    case .image(let data, let fileExtension, let width, let height, let fileName):
+      name = fileName
       let file = "\(id.uuidString).\(fileExtension)"
       try FileManager.default.createDirectory(at: imagesURL, withIntermediateDirectories: true)
       try data.write(to: imagesURL.appending(path: file), options: .atomic)
@@ -154,7 +167,7 @@ public struct ClipboardHistory: Sendable {
     let added = [
       ClipItem(
         id: id, content: content, digest: digest, date: date, isPinned: false, source: source,
-        timesCopied: 1, firstCopied: date)
+        timesCopied: 1, firstCopied: date, name: name)
     ]
     let dropped = Set((added + items).filter { !$0.isPinned }.dropFirst(Self.limit).map(\.id))
     items = (added + items).filter { item in

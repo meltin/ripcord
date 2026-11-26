@@ -241,11 +241,17 @@ public enum Search {
             action: action, isPinned: item.isPinned)
         )
       case .image(_, let width, let height):
-        guard trimmed.isEmpty || "image".localizedStandardContains(trimmed) else { return nil }
+        // A copied file goes by its name, as Raycast lists it; a pasted image by its size.
+        let title = item.name ?? "Image"
+        guard
+          trimmed.isEmpty || "image".localizedStandardContains(trimmed)
+            || title.localizedStandardContains(trimmed)
+        else { return nil }
         return (
           item,
           SearchResult(
-            id: id, title: "Image", subtitle: "\(width)×\(height)", keyword: nil, kind: .image,
+            id: id, title: title, subtitle: item.name == nil ? "\(width)×\(height)" : "",
+            keyword: nil, kind: .image,
             action: action, thumbnail: history.imageURL(of: item), isPinned: item.isPinned)
         )
       }

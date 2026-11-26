@@ -55,14 +55,16 @@ struct SearchView: View {
     }
     // Floats over the list like Raycast's footer, so rows scroll on underneath it.
     .overlay(alignment: .bottom) {
-      Footer(selected: model.selected, mode: model.mode, onCommand: onCommand)
+      Footer(
+        selected: model.selected, mode: model.mode, pasteTarget: model.pasteTarget,
+        onCommand: onCommand)
     }
     .overlay {
       if let menu = model.menu {
         ZStack(alignment: menu.isRoot ? .bottomLeading : .bottomTrailing) {
           // A click anywhere outside the card closes it, like a dialog's backdrop.
           Color.clear.contentShape(Rectangle()).onTapGesture { onCommand(.cancel) }
-          MenuCard(menu: menu, onCommand: onCommand)
+          MenuCard(menu: menu, pasteTarget: model.pasteTarget, onCommand: onCommand)
             // Covers the footer, as Raycast's action panel does.
             .padding(8)
         }
@@ -195,7 +197,10 @@ private struct ResultIcon: View {
       tile("list.clipboard.fill", .red)
     case .clip:
       if let thumbnail = result.thumbnail {
-        Thumbnail(url: thumbnail, maxPixelSize: 64).frame(width: 24, height: 24)
+        // Cropped to a rounded square, as Raycast draws them.
+        Thumbnail(url: thumbnail, maxPixelSize: 64, fill: true)
+          .frame(width: 24, height: 24)
+          .clipShape(RoundedRectangle(cornerRadius: 5))
       } else {
         tile("doc.text", .gray)
       }
@@ -231,16 +236,26 @@ private struct ClipPreview: View {
         ]
       case .image(_, let width, let height):
         [("Type", "Image"), ("Dimensions", "\(width)×\(height)")]
+          + (imageURL.flatMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize }
+            .map { [("Size", Int64($0).formatted(.byteCount(style: .file)))] } ?? [])
       }
     details =
       content + [
         ("Times copied", "\(item.copies)"),
-        ("Last copied", item.date.formatted(date: .abbreviated, time: .shortened)),
-        ("First copied", item.firstDate.formatted(date: .abbreviated, time: .shortened)),
+        ("Last copied", Self.copiedAt(item.date)),
+        ("First copied", Self.copiedAt(item.firstDate)),
       ]
     sourceApp = item.source.flatMap {
       NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)
     }
+  }
+
+  /// "Today at 9:39", as Raycast writes it; a full date further back.
+  private static func copiedAt(_ date: Date) -> String {
+    let time = date.formatted(date: .omitted, time: .shortened)
+    if Calendar.current.isDateInToday(date) { return "Today at \(time)" }
+    if Calendar.current.isDateInYesterday(date) { return "Yesterday at \(time)" }
+    return date.formatted(date: .abbreviated, time: .shortened)
   }
 
   var body: some View {
@@ -258,38 +273,42 @@ private struct ClipPreview: View {
           }
         case .image:
           if let imageURL {
-            Thumbnail(url: imageURL, maxPixelSize: 800)
+            Thumbnail(url: imageURL, maxPixelSize: 800, cornerRadius: 10)
               .padding(16)
               .frame(maxWidth: .infinity, maxHeight: .infinity)
           }
         }
       }
-      .frame(maxHeight: .infinity)
+      // A fixed share for the clip; the details scroll under the footer, as in Raycast.
+      .frame(height: 210)
       Divider().opacity(0.5)
-      VStack(alignment: .leading, spacing: 2) {
-        Text("Information")
-          .font(.system(size: 12, weight: .medium))
-          .foregroundStyle(.secondary)
-          .padding(.horizontal, 8)
-          .padding(.bottom, 4)
-        if let sourceApp {
-          detailRow("Source", index: 0) {
-            HStack(spacing: 6) {
-              Image(nsImage: NSWorkspace.shared.icon(forFile: sourceApp.path)).resizable()
-                .frame(width: 16, height: 16)
-              Text(FileManager.default.displayName(atPath: sourceApp.path))
+      ScrollView {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Information")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.bottom, 4)
+          if let sourceApp {
+            detailRow("Source", index: 0) {
+              HStack(spacing: 6) {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: sourceApp.path)).resizable()
+                  .frame(width: 16, height: 16)
+                Text(FileManager.default.displayName(atPath: sourceApp.path))
+              }
             }
           }
+          ForEach(Array(details.enumerated()), id: \.offset) { index, row in
+            detailRow(row.label, index: index + (sourceApp == nil ? 0 : 1)) { Text(row.value) }
+          }
         }
-        ForEach(Array(details.enumerated()), id: \.offset) { index, row in
-          detailRow(row.label, index: index + (sourceApp == nil ? 0 : 1)) { Text(row.value) }
-        }
+        .font(.system(size: 12))
+        .padding(.horizontal, 8)
+        .padding(.top, 10)
+        // Clear of the floating footer.
+        .padding(.bottom, LauncherController.footerHeight)
       }
-      .font(.system(size: 12))
-      .padding(.horizontal, 8)
-      .padding(.top, 10)
-      // Clear of the floating footer.
-      .padding(.bottom, LauncherController.footerHeight)
+      .scrollIndicators(.never)
     }
   }
 
@@ -314,6 +333,9 @@ private struct ClipPreview: View {
 private struct Thumbnail: View {
   let url: URL
   let maxPixelSize: Int
+  /// Fills its frame for the caller to crop, instead of fitting inside it.
+  var fill = false
+  var cornerRadius: CGFloat = 0
   @State private var image: NSImage?
 
   private static let cache = NSCache<NSString, NSImage>()
@@ -322,7 +344,9 @@ private struct Thumbnail: View {
   var body: some View {
     Group {
       if let image {
-        Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
+        Image(nsImage: image).resizable()
+          .aspectRatio(contentMode: fill ? .fill : .fit)
+          .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
       } else {
         Color.clear
       }
@@ -352,6 +376,7 @@ private struct Thumbnail: View {
 private struct Footer: View {
   let selected: SearchResult?
   let mode: LauncherMode
+  let pasteTarget: String?
   let onCommand: (SearchCommand) -> Void
 
   var body: some View {
@@ -387,7 +412,7 @@ private struct Footer: View {
             onCommand(.submit)
           } label: {
             HStack(spacing: 6) {
-              Text(selected.kind.primaryAction)
+              Text(title(of: selected.action, else: selected.kind.primaryAction, pasteTarget))
               Keycap("↵")
             }
             .padding(.horizontal, 10)
@@ -446,6 +471,7 @@ private struct HoverButton<Label: View>: View {
 /// Raycast's action panel: a floating list with a title and each item's shortcut.
 private struct MenuCard: View {
   let menu: OpenMenu
+  let pasteTarget: String?
   let onCommand: (SearchCommand) -> Void
 
   var body: some View {
@@ -463,7 +489,7 @@ private struct MenuCard: View {
             Image(systemName: item.symbol)
               .font(.system(size: 13, weight: .light))
               .frame(width: 18)
-            Text(item.title)
+            Text(title(of: item.action, else: item.title, pasteTarget))
             Spacer(minLength: 16)
             HStack(spacing: 3) {
               ForEach(Array(item.shortcut.map(String.init).enumerated()), id: \.offset) {
@@ -489,6 +515,14 @@ private struct MenuCard: View {
     .frame(width: 300)
     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
   }
+}
+
+/// "Paste to Rex" rather than "Paste to App", naming the app the paste lands in.
+private func title(
+  of action: SearchResult.Action, else fallback: String, _ pasteTarget: String?
+) -> String {
+  guard case .clip(_, .paste) = action, let pasteTarget else { return fallback }
+  return "Paste to \(pasteTarget)"
 }
 
 struct Keycap: View {

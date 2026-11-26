@@ -21,6 +21,8 @@ final class LauncherModel {
   var mode = LauncherMode.root
   /// The history the clipboard rows were built from, for the preview of the selected one.
   var clipboard: ClipboardHistory?
+  /// The app a paste lands in: the one in front when the panel opened, as it never activates.
+  var pasteTarget: String?
   var query = ""
   var sections: [SearchSection] = []
   var selection = 0
@@ -122,6 +124,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   private func show(_ mode: LauncherMode = .root) {
     refreshApps()
+    model.pasteTarget = NSWorkspace.shared.frontmostApplication?.localizedName
     model.mode = mode
     update("")
     isPlacing = true

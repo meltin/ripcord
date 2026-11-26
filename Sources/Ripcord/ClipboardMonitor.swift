@@ -34,13 +34,17 @@ final class ClipboardMonitor {
     self.timer = timer
   }
 
+  private var frontmostAtLastPoll: String?
+
   private func poll() {
+    defer { frontmostAtLastPoll = NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
     guard isEnabled, pasteboard.changeCount != changeCount else { return }
     changeCount = pasteboard.changeCount
     guard let capture = ClipCapture.read(pasteboard) else { return }
-    // shortcut: the app in front at the poll, up to ~0.7 s after the copy, so a quick ⌘Tab or
-    // Ripcord's own Copy Answer credits another app; exact needs a per-app event tap.
-    let source = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+    // shortcut: without the nspasteboard.org marker, the app in front at the previous poll. A
+    // copy needs a selection first, so it rarely comes within 0.5 s of switching apps, while
+    // CleanShot X leaves the front right after copying; exact needs a per-app event tap.
+    let source = ClipCapture.source(pasteboard) ?? frontmostAtLastPoll
     update { try $0.add(capture, from: source) }
   }
 
