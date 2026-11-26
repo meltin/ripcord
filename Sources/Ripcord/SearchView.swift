@@ -1156,7 +1156,13 @@ private struct ArgumentFields: View {
 
   @ViewBuilder private func field(_ index: Int) -> some View {
     let text = Binding(get: { value(at: index) }, set: { set($0, at: index) })
-    if arguments[index].type == .password {
+    if arguments[index].type == .dropdown {
+      Picker(arguments[index].placeholder, selection: text) {
+        ForEach(arguments[index].data ?? [], id: \.self) { Text($0.title).tag($0.value) }
+      }
+      .labelsHidden()
+      .pickerStyle(.menu)
+    } else if arguments[index].type == .password {
       SecureField(arguments[index].placeholder, text: text)
     } else {
       TextField(arguments[index].placeholder, text: text)
@@ -1165,7 +1171,8 @@ private struct ArgumentFields: View {
 
   private func value(at index: Int) -> String {
     let values = model.argumentValues[path] ?? []
-    return values.indices.contains(index) ? values[index] : ""
+    let value = values.indices.contains(index) ? values[index] : ""
+    return value.isEmpty ? arguments[index].initialValue : value
   }
 
   private func set(_ value: String, at index: Int) {
@@ -1174,8 +1181,10 @@ private struct ArgumentFields: View {
   }
 
   private func move(from index: Int, back: Bool) {
-    let next = back ? index - 1 : index + 1
-    if arguments.indices.contains(next) {
+    // Text fields only: a dropdown takes a click.
+    let typed = arguments.indices.filter { arguments[$0].type != .dropdown }
+    let next = back ? typed.last { $0 < index } : typed.first { $0 > index }
+    if let next {
       focus = next
     } else if back {
       model.isEditingArgument = false
@@ -1560,6 +1569,7 @@ private struct ConfirmationCard: View {
     switch confirmation.icon {
     case .command(let command): (command.symbol, command.color)
     case .system(let action): (action.symbol, .gray)
+    case .script: ("terminal", .gray)
     }
   }
 

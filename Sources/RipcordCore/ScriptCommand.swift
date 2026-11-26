@@ -14,33 +14,53 @@ public struct ScriptCommand: Equatable, Sendable {
   public let directory: URL
   /// Up to three, typed into fields beside the search bar and passed as $1, $2 and $3.
   public var arguments: [Argument] = []
+  /// Asks before it runs, as `needsConfirmation` says.
+  public var needsConfirmation = false
 
-  /// An `argumentN` field, as Raycast's ARGUMENTS.md documents it; a dropdown isn't read yet.
+  /// An `argumentN` field, as Raycast's ARGUMENTS.md documents it.
   public struct Argument: Equatable, Sendable, Decodable {
     public let type: Kind
     public let placeholder: String
     public var optional: Bool? = nil
     public var percentEncoded: Bool? = nil
+    /// A dropdown's items.
+    public var data: [Option]? = nil
 
     public enum Kind: String, Equatable, Sendable, Decodable {
-      case text, password
+      case text, password, dropdown
+    }
+
+    public struct Option: Equatable, Sendable, Decodable, Hashable {
+      public let title: String
+      public let value: String
     }
 
     public var isRequired: Bool { optional != true }
+
+    /// What a field left alone holds: a dropdown's first item, as a menu always shows one.
+    public var initialValue: String { type == .dropdown ? data?.first?.value ?? "" : "" }
+  }
+
+  /// `values` with each one left alone at its field's initial value.
+  private func resolved(_ values: [String]) -> [String] {
+    arguments.indices.map { index in
+      let value = values.indices.contains(index) ? values[index] : ""
+      return value.isEmpty ? arguments[index].initialValue : value
+    }
   }
 
   /// The index of the first required argument left empty in `values`; nil when it can run.
   public func firstMissing(in values: [String]) -> Int? {
-    arguments.indices.first { index in
-      arguments[index].isRequired && (values.indices.contains(index) ? values[index] : "").isEmpty
-    }
+    let values = resolved(values)
+    return arguments.indices.first { arguments[$0].isRequired && values[$0].isEmpty }
   }
 
   /// What the process gets as $1…: each value, percent-encoded where asked; an optional one
   /// left empty is "" so the later ones keep their places.
   public func processArguments(_ values: [String]) -> [String] {
-    arguments.indices.map { index in
-      let value = values.indices.contains(index) ? values[index] : ""
+    let values = resolved(values)
+    return arguments.indices.map { index in
+      let value = values[index]
       guard arguments[index].percentEncoded == true else { return value }
       // What JavaScript's encodeURIComponent keeps, as Raycast encodes: a space is %20, & is %26.
       let kept = CharacterSet(
@@ -62,8 +82,8 @@ public struct ScriptCommand: Equatable, Sendable {
   public var settingsKey: String { "script:\(url.path)" }
 
   /// Reads the metadata from the first lines of `text`; nil for a file that isn't a Script
-  /// Command, or one using what Ripcord doesn't run yet (a dropdown argument, inline with a
-  /// refresh time, a confirmation), which is left out rather than run differently.
+  /// Command, or one using what Ripcord doesn't run yet (inline with a refresh time), which is
+  /// left out rather than run differently.
   public static func parse(_ text: String, url: URL) -> ScriptCommand? {
     var values: [String: String] = [:]
     // Comments starting `#` or `//`, as Raycast's README requires.
@@ -92,8 +112,8 @@ public struct ScriptCommand: Equatable, Sendable {
       case "inline" where values["refreshTime"] == nil: .compact
       default: nil
       }
-    guard let mode, values["needsConfirmation"] != "true" else { return nil }
-    // argument1 to 3 in order; one that doesn't decode (a dropdown, broken JSON) or a gap
+    guard let mode else { return nil }
+    // argument1 to 3 in order; one that doesn't decode (broken JSON, an unknown type) or a gap
     // leaves the script out.
     let given = values.keys.filter { $0.hasPrefix("argument") }
     let arguments = (1...3).prefix { values["argument\($0)"] != nil }.compactMap { number in
@@ -117,7 +137,8 @@ public struct ScriptCommand: Equatable, Sendable {
     return ScriptCommand(
       url: url, title: title, mode: mode, icon: icon,
       packageName: values["packageName"] ?? folder.lastPathComponent,
-      directory: directory ?? folder, arguments: arguments)
+      directory: directory ?? folder, arguments: arguments,
+      needsConfirmation: values["needsConfirmation"] == "true")
   }
 
   /// How far into a file the metadata is looked for.

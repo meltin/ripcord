@@ -9,6 +9,7 @@ struct Confirmation {
   enum Icon {
     case command(BuiltinCommand)
     case system(SystemAction)
+    case script
   }
 
   let icon: Icon
@@ -266,6 +267,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private var scriptRun = 0
   /// The fullOutput run the output view waits for, so an earlier one's result never shows there.
   private var outputRun = 0
+  /// The script whose confirmation is up: answering it runs the script this once.
+  private var confirmedScript: String?
   /// The root search's Favorites, by item key.
   var favorites: [String] = [] {
     didSet {
@@ -525,6 +528,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.toast = nil
     model.argumentValues = [:]
     model.argumentFocusRequest = nil
+    confirmedScript = nil
     if model.isEditingArgument {
       // The search field takes the focus back for next time.
       model.isEditingArgument = false
@@ -635,6 +639,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
         perform(confirmation.action)
       case .cancel, .back:
         model.confirmation = nil
+        confirmedScript = nil
         // A panel opened only to ask goes away with the question.
         if openedForQuestion { hide() }
       default: break
@@ -716,7 +721,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
       goBack()
     case .nextField:
       // Not behind an open menu.
-      if model.menu == nil, model.argumentScript != nil { model.argumentFocusRequest = 0 }
+      // The first field to type in; a dropdown takes a click.
+      if model.menu == nil, let path = model.argumentScript {
+        model.argumentFocusRequest = model.scriptArguments[path]?.firstIndex {
+          $0.type != .dropdown
+        }
+      }
     case .activate(let id): model.results.first { $0.id == id }.map { perform($0.action) }
     case .toggleMenu(let root): toggleMenu(root: root)
     case .filterTag(let tag):
@@ -793,6 +803,21 @@ final class LauncherController: NSObject, NSWindowDelegate {
       scripts.map { ($0.url.path, $0.arguments) }, uniquingKeysWith: { first, _ in first })
   }
 
+  /// Asks before running a script that wants it, on the card System Actions ask on; its
+  /// arguments stay typed meanwhile.
+  private func askToRun(_ script: ScriptCommand) {
+    if !panel.isVisible {
+      show()
+      openedForQuestion = true
+    }
+    model.menu = nil
+    confirmedScript = script.url.path
+    model.confirmation = Confirmation(
+      icon: .script, title: "Run “\(script.title)”?",
+      message: "This script asks to be confirmed before it runs.", confirmTitle: "Run Script",
+      action: .runScript(script.url.path))
+  }
+
   /// Shows the script's row with its empty field focused: like Raycast, it doesn't run with a
   /// required argument missing, whichever way it was started.
   private func askForArgument(_ index: Int, of script: ScriptCommand) {
@@ -823,6 +848,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     // Read before a silent one hides the panel, which drops them.
     let values = model.argumentValues[path] ?? []
     if let missing = script.firstMissing(in: values) { return askForArgument(missing, of: script) }
+    if script.needsConfirmation, confirmedScript != path { return askToRun(script) }
+    confirmedScript = nil
     // Typed for this run, as Raycast's fields empty once it runs; a password isn't kept.
     model.argumentValues[path] = nil
     // Hidden already when its hotkey ran it: what was left open there stays.
