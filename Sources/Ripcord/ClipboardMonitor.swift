@@ -34,21 +34,30 @@ final class ClipboardMonitor {
     self.timer = timer
   }
 
-  private var frontmostAtLastPoll: NSRunningApplication?
-
   private func poll() {
-    let frontmost = NSWorkspace.shared.frontmostApplication
-    defer { frontmostAtLastPoll = frontmost }
     guard isEnabled, pasteboard.changeCount != changeCount else { return }
     changeCount = pasteboard.changeCount
     guard let capture = ClipCapture.read(pasteboard) else { return }
-    // shortcut: without the nspasteboard.org marker, the app in front now, except when a menu
-    // bar app such as CleanShot X was in front at the previous poll: those come forward for an
-    // overlay and leave right after copying. A ⌘C followed within 0.5 s by ⌘Tab is still
-    // credited to the next app; exact needs a per-app event tap.
-    let overlay = frontmostAtLastPoll.flatMap { $0.activationPolicy == .accessory ? $0 : nil }
-    let source = ClipCapture.source(pasteboard) ?? (overlay ?? frontmost)?.bundleIdentifier
-    update { try $0.add(capture, from: source) }
+    // shortcut: without the nspasteboard.org marker, a guess. A copy made while a menu bar app's
+    // overlay is up (CleanShot X keeps one for seconds after a capture) is credited to that app,
+    // and a ⌘C followed within 0.5 s by ⌘Tab to the next app; exact needs a per-app event tap.
+    let app = Self.overlayApp() ?? NSWorkspace.shared.frontmostApplication
+    update { try $0.add(capture, from: ClipCapture.source(pasteboard) ?? app?.bundleIdentifier) }
+  }
+
+  /// A menu bar app with a window above the screen saver level, as CleanShot X shows while and
+  /// after it captures. Such apps copy without ever coming to the front.
+  private static func overlayApp() -> NSRunningApplication? {
+    let windows =
+      CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+    let screenSaver = Int(CGWindowLevelForKey(.screenSaverWindow))
+    return windows.lazy.compactMap { window in
+      guard let level = window[kCGWindowLayer as String] as? Int, level > screenSaver,
+        let pid = window[kCGWindowOwnerPID as String] as? pid_t,
+        let app = NSRunningApplication(processIdentifier: pid), app.activationPolicy == .accessory
+      else { return nil }
+      return app
+    }.first
   }
 
   func togglePin(_ id: UUID) { update { try $0.togglePin(id) } }
