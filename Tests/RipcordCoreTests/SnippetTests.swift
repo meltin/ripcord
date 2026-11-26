@@ -144,13 +144,39 @@ import Testing
     #expect(result.kind.primaryAction == "Paste to App")
     #expect(result.keyword == "sig")
     #expect(result.symbol == "doc")
-    #expect(result.actions.map(\.shortcut) == ["↵", "⇧⌘C", "⌘E", "⌘D", "⌘N", "⌃X"])
+    #expect(result.actions.map(\.shortcut) == ["↵", "⇧⌘C", "⌘E", "⌘D", "⌘N", "⌃X", "⇧⌘,"])
     #expect(
       result.actions.map(\.action) == [
         .snippet(4, .paste), .snippet(4, .copy), .snippet(4, .edit), .snippet(4, .duplicate),
         .run(.createSnippet),
-        .snippet(4, .delete),
+        .snippet(4, .delete), .configureMenu(BuiltinCommand.searchSnippets.settingsKey),
       ])
+  }
+
+  @Test func commandRowsOfferConfigureCommand() throws {
+    let row = try #require(
+      Search.results(for: "search snippets", apps: [], quicklinks: []).first)
+    #expect(row.actions.map(\.title) == ["Open Command", "Configure Command…"])
+    #expect(row.actions.last?.action == .configureMenu(BuiltinCommand.searchSnippets.settingsKey))
+  }
+
+  @Test func configureCommandOffersSetAndDeleteAsTheCommandHasThem() {
+    let key = BuiltinCommand.searchSnippets.settingsKey
+    #expect(
+      MenuAction.configureMenu(key, settings: nil).map(\.title) == [
+        "Open Command Settings", "Set Hotkey…", "Set Alias…",
+      ])
+    let set = MenuAction.configureMenu(key, settings: ItemSettings(alias: "sn", hotkey: "ctrl+s"))
+    #expect(
+      set.map(\.title) == [
+        "Open Command Settings", "Update Hotkey…", "Update Alias…", "Delete Hotkey", "Delete Alias",
+      ])
+    #expect(
+      set.map(\.action) == [
+        .configure(key), .setHotkey(key), .setAlias(key), .deleteHotkey(key), .deleteAlias(key),
+      ])
+    #expect(set.map(\.isDestructive) == [false, false, false, true, true])
+    #expect(set.map(\.startsSection) == [false, true, false, true, false])
   }
 
   @Test func theCommandsAreFoundByTyping() {

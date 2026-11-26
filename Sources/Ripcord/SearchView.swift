@@ -33,7 +33,10 @@ struct SearchView: View {
           SearchField(
             text: model.query,
             placeholder: model.mode.placeholder,
-            onChange: onQueryChange, onCommand: onCommand)
+            onChange: onQueryChange, onCommand: onCommand
+          )
+          // A new one takes the focus back from Set Alias…'s field.
+          .id(model.searchFieldID)
           if model.mode == .snippets {
             // Only tags of listed snippets: one on a snippet without text would list nothing.
             TagFilter(
@@ -92,6 +95,14 @@ struct SearchView: View {
           MenuCard(menu: menu, pasteTarget: model.pasteTarget, onCommand: onCommand)
             // Covers the footer, as Raycast's action panel does.
             .padding(8)
+        }
+      }
+    }
+    .overlay {
+      if let editor = model.configureEditor {
+        ZStack(alignment: .bottomTrailing) {
+          Color.clear.contentShape(Rectangle()).onTapGesture { onCommand(.cancel) }
+          ConfigureEditorCard(editor: editor, onCommand: onCommand).padding(8)
         }
       }
     }
@@ -265,6 +276,8 @@ private struct ResultIcon: View {
       tile(layout.symbol, .indigo)
     case .reveal:
       tile("folder", .gray)
+    case .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey, .deleteAlias:
+      tile("gearshape", .gray)
     case .snippet:
       // Plain, as Raycast draws a snippet's icon.
       Image(systemName: result.symbol ?? "doc")
@@ -1188,6 +1201,9 @@ private struct MenuCard: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
       ForEach(Array(menu.items.enumerated()), id: \.offset) { index, item in
+        if item.startsSection, index > 0 {
+          Divider().opacity(0.5).padding(.vertical, 4)
+        }
         Button {
           onCommand(.runMenuItem(index))
         } label: {
@@ -1198,6 +1214,8 @@ private struct MenuCard: View {
               Image(systemName: item.symbol)
                 .font(.system(size: 13, weight: .light))
                 .frame(width: 18)
+                // Latin glyphs: text.cursor draws あ under a Japanese locale.
+                .environment(\.locale, Locale(identifier: "en"))
             }
             Text(title(of: item.action, else: item.title, pasteTarget))
               .lineLimit(1)
@@ -1209,6 +1227,7 @@ private struct MenuCard: View {
             }
           }
           .font(.system(size: 13))
+          .foregroundStyle(item.isDestructive ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
           .padding(.horizontal, 10)
           .frame(height: 34)
           .background(
@@ -1226,6 +1245,101 @@ private struct MenuCard: View {
     // Room for "Open in Visual Studio Code" and its keys on one line.
     .frame(width: 340)
     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+  }
+}
+
+/// Raycast's Set Hotkey… and Set Alias… card: what's being set, the keys held or the alias
+/// field, and the row it's for with what Esc and Return do.
+private struct ConfigureEditorCard: View {
+  let editor: ConfigureEditor
+  let onCommand: (SearchCommand) -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Text(editor.kind == .hotkey ? "Set Hotkey…" : "Set Alias…")
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+      Group {
+        switch editor.kind {
+        case .alias:
+          SearchField(
+            text: editor.alias, placeholder: "Enter Alias…", fontSize: 14,
+            onChange: { onCommand(.editAlias($0)) }, onCommand: onCommand
+          )
+          .padding(.horizontal, 10)
+          .frame(height: 34)
+          .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.primary.opacity(0.25)))
+          .padding(16)
+        case .hotkey:
+          VStack(spacing: 8) {
+            Text(hotkeyCaption)
+              .font(.system(size: 12))
+              .foregroundStyle(.secondary)
+            HStack(spacing: 4) {
+              ForEach(Array(shownKeys.enumerated()), id: \.offset) { _, key in
+                Text(key)
+                  .font(.system(size: 11, weight: .medium))
+                  .frame(minWidth: 22, minHeight: 22)
+                  .padding(.horizontal, key.count > 1 ? 4 : 0)
+                  .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
+              }
+            }
+            .opacity(isExample ? 0.6 : 1)
+            Text(editor.problem ?? (isExample ? "Modifiers and a key" : " "))
+              .font(.system(size: 12))
+              .foregroundStyle(
+                editor.problem == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.red))
+          }
+          .frame(maxWidth: .infinity)
+          .frame(height: 104)
+        }
+      }
+      Divider().opacity(0.5)
+      HStack(spacing: 8) {
+        ResultIcon(result: editor.row).scaleEffect(0.75).frame(width: 18, height: 18)
+        Text(editor.row.title).font(.system(size: 12)).lineLimit(1)
+        Spacer(minLength: 12)
+        if editor.kind == .alias {
+          hint("Close", "Esc")
+          hint("Save", "↵")
+        } else {
+          hint("Back", "Esc")
+          hint("Close", "↵")
+        }
+      }
+      .padding(.horizontal, 14)
+      .frame(height: 40)
+    }
+    .frame(width: 340)
+    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+  }
+
+  /// The modifiers held, in macOS's order.
+  private var heldKeys: [String] {
+    [(NSEvent.ModifierFlags.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘")]
+      .filter { editor.modifiers.contains($0.0) }.map(\.1)
+  }
+
+  /// The modifiers being held, else the hotkey set, else an example.
+  private var shownKeys: [String] {
+    if !heldKeys.isEmpty { return heldKeys }
+    return editor.hotkey.flatMap(Hotkey.init)?.keycaps ?? ["⌃", "⌥", "K"]
+  }
+
+  private var isExample: Bool { heldKeys.isEmpty && editor.hotkey == nil }
+
+  private var hotkeyCaption: String {
+    if !heldKeys.isEmpty { return "Now a key" }
+    return isExample ? "e.g." : "Press ⌫ to delete"
+  }
+
+  private func hint(_ title: String, _ key: String) -> some View {
+    HStack(spacing: 5) {
+      Text(title).font(.system(size: 12)).foregroundStyle(.secondary)
+      Keycap(key)
+    }
   }
 }
 

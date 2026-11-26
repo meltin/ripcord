@@ -51,13 +51,56 @@ public struct MenuAction: Equatable, Sendable {
   /// Modifiers in ⌃⌥⇧⌘ order, then the key, e.g. "⇧⌘C"; "↵" for the primary action.
   public let shortcut: String
   public let action: SearchResult.Action
+  /// Drawn in red, as Raycast draws Delete Alias.
+  public let isDestructive: Bool
+  /// A line above it, setting it apart from the items before.
+  public let startsSection: Bool
 
-  public init(title: String, symbol: String, shortcut: String, action: SearchResult.Action) {
+  public init(
+    title: String, symbol: String, shortcut: String, action: SearchResult.Action,
+    isDestructive: Bool = false, startsSection: Bool = false
+  ) {
     self.title = title
     self.symbol = symbol
     self.shortcut = shortcut
     self.action = action
+    self.isDestructive = isDestructive
+    self.startsSection = startsSection
   }
+
+  /// Raycast's Configure Command…, which opens `configureMenu` for the command with this key.
+  public static func configure(_ settingsKey: String) -> MenuAction {
+    MenuAction(
+      title: "Configure Command…", symbol: "gearshape", shortcut: "⇧⌘,",
+      action: .configureMenu(settingsKey))
+  }
+
+  /// What Configure Command… lists for the command with this settings key, given its settings:
+  /// its settings page, then setting its hotkey and alias, then deleting those it has.
+  public static func configureMenu(_ settingsKey: String, settings: ItemSettings?) -> [MenuAction] {
+    let hasHotkey = settings?.hotkey != nil
+    let hasAlias = !(settings?.alias ?? "").isEmpty
+    let deletes: [(title: String, action: SearchResult.Action)] =
+      (hasHotkey ? [("Delete Hotkey", .deleteHotkey(settingsKey))] : [])
+      + (hasAlias ? [("Delete Alias", .deleteAlias(settingsKey))] : [])
+    return [
+      MenuAction(
+        title: "Open Command Settings", symbol: "gearshape", shortcut: "",
+        action: .configure(settingsKey)),
+      MenuAction(
+        title: hasHotkey ? "Update Hotkey…" : "Set Hotkey…", symbol: "keyboard", shortcut: "",
+        action: .setHotkey(settingsKey), startsSection: true),
+      MenuAction(
+        title: hasAlias ? "Update Alias…" : "Set Alias…", symbol: "text.cursor",
+        shortcut: "", action: .setAlias(settingsKey)),
+    ]
+      + deletes.enumerated().map { index, delete in
+        MenuAction(
+          title: delete.title, symbol: "trash", shortcut: "", action: delete.action,
+          isDestructive: true, startsSection: index == 0)
+      }
+  }
+
 }
 
 public struct SearchResult: Identifiable, Equatable, Sendable {
@@ -74,6 +117,15 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case window(WindowLayout)
     /// A folder opened in a chosen app, as a repository is.
     case openWith(URL, app: URL)
+    /// Settings, at the page that lists the command with this settings key.
+    case configure(String)
+    /// The Configure Command submenu of the command with this settings key.
+    case configureMenu(String)
+    /// The panel's own editor for the command's hotkey or alias, as Raycast's.
+    case setHotkey(String)
+    case setAlias(String)
+    case deleteHotkey(String)
+    case deleteAlias(String)
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -111,7 +163,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
           title: "Show in Finder", symbol: "folder", shortcut: "⇧⌘F", action: .reveal(url)),
         MenuAction(
           title: "Copy Path", symbol: "doc.on.doc", shortcut: "⇧⌘C", action: .copy(url.path)),
-      ]
+      ] + [settingsKey.map(MenuAction.configure)].compactMap { $0 }
     case .open(let url):
       return [
         primary,
@@ -129,6 +181,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
           title: isPinned ? "Unpin" : "Pin", symbol: isPinned ? "pin.slash" : "pin",
           shortcut: "⇧⌘P", action: .clip(id, .togglePin)),
         MenuAction(title: "Delete", symbol: "trash", shortcut: "⌃X", action: .clip(id, .delete)),
+        .configure(BuiltinCommand.clipboardHistory.settingsKey),
       ]
     case .snippet(let index, _):
       return [
@@ -146,7 +199,11 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
         MenuAction(
           title: "Delete Snippet", symbol: "trash", shortcut: "⌃X", action: .snippet(index, .delete)
         ),
+        .configure(BuiltinCommand.searchSnippets.settingsKey),
       ]
+    case .run(let command): return [primary, .configure(command.settingsKey)]
+    case .system(let system, _): return [primary, .configure(system.settingsKey)]
+    case .window(let layout): return [primary, .configure(layout.settingsKey)]
     default:
       return [primary]
     }
@@ -168,6 +225,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   /// Its ⌘K actions when they depend on settings, as a repository's apps do; nil works them out
   /// from `action`.
   public var menu: [MenuAction]? = nil
+  /// An app's key in the settings, for Configure Command…; commands carry theirs in `action`.
+  public var settingsKey: String? = nil
   public var isPinned = false
 }
 
@@ -423,6 +482,7 @@ public enum Search {
             title: "Show in Finder", symbol: "folder", shortcut: "⇧⌘F", action: .reveal(url)),
           MenuAction(
             title: "Copy Path", symbol: "doc.on.doc", shortcut: "⇧⌘C", action: .copy(url.path)),
+          .configure(BuiltinCommand.searchRepositories.settingsKey),
         ]
       return SearchResult(
         id: "repo:\(url.path)", title: repository.name,
@@ -478,7 +538,7 @@ public enum Search {
   private static func result(for app: AppEntry, alias: String?) -> SearchResult {
     SearchResult(
       id: app.url.path, title: app.names[0], subtitle: "", keyword: alias, kind: .application,
-      action: .open(app.url))
+      action: .open(app.url), settingsKey: app.settingsKey)
   }
 
   private static func result(for link: Quicklink) -> SearchResult? {

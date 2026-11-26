@@ -35,8 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     NSApp.mainMenu = makeMainMenu()
     statusItem = makeStatusItem()
     launcher.onOpenSettings = { [weak self] in self?.openSettings() }
+    launcher.onConfigure = { [weak self] in self?.settings.show(configuring: $0) }
+    launcher.settings = settings.model
     launcher.onError = { [weak self] in self?.showError($0) }
     launcher.editSnippets = { [weak self] change in self?.editSnippets(change) ?? false }
+    launcher.editSettings = { [weak self] change in self?.editSettings(change) ?? false }
     launcher.onExportSnippets = { [weak self] in self?.exportSnippets() }
     launcher.onImportSnippets = { [weak self] in self?.importSnippets() }
     settings.model.onSave = { [weak self] in self?.applyConfig() }
@@ -85,6 +88,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     model.config.snippets = snippets
     // Saving calls applyConfig, which hands the launcher the new list.
+    model.saveIfChanged()
+    if let error = model.loadError { showError(error) }
+    return model.loadError == nil
+  }
+
+  /// Applies `change` to the file as it is now, and saves; false when it can't be read or saved.
+  private func editSettings(_ change: (SettingsModel) -> Void) -> Bool {
+    let model = settings.model
+    model.load()
+    guard model.loadError == nil else {
+      showError(model.loadError ?? "")
+      return false
+    }
+    change(model)
+    // Saving calls applyConfig, which hands the launcher the new settings.
     model.saveIfChanged()
     if let error = model.loadError { showError(error) }
     return model.loadError == nil

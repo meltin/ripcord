@@ -100,8 +100,10 @@ import Testing
 
   @Test func actionsPutPrimaryFirst() throws {
     let app = try #require(Search.results(for: "safari", apps: apps, quicklinks: []).first)
-    #expect(app.actions.map(\.shortcut) == ["↵", "⇧⌘F", "⇧⌘C"])
+    #expect(app.actions.map(\.shortcut) == ["↵", "⇧⌘F", "⇧⌘C", "⇧⌘,"])
     #expect(app.actions[2].action == .copy("/Applications/Safari.app"))
+    // An app is configured by its settings key, as the Applications page lists it.
+    #expect(app.actions[3].action == .configureMenu(apps[0].settingsKey))
     let link = try #require(Search.results(for: "google", apps: [], quicklinks: links).first)
     #expect(link.actions.map(\.title) == ["Open Command", "Copy URL"])
   }

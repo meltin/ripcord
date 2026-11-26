@@ -18,6 +18,23 @@ struct Confirmation {
   let action: SearchResult.Action
 }
 
+/// Configure Command's Set Hotkey… or Set Alias…, open over the panel as Raycast's are.
+struct ConfigureEditor {
+  enum Kind { case hotkey, alias }
+
+  let kind: Kind
+  let settingsKey: String
+  /// The row it's for, named with its icon at the bottom of the card.
+  let row: SearchResult
+  var alias = ""
+  /// The hotkey set, shown as keycaps; nil when there's none yet.
+  var hotkey: String?
+  /// The modifiers held while recording a hotkey.
+  var modifiers: NSEvent.ModifierFlags = []
+  /// Why the keys pressed can't be the hotkey.
+  var problem: String?
+}
+
 /// The ⌘K actions of a row, or the root menu behind the footer's left button.
 struct OpenMenu {
   let title: String
@@ -56,6 +73,9 @@ final class LauncherModel {
   var menu: OpenMenu?
   /// A question asked over the panel before something that can't be undone.
   var confirmation: Confirmation?
+  var configureEditor: ConfigureEditor?
+  /// Bumped to remount the search field, which takes focus back as it appears.
+  var searchFieldID = 0
   /// The config's snippets, for the preview of the selected one.
   var snippets: [Snippet] = []
   /// What Create Snippet's form holds; `editing` is the snippet's index when it's an edit.
@@ -85,6 +105,7 @@ enum SearchCommand {
   case filterTag(String?)
   case runMenuItem(Int)
   case selectMenuItem(Int)
+  case editAlias(String)
 }
 
 /// A panel that takes keys without activating Ripcord, so the previous app stays frontmost.
@@ -159,11 +180,18 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Saves a change to the config's snippets; false when the file couldn't be written.
   /// `change` gets the list as the file holds it now and returns the new one, or nil to refuse.
   var editSnippets: (_ change: ([Snippet]) -> [Snippet]?) -> Bool = { _ in false }
+  /// Changes the settings file through the settings window's model, as its rows do.
+  var editSettings: (_ change: (SettingsModel) -> Void) -> Bool = { _ in false }
   /// The input source selected while the panel is open, by TIS ID; nil leaves it alone.
   var inputSource: String?
   /// What the panel switched away from, put back when it closes.
   private var previousInputSource: TISInputSource?
   var onOpenSettings: () -> Void = {}
+  /// Settings at the page for the command with this settings key.
+  var onConfigure: (_ settingsKey: String) -> Void = { _ in }
+  /// The settings window's model, whose hotkey checks Set Hotkey… records through.
+  weak var settings: SettingsModel?
+  private var hotkeyMonitor: Any?
   /// Shows why something couldn't be done, as a System Action that lacks a permission.
   var onError: (String) -> Void = { _ in NSSound.beep() }
   /// Export Snippets and Import Snippets, which need file dialogs and the config.
@@ -334,6 +362,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// `keepingMode` leaves a command's list or form as it is, to come back to (`leftOpen`).
   private func hide(keepingMode: Bool = false) {
+    // A recording left running would keep every hotkey unregistered.
+    closeEditor(backToMenu: false)
     panel.orderOut(nil)
     openedForQuestion = false
     model.menu = nil
@@ -431,6 +461,15 @@ final class LauncherController: NSObject, NSWindowDelegate {
       }
       return
     }
+    if let editor = model.configureEditor {
+      switch command {
+      case .editAlias(let text): model.configureEditor?.alias = text
+      case .submit where editor.kind == .alias: saveAlias(editor)
+      case .cancel: closeEditor(backToMenu: editor.kind == .hotkey)
+      default: break
+      }
+      return
+    }
     // An open menu takes the arrows, Return and Esc.
     if let menu = model.menu {
       switch command {
@@ -480,6 +519,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
         perform(items[index].action)
       }
     case .selectMenuItem(let index): model.menu?.selection = index
+    case .editAlias: break  // Only while Set Alias… is open, above.
     }
   }
 
@@ -505,7 +545,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     // ⌃ too, for Raycast's ⌃X Delete.
     // Shortcuts would act behind a question; only its Return and Esc count.
     guard model.confirmation == nil, !flags.isDisjoint(with: [.command, .control]),
-      let key = event.charactersIgnoringModifiers?.lowercased()
+      // Unshifted, so ⇧⌘, reads as "," where charactersIgnoringModifiers gives "<".
+      let key = event.characters(byApplyingModifiers: [])?.lowercased()
     else { return false }
     // An accessory app has no Edit menu, so ⌘X/C/V/A never reach the search field otherwise.
     let editing = [
@@ -515,6 +556,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if flags == .command, let selector = editing[key] {
       return NSApp.sendAction(selector, to: nil, from: panel)
     }
+    // Set Alias… keeps the keys to its field; the row's shortcuts would act behind it.
+    if model.configureEditor != nil { return false }
     // Undo and redo, for the same reason; they matter in Create Snippet's editor.
     if key == "z", flags == .command || flags == [.command, .shift] {
       return NSApp.sendAction(
@@ -574,6 +617,23 @@ final class LauncherController: NSObject, NSWindowDelegate {
     // Open Settings while the panel still holds the key press, so macOS treats it as the
     // user's request to bring Ripcord forward.
     if action == .run(.settings) { onOpenSettings() }
+    if case .configureMenu(let key) = action {
+      model.menu = OpenMenu(
+        title: "Configure Command", items: MenuAction.configureMenu(key, settings: items[key]),
+        isRoot: false)
+      return
+    }
+    if let delete = deletion(action) {
+      model.menu = nil
+      if !editSettings(delete) { NSSound.beep() }
+      return refreshRows(selecting: model.selected?.id)
+    }
+    switch action {
+    case .setHotkey(let key): return openEditor(.hotkey, for: key)
+    case .setAlias(let key): return openEditor(.alias, for: key)
+    case .configure(let key): onConfigure(key)
+    default: break
+    }
     hide()
     switch action {
     case .open(let url):
@@ -586,7 +646,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
         Bundle.main.bundleIdentifier ?? "", forType: .init("org.nspasteboard.source"))
     case .reveal(let url):
       NSWorkspace.shared.activateFileViewerSelecting([url])
-    case .run(.settings):
+    case .run(.settings), .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey,
+      .deleteAlias:
       break  // Opened before hide(), above.
     case .openWith(let url, let app):
       NSWorkspace.shared.open([url], withApplicationAt: app, configuration: .init()) { _, error in
@@ -643,6 +704,84 @@ final class LauncherController: NSObject, NSWindowDelegate {
       else { return }
       repositories = found
       if model.mode == .repositories { refreshRows(selecting: model.selected?.id) }
+    }
+  }
+
+  /// Opens Set Hotkey… or Set Alias… over the panel for the selected row.
+  private func openEditor(_ kind: ConfigureEditor.Kind, for key: String) {
+    guard let row = model.selected, let settings else { return NSSound.beep() }
+    settings.load()
+    guard settings.loadError == nil else { return NSSound.beep() }
+    model.menu = nil
+    model.configureEditor = ConfigureEditor(
+      kind: kind, settingsKey: key, row: row, alias: items[key]?.alias ?? "",
+      hotkey: items[key]?.hotkey)
+    guard kind == .hotkey else { return }
+    // Ripcord's hotkeys would fire instead of being recorded.
+    settings.onRecordingChange(true)
+    hotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) {
+      [weak self] event in
+      self?.record(event, for: key)
+      return event.type == .flagsChanged ? event : nil
+    }
+  }
+
+  /// A key press while Set Hotkey… is open, as Raycast's takes them: Esc goes back, Return
+  /// closes, Delete removes the hotkey, and keys with modifiers become the hotkey, shown until
+  /// the card closes.
+  private func record(_ event: NSEvent, for key: String) {
+    guard model.configureEditor?.kind == .hotkey, let settings else { return }
+    let modifiers = event.modifierFlags.intersection([.control, .option, .shift, .command])
+    if event.type == .flagsChanged {
+      model.configureEditor?.modifiers = modifiers
+      return
+    }
+    let bare = modifiers.isEmpty
+    switch Int(event.keyCode) {
+    case kVK_Escape: return closeEditor(backToMenu: true)
+    case kVK_Return where bare: return closeEditor(backToMenu: false)
+    case kVK_Delete where bare:
+      settings.setHotkey(nil, for: .item(key))
+      settings.saveIfChanged()
+      model.configureEditor?.hotkey = nil
+      model.configureEditor?.problem = nil
+    default:
+      model.configureEditor?.problem = settings.setHotkey(from: event, for: .item(key))
+      model.configureEditor?.hotkey = settings.hotkey(of: .item(key))
+    }
+  }
+
+  private func saveAlias(_ editor: ConfigureEditor) {
+    let alias = editor.alias.trimmingCharacters(in: .whitespaces)
+    if !editSettings({ $0.setAlias(alias, for: .item(editor.settingsKey)) }) { NSSound.beep() }
+    closeEditor(backToMenu: false)
+  }
+
+  /// Closes Set Hotkey… or Set Alias…; Set Hotkey…'s Esc goes back to Configure Command.
+  private func closeEditor(backToMenu: Bool) {
+    guard let editor = model.configureEditor else { return }
+    if let hotkeyMonitor {
+      NSEvent.removeMonitor(hotkeyMonitor)
+      self.hotkeyMonitor = nil
+      // Registers the hotkeys again, the new one included.
+      settings?.onRecordingChange(false)
+    }
+    model.configureEditor = nil
+    refreshRows(selecting: model.selected?.id)
+    if backToMenu {
+      perform(.configureMenu(editor.settingsKey))
+    } else if editor.kind == .alias {
+      // The alias field had the focus.
+      model.searchFieldID += 1
+    }
+  }
+
+  /// Delete Hotkey and Delete Alias, as changes to the settings; nil for any other action.
+  private func deletion(_ action: SearchResult.Action) -> ((SettingsModel) -> Void)? {
+    switch action {
+    case .deleteHotkey(let key): { $0.setHotkey(nil, for: .item(key)) }
+    case .deleteAlias(let key): { $0.setAlias("", for: .item(key)) }
+    default: nil
     }
   }
 
