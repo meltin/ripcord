@@ -368,12 +368,15 @@ private struct SnippetForm: View {
   @FocusState private var focus: Field?
 
   enum Field: CaseIterable { case text, name, keyword, tags }
+  /// The snippet's caret or selection, kept while another field has focus, so a placeholder
+  /// chip goes where the caret last was.
+  @State private var selection: TextSelection?
 
   var body: some View {
     HStack(alignment: .top, spacing: 28) {
       VStack(alignment: .leading, spacing: 8) {
         label("Snippet")
-        TextEditor(text: $model.draft.text)
+        TextEditor(text: $model.draft.text, selection: $selection)
           .font(.system(size: 13))
           .scrollContentBackground(.hidden)
           .scrollIndicators(.never)
@@ -436,7 +439,7 @@ private struct SnippetForm: View {
           .tabs(from: .tags, focus: $focus)
           .inputField(isFocused: focus == .tags)
         Spacer(minLength: 16)
-        PlaceholderList()
+        PlaceholderList { insert($0) }
       }
       .frame(width: 280)
     }
@@ -448,9 +451,33 @@ private struct SnippetForm: View {
     .frame(maxHeight: .infinity, alignment: .top)
     // On the next pass: as the form appears, the search field it replaces is still first
     // responder, and a panel opened straight into the form isn't key yet.
-    .onAppear { DispatchQueue.main.async { focus = .text } }
+    .onAppear {
+      DispatchQueue.main.async {
+        focus = .text
+        highlightPlaceholders()
+      }
+    }
+    // After SwiftUI has put the new text in the text box.
+    .onChange(of: model.draft.text) { DispatchQueue.main.async { highlightPlaceholders() } }
     // Back to the name once the icon list closes, however it closed.
     .onChange(of: model.isPickingIcon) { if !model.isPickingIcon { focus = .name } }
+  }
+
+  /// Replaces the selection (or puts at the caret, or at the end with no caret yet) with
+  /// `token`, and leaves the caret after it in the focused text box.
+  private func insert(_ token: String) {
+    let text = model.draft.text
+    let range: Range<String.Index> =
+      if case .selection(let range)? = selection?.indices, range.upperBound <= text.endIndex {
+        range
+      } else {
+        text.endIndex..<text.endIndex
+      }
+    let caret = text.distance(from: text.startIndex, to: range.lowerBound) + token.count
+    let filled = String(text[..<range.lowerBound]) + token + String(text[range.upperBound...])
+    model.draft.text = filled
+    selection = TextSelection(insertionPoint: filled.index(filled.startIndex, offsetBy: caret))
+    focus = .text
   }
 
   private func label(_ text: String) -> some View {
@@ -460,6 +487,7 @@ private struct SnippetForm: View {
 
 /// What a snippet can hold besides text, each with what it becomes on hover.
 private struct PlaceholderList: View {
+  let onInsert: (String) -> Void
   private let rows: [[(token: String, help: String)]] = [
     [
       ("{clipboard}", "What's copied"), ("{date}", "Today's date"),
@@ -471,14 +499,25 @@ private struct PlaceholderList: View {
     ],
   ]
 
+  /// What the chip under the pointer becomes, shown beside the heading. Not `.help`: its
+  /// tooltip layer took the chips' clicks.
+  @State private var hovered: String?
+
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      Text("Placeholders").font(.system(size: 12)).foregroundStyle(.secondary)
+      HStack(spacing: 6) {
+        Text("Placeholders").foregroundStyle(.secondary)
+        if let hovered {
+          Text("· \(hovered)").foregroundStyle(.tertiary)
+        }
+      }
+      .font(.system(size: 12))
       ForEach(rows.indices, id: \.self) { row in
         HStack(spacing: 6) {
           ForEach(rows[row], id: \.token) { placeholder in
-            PlaceholderChip(token: placeholder.token)
-              .help(placeholder.help)
+            PlaceholderChip(token: placeholder.token, onInsert: onInsert) { isHovered in
+              hovered = isHovered ? placeholder.help : nil
+            }
           }
         }
       }
@@ -489,11 +528,13 @@ private struct PlaceholderList: View {
 /// A placeholder that, clicked, goes into the snippet where its caret last was.
 private struct PlaceholderChip: View {
   let token: String
+  let onInsert: (String) -> Void
+  let onHover: (Bool) -> Void
   @State private var isHovered = false
 
   var body: some View {
     Button {
-      insert()
+      onInsert(token)
     } label: {
       Text(verbatim: token)
         .font(.system(size: 11, design: .monospaced))
@@ -504,26 +545,11 @@ private struct PlaceholderChip: View {
         .contentShape(Capsule())
     }
     .buttonStyle(.plain)
-    .onHover { isHovered = $0 }
-    .accessibilityLabel("Insert \(token)")
-  }
-
-  /// Through the text box's own NSTextView: it keeps its selection while another field has focus,
-  /// and inserting there updates the binding and can be undone.
-  private func insert() {
-    guard let window = NSApp.keyWindow, let content = window.contentView,
-      let editor = Self.textBox(in: content)
-    else { return NSSound.beep() }
-    window.makeFirstResponder(editor)
-    editor.insertText(token, replacementRange: editor.selectedRange())
-  }
-
-  /// The form's one multi-line editor; single-line fields edit through a shared field editor.
-  private static func textBox(in view: NSView) -> NSTextView? {
-    if let textView = view as? NSTextView, !textView.isFieldEditor, textView.isEditable {
-      return textView
+    .onHover {
+      isHovered = $0
+      onHover($0)
     }
-    return view.subviews.lazy.compactMap { textBox(in: $0) }.first
+    .accessibilityLabel("Insert \(token)")
   }
 }
 
@@ -559,6 +585,51 @@ extension View {
       .frame(height: 36)
       .field(isFocused: isFocused)
   }
+}
+
+/// The placeholders Snippet.expand fills in, as typed in a snippet.
+private let placeholderPattern = try? NSRegularExpression(
+  pattern: #"\{(clipboard|date|time|datetime|day|uuid|cursor)\}"#)
+
+/// Colors the placeholders in Create Snippet's text box in the accent color, so a mistyped one
+/// shows. Only the drawing changes: the text belongs to SwiftUI, which would overwrite an edit
+/// made to the NSTextView under it.
+@MainActor private func highlightPlaceholders() {
+  guard let panel = NSApp.windows.first(where: { $0 is LauncherPanel && $0.isVisible }),
+    let content = panel.contentView, let textView = snippetTextView(in: content)
+  else { return }
+  let ranges =
+    placeholderPattern?.matches(
+      in: textView.string, range: NSRange(location: 0, length: (textView.string as NSString).length)
+    ).map(\.range) ?? []
+  if let layout = textView.textLayoutManager, let storage = layout.textContentManager {
+    let document = storage.documentRange
+    layout.removeRenderingAttribute(.foregroundColor, for: document)
+    for range in ranges {
+      guard let start = storage.location(document.location, offsetBy: range.location),
+        let end = storage.location(start, offsetBy: range.length),
+        let textRange = NSTextRange(location: start, end: end)
+      else { continue }
+      layout.addRenderingAttribute(
+        .foregroundColor, value: NSColor.controlAccentColor, for: textRange)
+    }
+  } else if let layout = textView.layoutManager {
+    // TextKit 1, should SwiftUI hand over that kind of text view.
+    let all = NSRange(location: 0, length: (textView.string as NSString).length)
+    layout.removeTemporaryAttribute(.foregroundColor, forCharacterRange: all)
+    for range in ranges {
+      layout.addTemporaryAttribute(
+        .foregroundColor, value: NSColor.controlAccentColor, forCharacterRange: range)
+    }
+  }
+}
+
+/// The form's one multi-line editor; single-line fields edit through a shared field editor.
+@MainActor private func snippetTextView(in view: NSView) -> NSTextView? {
+  if let textView = view as? NSTextView, !textView.isFieldEditor, textView.isEditable {
+    return textView
+  }
+  return view.subviews.lazy.compactMap { snippetTextView(in: $0) }.first
 }
 
 /// SF Symbols to choose a snippet's icon from, named as Raycast names its icons.
