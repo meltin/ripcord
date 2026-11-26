@@ -2,6 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 import RipcordCore
 import SwiftUI
+import os
 
 /// The settings window's copy of config.json; every edit is written straight back to the file.
 @MainActor
@@ -268,6 +269,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
     isSettingsOpen = true
     NSApp.setActivationPolicy(.regular)
+    // Asked at once too, inside the key press or click that opened it: macOS grants a request
+    // made in answer to the user's input most readily.
+    NSApp.activate()
     // On top of other apps' windows even if macOS turns the activation request down.
     window.orderFrontRegardless()
     window.makeKey()
@@ -293,18 +297,27 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     bringForward(attempt: 1)
   }
 
-  /// Asks to become the active app until macOS agrees, a few times: the policy change lands a
-  /// run loop pass later, and a request made before it, or lost to the app the user was in,
-  /// leaves the window behind that app's with the keys going to it.
+  /// Asks to become the active app until macOS agrees, for up to a second: the policy change
+  /// lands a run loop pass later, and a request made before it, or lost to the app the user was
+  /// in, leaves the window grayed out behind that app's, with the keys going to it.
   private func bringForward(attempt: Int) {
     DispatchQueue.main.asyncAfter(deadline: .now() + (attempt == 1 ? 0 : 0.1)) { [self] in
       guard window.isVisible, !NSApp.isActive || !window.isKeyWindow else { return }
+      guard attempt <= 10 else {
+        // Read with: log show --predicate 'subsystem == "io.github.meltin.ripcord"'
+        Self.log.error(
+          "Settings stayed inactive; frontmost: \(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "-", privacy: .public)"
+        )
+        return
+      }
       NSApp.activate()
       window.orderFrontRegardless()
       window.makeKey()
-      if attempt < 4 { bringForward(attempt: attempt + 1) }
+      bringForward(attempt: attempt + 1)
     }
   }
+
+  private static let log = Logger(subsystem: "io.github.meltin.ripcord", category: "settings")
 
   /// Posted for the sidebar to move to the next or previous page.
   static let nextPage = Notification.Name("RipcordSettingsNextPage")
