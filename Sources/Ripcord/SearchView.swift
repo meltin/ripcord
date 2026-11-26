@@ -597,8 +597,7 @@ private let placeholderPattern = try? NSRegularExpression(
   private weak var textView: NSTextView?
   private var observer: NSObjectProtocol?
 
-  /// Finds the text box and recolors on every change to its text, typed or set by SwiftUI, in
-  /// the same pass as the edit, so placeholders never show uncolored first.
+  /// Finds the text box and recolors on every change to its text, typed or set by SwiftUI.
   func attach() {
     guard textView == nil,
       let panel = NSApp.windows.first(where: { $0 is LauncherPanel && $0.isVisible }),
@@ -609,7 +608,10 @@ private let placeholderPattern = try? NSRegularExpression(
       forName: NSTextStorage.didProcessEditingNotification, object: textView.textStorage,
       queue: nil
     ) { [weak self] _ in
-      MainActor.assumeIsolated { self?.highlight() }
+      // Not inside the notification: the layout manager clears rendering attributes around
+      // the edit after it, which uncolored placeholders touching it. The main queue is drained
+      // in this run loop pass, before the change is drawn, so nothing shows uncolored either.
+      DispatchQueue.main.async { self?.highlight() }
     }
     highlight()
   }
