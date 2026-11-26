@@ -33,7 +33,8 @@ ORDER = list(dict.fromkeys(GROUPS.values()))
 TONES = ["light", "medium-light", "medium", "medium-dark", "dark"]
 # The variation selector that asks for the emoji look; CLDR leaves it out of its keys.
 VARIATION = "\ufe0f"
-# The newest Emoji version Apple Color Emoji draws on macOS 26; raise it as macOS catches up.
+# The newest Emoji version this Mac's Apple Color Emoji drew (16.0's showed as boxes on macOS 26
+# here); raise it once they draw.
 MAX_VERSION = 15.1
 MAC_KEYS = [
     ("⌘", "command key", "コマンドキー"), ("⌥", "option key", "オプションキー"),
@@ -67,22 +68,30 @@ def main(folder, out):
         if line.startswith("# group:"):
             group = GROUPS.get(line.split(":", 1)[1].strip())
             continue
-        if group is None or line.startswith("#") or "; fully-qualified" not in line:
+        if line.startswith("#") or "; " not in line:
             continue
         char = line.split("#", 1)[1].split()[0]
-        # Every emoji Unicode lists, left out or not, so none comes back below as a symbol.
+        # Every emoji Unicode lists, left out or not (skin swatches and hair parts are its
+        # "component"s), so none comes back below as a symbol.
         every.add(char.replace(VARIATION, ""))
+        if group is None or "; fully-qualified" not in line:
+            continue
         version = float(line.split("#", 1)[1].split()[1].lstrip("E"))
         if version > MAX_VERSION:
             continue  # newer than macOS's emoji font draws; it would show as a box
         name = line.split("#", 1)[1].split(" E", 1)[1].split(" ", 1)[1].strip()
-        # "thumbs up: light skin tone": one tone throughout, kept with "thumbs up".
-        base, _, tone = name.partition(": ")
-        tone = tone.removesuffix(" skin tone")
-        if tone in TONES and base in by_name:
-            by_name[base].setdefault("tones", [None] * 5)[TONES.index(tone)] = char
+        # "thumbs up: light skin tone" and "woman: medium skin tone, red hair": one tone
+        # throughout, kept with "thumbs up" and "woman: red hair".
+        head, _, rest = name.partition(": ")
+        parts = rest.split(", ") if rest else []
+        tones = [p.removesuffix(" skin tone") for p in parts if p.endswith(" skin tone")]
+        if len(tones) == 1 and tones[0] in TONES:
+            others = [p for p in parts if not p.endswith(" skin tone")]
+            base = head + (": " + ", ".join(others) if others else "")
+            if base in by_name:
+                by_name[base].setdefault("tones", [None] * 5)[TONES.index(tones[0])] = char
             continue
-        if ": " in name and "skin tone" in name:
+        if tones:
             continue  # mixed tones; the base stays
         entry = {"c": char, "g": ORDER.index(group), "n": lookup(en, char)[0] or name,
                  "j": lookup(ja, char)[0], "k": lookup(en, char)[1], "kj": lookup(ja, char)[1]}
@@ -98,9 +107,14 @@ def main(folder, out):
     # Mac's key symbols, which CLDR doesn't name.
     present = {e["c"] for e in emoji}
     for char, name, japanese in MAC_KEYS:
-        if char not in present:
-            emoji.append({"c": char, "g": symbols, "n": name, "j": japanese,
-                          "k": ["key", "mac", "keyboard"], "kj": ["キー", "キーボード", "Mac"]})
+        keys = {"k": [name, "key", "mac", "keyboard"], "kj": [japanese, "キー", "キーボード", "Mac"]}
+        if char in present:
+            # Named by CLDR as an arrow (⇧, ⇥): the key's name joins its keywords.
+            entry = next(e for e in emoji if e["c"] == char)
+            for key, words in keys.items():
+                entry[key] = entry.get(key, []) + [w for w in words if w not in entry.get(key, [])]
+        else:
+            emoji.append({"c": char, "g": symbols, "n": name, "j": japanese, **keys})
     for entry in emoji:
         tones = entry.get("tones")
         if tones and None in tones:

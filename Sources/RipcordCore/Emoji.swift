@@ -48,9 +48,9 @@ public struct Emoji: Decodable, Equatable, Sendable {
   /// Its name as Raycast shows it: "Cat Face".
   public var title: String { name.split(separator: " ").map(\.capitalized).joined(separator: " ") }
 
-  /// Its code points, as Copy Unicode copies them: "U+1F431".
-  public var unicode: String {
-    character.unicodeScalars.map { "U+" + String($0.value, radix: 16, uppercase: true) }
+  /// Its code points in skin `tone`, as Copy Unicode copies them: "U+1F431".
+  public func unicode(tone: Int?) -> String {
+    character(tone: tone).unicodeScalars.map { "U+" + String($0.value, radix: 16, uppercase: true) }
       .joined(separator: " ")
   }
 }
@@ -198,7 +198,7 @@ extension Search {
         action: .emoji(shown, base: emoji.character, .pasteKeepingOpen)),
       MenuAction(
         title: "Copy Unicode", symbol: "doc.on.doc", shortcut: "⌥⇧⌘C",
-        action: .copy(emoji.unicode), startsSection: true),
+        action: .copy(emoji.unicode(tone: tone)), startsSection: true),
       MenuAction(
         title: "Copy All Emojis from Section", symbol: "doc.on.doc", shortcut: "⌃⌘C",
         action: .copy(section)),

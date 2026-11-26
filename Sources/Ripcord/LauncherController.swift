@@ -380,6 +380,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     } else {
       // What was left open is dropped, filter included.
       model.snippetTag = nil
+      model.emojiCategory = nil
       model.mode = mode
       update("")
     }
@@ -463,8 +464,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     model.isPickingIcon = false
     leftOpen = nil
-    // A filter left on would hide snippets the next time, unasked.
+    // A filter left on would hide snippets or emoji the next time, unasked.
     model.snippetTag = nil
+    model.emojiCategory = nil
     model.mode = .root
     update("")
   }
@@ -587,6 +589,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       case .cancel:
         model.menu = nil
         return
+      // The grid behind the menu stays put; the menu acts on what's selected.
+      case .left, .right: return
       default: break
       }
     }
@@ -764,8 +768,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       do { try emojiHistory.use(base) } catch { onError(error.localizedDescription) }
       guard how == .pasteKeepingOpen else { return paste(shown, copyOnly: how == .copy) }
       // The panel gives the key back for the paste, then comes back where it was.
-      hide(keepingMode: true)
-      paste(shown, copyOnly: false)
+      paste(shown, copyOnly: false, keepingMode: true)
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
         self?.show(resuming: true)
       }
@@ -1359,7 +1362,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   }
 
   /// Paste borrows the pasteboard and puts back what the user had copied; Copy replaces it.
-  private func paste(_ text: String, copyOnly: Bool) {
+  private func paste(_ text: String, copyOnly: Bool, keepingMode: Bool = false) {
     let action: SearchResult.SnippetAction = copyOnly ? .copy : .paste
     // Read before writing, which replaces what {clipboard} stands for.
     let copied = NSPasteboard.general.string(forType: .string) ?? ""
@@ -1368,7 +1371,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     let saved = action == .paste ? clipboard.snapshot() : []
     let written = clipboard.write(
       expansion.text, transient: action == .paste, concealed: concealed)
-    hide()
+    hide(keepingMode: keepingMode)
     guard written else { return NSSound.beep() }
     guard action == .paste else { return }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [clipboard] in

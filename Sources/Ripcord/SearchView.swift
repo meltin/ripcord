@@ -1065,7 +1065,9 @@ private struct EmojiGrid: View {
     repeating: GridItem(.flexible(), spacing: 8), count: LauncherController.emojiColumns)
 
   var body: some View {
-    ScrollViewReader { proxy in
+    // Once per body: each tile asking would flatten every section again.
+    let selectedID = model.selected?.id
+    return ScrollViewReader { proxy in
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 8) {
           ForEach(model.sections) { section in
@@ -1078,7 +1080,7 @@ private struct EmojiGrid: View {
             .padding(.top, 6)
             LazyVGrid(columns: columns, spacing: 8) {
               ForEach(section.results) { result in
-                tile(result, isSelected: result.id == model.selected?.id)
+                tile(result, isSelected: result.id == selectedID)
                   .id(result.id)
                   .onTapGesture { onCommand(.activate(result.id)) }
               }
