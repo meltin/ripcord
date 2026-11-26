@@ -4,14 +4,36 @@ import Testing
 @testable import RipcordCore
 
 @Suite struct SnippetTests {
-  @Test func fillsInTheDateAndTheClipboard() {
-    let text = Snippet.expand(
-      "On {date}: {clipboard} ({date})", date: "Nov 26, 2026", clipboard: "copied")
-    #expect(text == "On Nov 26, 2026: copied (Nov 26, 2026)")
+  @Test func fillsInPlaceholdersAndTheClipboard() {
+    let filled = Snippet.expand(
+      "On {date} ({day}): {clipboard} {date}", values: ["date": "Nov 26, 2026", "day": "Thursday"],
+      clipboard: "copied")
+    #expect(
+      filled
+        == .init(text: "On Nov 26, 2026 (Thursday): copied Nov 26, 2026", charactersAfterCursor: 0))
   }
 
   @Test func leavesPlaceholdersInsideTheClipboardAlone() {
-    #expect(Snippet.expand("{clipboard}", date: "today", clipboard: "{date}") == "{date}")
+    let filled = Snippet.expand(
+      "{clipboard}", values: ["date": "today"], clipboard: "{date}{cursor}")
+    #expect(filled.text == "{date}{cursor}")
+  }
+
+  @Test func putsTheCaretAtTheFirstCursor() {
+    let filled = Snippet.expand(
+      "Hi {cursor}, see {clipboard}{cursor}!", values: [:], clipboard: "this")
+    #expect(filled == .init(text: "Hi , see this!", charactersAfterCursor: 11))
+  }
+
+  @Test func formatsTheDateTimeDayAndUUID() throws {
+    let date = try #require(ISO8601DateFormatter().date(from: "2026-11-26T09:05:00Z"))
+    let uuid = try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000001"))
+    let values = Snippet.values(
+      at: date, locale: Locale(identifier: "en_US"), timeZone: .gmt, uuid: uuid)
+    #expect(values["date"] == "Nov 26, 2026")
+    #expect(values["day"] == "Thursday")
+    #expect(values["time"]?.hasPrefix("9:05") == true)
+    #expect(values["uuid"] == "00000000-0000-0000-0000-000000000001")
   }
 
   @Test func readsTagsAsTyped() {

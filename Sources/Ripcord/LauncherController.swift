@@ -547,18 +547,18 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Paste borrows the pasteboard and puts back what the user had copied; Copy replaces it.
   private func paste(_ text: String, copyOnly: Bool) {
     let action: SearchResult.SnippetAction = copyOnly ? .copy : .paste
-    let date = Date.now.formatted(date: .abbreviated, time: .omitted)
     // Read before writing, which replaces what {clipboard} stands for.
     let copied = NSPasteboard.general.string(forType: .string) ?? ""
-    let expanded = Snippet.expand(text, date: date, clipboard: copied)
+    let expansion = Snippet.expand(text, values: Snippet.values(at: .now), clipboard: copied)
     let concealed = clipboard.isConcealed && text.contains("{clipboard}")
     let saved = action == .paste ? clipboard.snapshot() : []
-    let written = clipboard.write(expanded, transient: action == .paste, concealed: concealed)
+    let written = clipboard.write(
+      expansion.text, transient: action == .paste, concealed: concealed)
     hide()
     guard written else { return NSSound.beep() }
     guard action == .paste else { return }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [clipboard] in
-      guard clipboard.pasteIntoFrontmostApp() else {
+      guard clipboard.pasteIntoFrontmostApp(thenLeft: expansion.charactersAfterCursor) else {
         // Not pasted: leave the snippet copied so Return still did something, and say so.
         return NSSound.beep()
       }

@@ -372,11 +372,14 @@ private struct SnippetForm: View {
             focus = .name
             return .handled
           }
-        let date = Text(verbatim: "{date}").foregroundStyle(.tint)
         let clipboard = Text(verbatim: "{clipboard}").foregroundStyle(.tint)
-        Text("Include \(date) or \(clipboard) for the current date or the copied text")
-          .font(.system(size: 12))
-          .foregroundStyle(.secondary)
+        let date = Text(verbatim: "{date}").foregroundStyle(.tint)
+        let cursor = Text(verbatim: "{cursor}").foregroundStyle(.tint)
+        Text(
+          "Include \(clipboard), \(date) (or {time}, {datetime}, {day}, {uuid}) and \(cursor), where the caret lands"
+        )
+        .font(.system(size: 12))
+        .foregroundStyle(.secondary)
       }
       VStack(alignment: .leading, spacing: 8) {
         label("Name & Icon")

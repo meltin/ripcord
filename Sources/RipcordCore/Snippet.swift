@@ -31,10 +31,48 @@ public struct Snippet: Codable, Equatable, Sendable {
     return unique.isEmpty ? nil : unique
   }
 
-  /// The text with `{date}` as `date` and `{clipboard}` as `clipboard`. The clipboard goes in
-  /// last, so a `{date}` inside what was copied is left as it was.
-  public static func expand(_ text: String, date: String, clipboard: String) -> String {
-    text.replacingOccurrences(of: "{date}", with: date)
-      .replacingOccurrences(of: "{clipboard}", with: clipboard)
+  /// A snippet filled in, and how far back from its end the caret goes for `{cursor}`.
+  public struct Expansion: Equatable, Sendable {
+    public let text: String
+    public let charactersAfterCursor: Int
+  }
+
+  /// `{name}` placeholders replaced by `values` (date, time, datetime, day, uuid) and
+  /// `{clipboard}` by `clipboard`, which goes in last so placeholders inside what was copied stay
+  /// as they were. The first `{cursor}` marks where the caret ends up; others are dropped.
+  public static func expand(_ text: String, values: [String: String], clipboard: String)
+    -> Expansion
+  {
+    func fill(_ part: String) -> String {
+      let filled = values.reduce(part.replacingOccurrences(of: "{cursor}", with: "")) {
+        $0.replacingOccurrences(of: "{\($1.key)}", with: $1.value)
+      }
+      return filled.replacingOccurrences(of: "{clipboard}", with: clipboard)
+    }
+    guard let marker = text.range(of: "{cursor}") else {
+      return Expansion(text: fill(text), charactersAfterCursor: 0)
+    }
+    let after = fill(String(text[marker.upperBound...]))
+    return Expansion(
+      text: fill(String(text[..<marker.lowerBound])) + after, charactersAfterCursor: after.count)
+  }
+
+  /// What the placeholders other than `{clipboard}` stand for at `date`.
+  public static func values(
+    at date: Date, locale: Locale = .current, timeZone: TimeZone = .current, uuid: UUID = UUID()
+  ) -> [String: String] {
+    func style(_ format: Date.FormatStyle) -> String {
+      var format = format
+      format.locale = locale
+      format.timeZone = timeZone
+      return date.formatted(format)
+    }
+    return [
+      "date": style(.init(date: .abbreviated, time: .omitted)),
+      "time": style(.init(date: .omitted, time: .shortened)),
+      "datetime": style(.init(date: .abbreviated, time: .shortened)),
+      "day": style(.init().weekday(.wide)),
+      "uuid": uuid.uuidString,
+    ]
   }
 }

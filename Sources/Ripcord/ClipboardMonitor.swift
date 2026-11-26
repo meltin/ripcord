@@ -148,7 +148,8 @@ final class ClipboardMonitor {
 
   /// Presses ⌘V in the frontmost app. Without the Accessibility permission, asks for it and
   /// returns false, leaving the item copied.
-  func pasteIntoFrontmostApp() -> Bool {
+  /// `left` presses ← that many times after, for a snippet's `{cursor}`.
+  func pasteIntoFrontmostApp(thenLeft left: Int = 0) -> Bool {
     // The key's name, spelled out: kAXTrustedCheckOptionPrompt is a global var Swift 6 rejects.
     let options = ["AXTrustedCheckOptionPrompt": !hasAskedForAccessibility] as CFDictionary
     hasAskedForAccessibility = true
@@ -160,6 +161,14 @@ final class ClipboardMonitor {
         keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: isDown)
       event?.flags = .maskCommand
       event?.post(tap: .cghidEventTap)
+    }
+    // Queued after ⌘V, so the app moves the caret back once the text is in.
+    for _ in 0..<left {
+      for isDown in [true, false] {
+        CGEvent(
+          keyboardEventSource: source, virtualKey: CGKeyCode(kVK_LeftArrow), keyDown: isDown)?
+          .post(tap: .cghidEventTap)
+      }
     }
     return true
   }
