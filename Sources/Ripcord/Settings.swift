@@ -218,6 +218,32 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     return window
   }()
 
+  private var welcomeWindow: NSWindow?
+  private static let welcomeShownKey = "welcomeShown"
+
+  /// The first launch's guide, once; closing it any way counts as seen.
+  func showWelcomeIfNew() {
+    guard !UserDefaults.standard.bool(forKey: Self.welcomeShownKey) else { return }
+    model.load()
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 640, height: 640),
+      styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
+    window.titlebarAppearsTransparent = true
+    window.titleVisibility = .hidden
+    window.isReleasedWhenClosed = false
+    let content = NSHostingView(
+      rootView: WelcomeView(model: model) { [weak window] in window?.performClose(nil) })
+    window.contentView = content
+    window.setContentSize(content.fittingSize)
+    window.delegate = self
+    window.center()
+    welcomeWindow = window
+    NSApp.setActivationPolicy(.regular)
+    window.orderFrontRegardless()
+    window.makeKey()
+    DispatchQueue.main.async { NSApp.activate() }
+  }
+
   /// Closes the window on Esc while it's open, as Raycast's settings do.
   private var escMonitor: Any?
 
@@ -249,9 +275,17 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
   }
 
   func windowWillClose(_ notification: Notification) {
-    if let escMonitor { NSEvent.removeMonitor(escMonitor) }
-    escMonitor = nil
-    NSApp.setActivationPolicy(.accessory)
+    model.stopRecording()
+    if (notification.object as? NSWindow) === welcomeWindow {
+      UserDefaults.standard.set(true, forKey: Self.welcomeShownKey)
+      welcomeWindow = nil
+    } else {
+      if let escMonitor { NSEvent.removeMonitor(escMonitor) }
+      escMonitor = nil
+    }
+    // An accessory again once neither window is open.
+    let settingsOpen = (notification.object as? NSWindow) !== window && window.isVisible
+    if !settingsOpen, welcomeWindow == nil { NSApp.setActivationPolicy(.accessory) }
   }
 
   /// Picks up edits made to the file in an editor while the window was in the background.
@@ -267,6 +301,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
 private enum SettingsPage: String, CaseIterable, Identifiable {
   case general = "General"
+  case permissions = "Permissions"
   case applications = "Applications"
   case quicklinks = "Quicklinks"
   case clipboardHistory = "Clipboard History"
@@ -280,6 +315,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   var symbol: String {
     switch self {
     case .general: "slider.horizontal.3"
+    case .permissions: "lock.shield.fill"
     case .applications: "square.grid.2x2.fill"
     case .quicklinks: "link"
     case .clipboardHistory: "list.clipboard.fill"
@@ -293,6 +329,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   var color: Color {
     switch self {
     case .general, .systemActions, .ripcord: .gray
+    case .permissions: .green
     case .applications, .quicklinks, .snippets: .blue
     case .clipboardHistory: .red
     case .windowManagement: .indigo
@@ -303,6 +340,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   var summary: String {
     switch self {
     case .general: ""
+    case .permissions:
+      "What Ripcord may do on your Mac, and which features need it. Each is asked for on first use too."
     case .applications:
       "An alias to type in the panel, a hotkey to open it from anywhere; unchecked apps never show in search."
     case .quicklinks:
@@ -325,7 +364,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
-    case .general, .applications, .quicklinks: nil
+    case .general, .permissions, .applications, .quicklinks: nil
     }
   }
 }
@@ -355,6 +394,11 @@ struct SettingsView: View {
       Group {
         switch page {
         case .general: PageScroll(model: model) { GeneralPage(model: model) }
+        case .permissions:
+          PageScroll(model: model) {
+            PageHeader(page: .permissions)
+            PermissionsCard()
+          }
         case .applications: ApplicationsPage(model: model)
         case .quicklinks:
           PageScroll(model: model) {
@@ -390,8 +434,9 @@ private struct Sidebar: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 2) {
         row(.general)
+        row(.permissions)
         Spacer().frame(height: 14)
-        ForEach(SettingsPage.allCases.filter { $0 != .general }) { row($0) }
+        ForEach(SettingsPage.allCases.filter { $0 != .general && $0 != .permissions }) { row($0) }
       }
       .padding(.horizontal, 10)
       // Below the window's traffic lights.
@@ -940,6 +985,162 @@ private struct HotkeyRecorder: View {
         Text(message.text).font(.system(size: 11)).foregroundStyle(.orange)
       }
     }
+  }
+}
+
+/// Each permission with its state and a button to grant it; rechecked every second, so a change
+/// made in System Settings shows up when the user comes back.
+private struct PermissionsCard: View {
+  /// The reset note, for the Permissions page; a first run has nothing to reset.
+  var showsReset = true
+  @State private var statuses: [Permission: Permission.Status] = [:]
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Card {
+        ForEach(Array(Permission.allCases.enumerated()), id: \.element) { index, permission in
+          if index > 0 { Divider() }
+          PermissionRow(permission: permission, status: statuses[permission]) {
+            await refresh()
+          }
+        }
+      }
+      if showsReset {
+        HStack(alignment: .firstTextBaseline) {
+          Text("Accessibility on but not working after an update? Reset it and allow it again.")
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+          Spacer(minLength: 12)
+          Button("Reset Accessibility") {
+            Permission.resetAccessibility()
+            Task { await refresh() }
+          }
+        }
+        .padding(.horizontal, 4)
+      }
+    }
+    .task {
+      while !Task.isCancelled {
+        await refresh()
+        try? await Task.sleep(for: .seconds(1))
+      }
+    }
+  }
+
+  private func refresh() async {
+    for permission in Permission.allCases {
+      statuses[permission] = await permission.status()
+    }
+  }
+}
+
+private struct PermissionRow: View {
+  let permission: Permission
+  let status: Permission.Status?
+  let onChange: () async -> Void
+
+  var body: some View {
+    HStack(spacing: 12) {
+      Image(systemName: permission.symbol)
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundStyle(.white)
+        .frame(width: 26, height: 26)
+        .background(Color.gray.gradient, in: RoundedRectangle(cornerRadius: 6))
+      VStack(alignment: .leading, spacing: 2) {
+        Text(permission.title).font(.system(size: 13))
+        Text(permission.purpose).font(.system(size: 12)).foregroundStyle(.secondary)
+      }
+      Spacer(minLength: 12)
+      control
+    }
+    .padding(.horizontal, 18)
+    .padding(.vertical, 12)
+  }
+
+  /// "Granted" or "Not Granted", as apps commonly put it, and the button that grants it.
+  @ViewBuilder private var control: some View {
+    switch status {
+    case .granted:
+      state("Granted", "checkmark.circle.fill", .green)
+    case .denied:
+      state("Not Granted", "xmark.circle.fill", .red)
+      // macOS won't ask again once it's been turned down; only System Settings can change it.
+      Button("Open System Settings") { permission.openSystemSettings() }
+    case .notAsked, .unknown:
+      state("Not Granted", "xmark.circle.fill", .red)
+      Button("Grant Access") {
+        Task {
+          await permission.request()
+          // Accessibility is switched on in System Settings; macOS's request only points there.
+          if permission == .accessibility { permission.openSystemSettings() }
+          await onChange()
+        }
+      }
+    case nil:
+      ProgressView().controlSize(.small)
+    }
+  }
+
+  private func state(_ text: String, _ symbol: String, _ color: Color) -> some View {
+    Label(text, systemImage: symbol)
+      .font(.system(size: 12))
+      .foregroundStyle(color)
+      .padding(.trailing, 4)
+  }
+}
+
+/// The first launch's guide: the hotkey, Launch at Login and the permissions, on one page.
+struct WelcomeView: View {
+  @Bindable var model: SettingsModel
+  let onDone: () -> Void
+
+  var body: some View {
+    // Sized to fit, no scrolling: the window takes this view's height.
+    VStack(alignment: .leading, spacing: 16) {
+      HStack(spacing: 14) {
+        Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 56, height: 56)
+        VStack(alignment: .leading, spacing: 3) {
+          Text("Welcome to Ripcord").font(.system(size: 20, weight: .semibold))
+          Text(
+            "Open apps, search, paste from your clipboard history and snippets, and move windows, from one hotkey."
+          )
+          .font(.system(size: 13))
+          .foregroundStyle(.secondary)
+        }
+      }
+      Card {
+        SettingRow(
+          title: "Ripcord Hotkey",
+          description: "Shows the panel from any app. Free ⌘Space in System Settings to use it."
+        ) {
+          HotkeyRecorder(target: .launcher, model: model, clearable: false)
+        }
+        Divider()
+        SettingRow(title: "Launch at Login", description: "Start Ripcord when you log in.") {
+          Toggle("Launch at Login", isOn: $model.config.launchAtLogin)
+            .toggleStyle(.switch)
+            .labelsHidden()
+        }
+      }
+      Text("Permissions").font(.system(size: 13, weight: .semibold))
+      PermissionsCard(showsReset: false)
+      HStack {
+        Text("Everything here is in Settings (⌘,) later.")
+          .font(.system(size: 12))
+          .foregroundStyle(.secondary)
+        Spacer()
+        Button("Get Started", action: onDone)
+          .buttonStyle(.borderedProminent)
+          .keyboardShortcut(.defaultAction)
+      }
+    }
+    .padding(.horizontal, 28)
+    .padding(.top, 36)
+    .padding(.bottom, 24)
+    .frame(width: 660)
+    .fixedSize(horizontal: false, vertical: true)
+    .onChange(of: model.config) { model.saveIfChanged() }
   }
 }
 

@@ -51,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
     }
     applyConfig()
+    settings.showWelcomeIfNew()
   }
 
   /// Opening Ripcord.app again shows the panel, a way in when the hotkey or menu bar icon fails.
