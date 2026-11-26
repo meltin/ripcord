@@ -378,7 +378,16 @@ final class LauncherController: NSObject, NSWindowDelegate {
     panel.isMovableByWindowBackground = true
     panel.delegate = self
     panel.keyEquivalentHandler = { [weak self] in self?.handleKeyEquivalent($0) ?? false }
-    panel.typingHandler = { [weak self] in self?.typeIntoMenu($0) ?? false }
+    panel.typingHandler = { [weak self] event in
+      guard let self else { return false }
+      // A question takes only Return and Esc: a key typed meanwhile mustn't reach the field
+      // behind it, where it would change the query or an argument about to be run.
+      if model.confirmation != nil {
+        let answers = [kVK_Return, kVK_ANSI_KeypadEnter, kVK_Escape].map { UInt16($0) }
+        return !answers.contains(event.keyCode)
+      }
+      return typeIntoMenu(event)
+    }
     panel.escapeHandler = { [weak self] in
       // Only the form: the search field turns Esc into .cancel itself.
       // The output view has no field either, and an argument field acts as the search field.
