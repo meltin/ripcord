@@ -255,6 +255,17 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
   /// Becomes a regular app while the window is open, as Raycast does: macOS 14 only lets an
   /// accessory app ask to come forward, and the request loses to the app the user was in.
   func show() {
+    // On the screen the panel was on, the pointer's: `center()` alone uses the screen macOS
+    // counts as main, which can be another display, and a closed window keeps its old place.
+    if !window.isVisible,
+      let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
+    {
+      let area = screen.visibleFrame
+      let size = window.frame.size
+      window.setFrameOrigin(
+        NSPoint(
+          x: (area.midX - size.width / 2).rounded(), y: (area.midY - size.height / 2).rounded()))
+    }
     isSettingsOpen = true
     NSApp.setActivationPolicy(.regular)
     // On top of other apps' windows even if macOS turns the activation request down.
@@ -278,9 +289,20 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         return nil
       }
     }
-    // The policy change lands on the next run loop pass; asking before it is asking as an
-    // accessory app.
-    DispatchQueue.main.async { NSApp.activate() }
+    bringForward(attempt: 1)
+  }
+
+  /// Asks to become the active app until macOS agrees, a few times: the policy change lands a
+  /// run loop pass later, and a request made before it, or lost to the app the user was in,
+  /// leaves the window behind that app's with the keys going to it.
+  private func bringForward(attempt: Int) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + (attempt == 1 ? 0 : 0.1)) { [self] in
+      guard window.isVisible, !NSApp.isActive || !window.isKeyWindow else { return }
+      NSApp.activate()
+      window.orderFrontRegardless()
+      window.makeKey()
+      if attempt < 4 { bringForward(attempt: attempt + 1) }
+    }
   }
 
   /// Posted with +1 or -1 for the sidebar to move to the next or previous page.
