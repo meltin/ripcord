@@ -57,7 +57,19 @@ enum Permission: CaseIterable, Identifiable {
     guard let bundleIdentifier else {
       return AXIsProcessTrusted() ? .granted : .notAsked
     }
+    // Launched in the background first: System Events quits when idle, and a quit app can't
+    // be asked about. It quits again on its own.
+    await Self.launchIfNeeded(bundleIdentifier)
     return await Task.detached { Self.automation(bundleIdentifier, ask: false) }.value
+  }
+
+  private static func launchIfNeeded(_ bundleIdentifier: String) async {
+    guard NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty,
+      let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)
+    else { return }
+    let configuration = NSWorkspace.OpenConfiguration()
+    configuration.activates = false
+    _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
   }
 
   /// Puts up macOS's request where it can, which it shows only while undecided; once denied,
@@ -67,16 +79,7 @@ enum Permission: CaseIterable, Identifiable {
       _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
       return
     }
-    // An app answers only while running; Finder or System Events may have quit.
-    if NSRunningApplication.runningApplications(
-      withBundleIdentifier: bundleIdentifier
-    ).isEmpty,
-      let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)
-    {
-      let configuration = NSWorkspace.OpenConfiguration()
-      configuration.activates = false
-      _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
-    }
+    await Self.launchIfNeeded(bundleIdentifier)
     _ = await Task.detached { Self.automation(bundleIdentifier, ask: true) }.value
   }
 
@@ -90,19 +93,26 @@ enum Permission: CaseIterable, Identifiable {
     }
   }
 
-  /// Forgets the Accessibility grant and asks again: an ad-hoc signed build is a new app to
-  /// macOS, so the grant an earlier build got no longer applies to it.
-  static func resetAccessibility() async {
+  /// Forgets the Accessibility grant and relaunches: an ad-hoc signed build is a new app to
+  /// macOS, so an earlier build's grant shows as on but doesn't apply. A running process keeps
+  /// its old answer, and macOS's request only comes up again in a fresh one.
+  static func resetAccessibilityAndRelaunch() async {
     // Never without an ID: tccutil with none resets every app's Accessibility grant.
     guard let id = Bundle.main.bundleIdentifier, !id.isEmpty else { return }
+    let bundle = Bundle.main.bundlePath
     await Task.detached {
       let reset = Process()
       reset.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
       reset.arguments = ["reset", "Accessibility", id]
       try? reset.run()
       reset.waitUntilExit()
+      // Opened again once this process has quit; `open` would only focus a running copy.
+      let relaunch = Process()
+      relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")
+      relaunch.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", bundle]
+      try? relaunch.run()
     }.value
-    _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+    await NSApp.terminate(nil)
   }
 
   private static func automation(_ bundleIdentifier: String, ask: Bool) -> Status {

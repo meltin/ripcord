@@ -1010,16 +1010,15 @@ private struct PermissionsCard: View {
       }
       if showsReset {
         HStack(alignment: .firstTextBaseline) {
-          Text("Accessibility on but not working after an update? Reset it and allow it again.")
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+          Text(
+            "Accessibility on but not working after an update? This resets only Accessibility and restarts Ripcord; then grant it again."
+          )
+          .font(.system(size: 11))
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
           Spacer(minLength: 12)
           Button("Reset Accessibility") {
-            Task {
-              await Permission.resetAccessibility()
-              await refresh()
-            }
+            Task { await Permission.resetAccessibilityAndRelaunch() }
           }
         }
         .padding(.horizontal, 4)
