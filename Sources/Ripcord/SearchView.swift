@@ -95,7 +95,8 @@ struct SearchView: View {
     }
     .overlay {
       if let confirmation = model.confirmation {
-        ConfirmationCard(confirmation: confirmation, onCommand: onCommand)
+        ConfirmationCard(
+          confirmation: confirmation, command: model.mode.command, onCommand: onCommand)
       }
     }
   }
@@ -984,60 +985,60 @@ private struct Footer: View {
   }
 }
 
-/// Raycast's alert over a dimmed panel: what's about to happen, a red button for it and Cancel.
+/// Raycast's alert over a dimmed panel: the command's icon, the question, a warning, and Cancel
+/// beside a red Delete.
 private struct ConfirmationCard: View {
   let confirmation: Confirmation
+  let command: BuiltinCommand?
   let onCommand: (SearchCommand) -> Void
 
   var body: some View {
     ZStack {
       // A click outside the card cancels, as Esc does.
-      Color.black.opacity(0.25)
+      Color.black.opacity(0.2)
         .contentShape(Rectangle())
         .onTapGesture { onCommand(.cancel) }
-      VStack(spacing: 14) {
-        Image(systemName: "trash.fill")
-          .font(.system(size: 20, weight: .semibold))
-          .foregroundStyle(.white)
-          .frame(width: 44, height: 44)
-          .background(Color.red.gradient, in: Circle())
-        VStack(spacing: 6) {
-          Text(confirmation.title).font(.system(size: 15, weight: .semibold))
-          Text(confirmation.message)
-            .font(.system(size: 12))
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        VStack(spacing: 8) {
-          Button {
-            onCommand(.submit)
-          } label: {
-            HStack(spacing: 6) {
-              Text(confirmation.confirmTitle)
-              Keycap("↵")
-            }
-            .frame(maxWidth: .infinity, minHeight: 32)
+      VStack(alignment: .leading, spacing: 0) {
+        if let command {
+          Image(systemName: command.symbol)
+            .font(.system(size: 24, weight: .semibold))
             .foregroundStyle(.white)
-            .background(Color.red, in: RoundedRectangle(cornerRadius: 8))
-          }
+            .frame(width: 52, height: 52)
+            .background(command.color.gradient, in: RoundedRectangle(cornerRadius: 12))
+            .padding(.bottom, 14)
+        }
+        Text(confirmation.title).font(.system(size: 14, weight: .semibold))
+        Text(confirmation.message)
+          .font(.system(size: 12))
+          .fixedSize(horizontal: false, vertical: true)
+          .padding(.top, 6)
+        HStack(spacing: 8) {
           Button {
             onCommand(.cancel)
           } label: {
-            HStack(spacing: 6) {
-              Text("Cancel")
-              Keycap("esc")
-            }
-            .frame(maxWidth: .infinity, minHeight: 32)
-            .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            Text("Cancel")
+              .foregroundStyle(.secondary)
+              .frame(maxWidth: .infinity, minHeight: 32)
+              .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+          }
+          Button {
+            onCommand(.submit)
+          } label: {
+            Text(confirmation.confirmTitle)
+              .foregroundStyle(.red)
+              .frame(maxWidth: .infinity, minHeight: 32)
+              .background(Color.red.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+              // Return confirms, as Raycast marks its default button.
+              .overlay(alignment: .top) { Keycap("↵").offset(y: -12) }
           }
         }
         .buttonStyle(.plain)
         .font(.system(size: 13, weight: .medium))
+        .padding(.top, 20)
       }
-      .padding(20)
-      .frame(width: 280)
-      .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18))
+      .padding(16)
+      .frame(width: 260)
+      .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20))
       .shadow(color: .black.opacity(0.2), radius: 20, y: 8)
     }
   }

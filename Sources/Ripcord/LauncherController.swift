@@ -616,9 +616,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
       // Asked first, as Raycast does by default: a deleted snippet has no undo.
       model.menu = nil
       model.confirmation = Confirmation(
-        title: "Delete Snippet",
-        message: "“\(snippets[index].name)” will be deleted. This can't be undone.",
-        confirmTitle: "Delete Snippet", action: .snippet(index, .confirmDelete))
+        title: "Delete “\(snippets[index].name)”?",
+        message: "Warning: this can't be undone.",
+        confirmTitle: "Delete", action: .snippet(index, .confirmDelete))
     case .confirmDelete:
       model.menu = nil
       let original = snippets[index]
