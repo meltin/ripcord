@@ -320,6 +320,15 @@ struct SettingsView: View {
 
 private struct GeneralPage: View {
   @Bindable var model: SettingsModel
+  @State private var inputSources: [InputSource.Option] = []
+
+  /// The enabled sources, plus a saved one that was since disabled, so the picker never goes blank.
+  private var inputSourceOptions: [InputSource.Option] {
+    guard let id = model.config.inputSource, !inputSources.contains(where: { $0.id == id }) else {
+      return inputSources
+    }
+    return inputSources + [InputSource.Option(id: id, name: "\(id) (not enabled)")]
+  }
 
   var body: some View {
     Card {
@@ -337,6 +346,21 @@ private struct GeneralPage: View {
         description: "Shows the panel from any app. Click, then press the new keys; Esc cancels."
       ) {
         HotkeyRecorder(target: .launcher, model: model, clearable: false)
+      }
+      Divider()
+      SettingRow(
+        title: "Auto-switch Input Source",
+        description:
+          "Switches to this input source while the panel is open, and back when it closes."
+      ) {
+        Picker("Auto-switch Input Source", selection: $model.config.inputSource) {
+          Text("Off").tag(String?.none)
+          ForEach(inputSourceOptions) { Text($0.name).tag(Optional($0.id)) }
+        }
+        .labelsHidden()
+        .fixedSize()
+        // Read on each visit, so a source enabled meanwhile shows up.
+        .onAppear { inputSources = InputSource.selectable() }
       }
     }
     Card {

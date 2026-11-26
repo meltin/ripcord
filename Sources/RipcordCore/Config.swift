@@ -7,15 +7,19 @@ public struct Config: Codable, Equatable, Sendable {
   public var quicklinks: [Quicklink]
   /// Per-app and per-command settings from the Shortcuts page, by settings key.
   public var items: [String: ItemSettings]
+  /// The keyboard input source (a TIS ID such as `com.apple.keylayout.ABC`) selected while the
+  /// panel is open; nil leaves the input source alone.
+  public var inputSource: String?
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
-    items: [String: ItemSettings] = [:]
+    items: [String: ItemSettings] = [:], inputSource: String? = nil
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
     self.quicklinks = quicklinks
     self.items = items
+    self.inputSource = inputSource
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -25,6 +29,7 @@ public struct Config: Codable, Equatable, Sendable {
     launchAtLogin = try container.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
     quicklinks = try container.decodeIfPresent([Quicklink].self, forKey: .quicklinks) ?? []
     items = try container.decodeIfPresent([String: ItemSettings].self, forKey: .items) ?? [:]
+    inputSource = try container.decodeIfPresent(String.self, forKey: .inputSource)
   }
 
   public static let `default` = Config(
