@@ -104,4 +104,120 @@ import Testing
     #expect(row.action == .open(URL(string: "https://swift.org")!))
     #expect(row.actions.last?.action == .deleteBookmark(line: 3, text: file.bookmarks[0].text))
   }
+
+  // MARK: Saving and moving
+
+  let sample =
+    "Notes.\n\n# Docs\n- [Swift](https://swift.org)\n\n## Sub\n- [Sub](https://sub.example)\n\n# Tools\n  * [x] [Raycast](https://raycast.com) - Launcher\n"
+
+  func save(
+    _ file: BookmarkFile, _ title: String, _ url: String, _ description: String = "",
+    replacing original: Bookmark? = nil, under destination: BookmarkFile.Destination
+  ) throws -> (file: BookmarkFile, line: Int, text: String) {
+    try file.saving(
+      title: title, url: url, description: description,
+      replacing: original.map { ($0.line, $0.text) }, under: destination)
+  }
+
+  @Test func addsAfterTheLastBookmarkOfTheGroup() throws {
+    let file = BookmarkFile(text: sample)
+    let docs = try #require(file.headings.first { $0.title == "Docs" })
+    let saved = try save(file, "Apple", "https://apple.com", under: .heading(docs))
+    // After Swift, before the blank line and the sub-heading.
+    #expect(
+      saved.file.text
+        == sample.replacingOccurrences(
+          of: "- [Swift](https://swift.org)\n",
+          with: "- [Swift](https://swift.org)\n- [Apple](https://apple.com)\n"))
+    #expect(saved.line == 4)
+    // A heading with only sub-headings under it: right after the heading.
+    let onlySub = BookmarkFile(text: "# A\n## B\n- [x](https://x.example)\n")
+    let a = try #require(onlySub.headings.first)
+    #expect(
+      try save(onlySub, "N", "https://n.example", under: .heading(a)).file.text
+        == "# A\n- [N](https://n.example)\n## B\n- [x](https://x.example)\n")
+  }
+
+  @Test func keepsLineEndingsWhenAdding() throws {
+    let crlf = BookmarkFile(text: "# A\r\n- [a](https://a.example)")
+    let a = try #require(crlf.headings.first)
+    #expect(
+      try save(crlf, "b", "https://b.example", under: .heading(a)).file.text
+        == "# A\r\n- [a](https://a.example)\r\n- [b](https://b.example)")
+    #expect(
+      try save(crlf, "b", "https://b.example", under: .newHeading("New")).file.text
+        == "# A\r\n- [a](https://a.example)\r\n\r\n# New\r\n- [b](https://b.example)")
+    #expect(
+      try save(BookmarkFile(text: ""), "b", "https://b.example", under: .newHeading("New")).file
+        .text == "# New\n- [b](https://b.example)\n")
+  }
+
+  @Test func editsInPlaceKeepingTheLinesStart() throws {
+    let file = BookmarkFile(text: sample)
+    let raycast = try #require(file.bookmarks.last)
+    let tools = try #require(file.headings.last)
+    let saved = try save(
+      file, "Raycast 2", "https://raycast.com", "", replacing: raycast, under: .heading(tools))
+    #expect(
+      saved.file.text
+        == sample.replacingOccurrences(
+          of: "  * [x] [Raycast](https://raycast.com) - Launcher",
+          with: "  * [x] [Raycast 2](https://raycast.com)"))
+    // Above the first heading stays there too.
+    let top = BookmarkFile(text: "- [a](https://a.example)\n# H\n")
+    let a = try #require(top.bookmarks.first)
+    #expect(
+      try save(
+        top, "b", "https://a.example", replacing: a,
+        under: .heading(.init(title: "", line: -1))
+      ).file.text == "- [b](https://a.example)\n# H\n")
+  }
+
+  @Test func movesTheLineAsWritten() throws {
+    let file = BookmarkFile(text: sample)
+    let raycast = try #require(file.bookmarks.last)
+    let docs = try #require(file.headings.first { $0.title == "Docs" })
+    let moved = try file.moving(line: raycast.line, text: raycast.text, under: .heading(docs))
+    #expect(
+      moved.file.text
+        == "Notes.\n\n# Docs\n- [Swift](https://swift.org)\n  * [x] [Raycast](https://raycast.com) - Launcher\n\n## Sub\n- [Sub](https://sub.example)\n\n# Tools\n"
+    )
+    // Down past where it was.
+    let swift = try #require(file.bookmarks.first)
+    let tools = try #require(file.headings.last)
+    let down = try file.moving(line: swift.line, text: swift.text, under: .heading(tools))
+    #expect(down.file.bookmarks.last?.title == "Swift")
+    #expect(down.file.bookmarks.last?.group == "Tools")
+    // A new group by a name already there goes under that one.
+    let named = try file.moving(line: swift.line, text: swift.text, under: .newHeading("Tools"))
+    #expect(named.file.headings.count == file.headings.count)
+  }
+
+  @Test func refusesWhatWouldNotReadBack() throws {
+    let file = BookmarkFile(text: sample)
+    let docs = try #require(file.headings.first)
+    for (title, url) in [
+      ("", "https://a.example"), ("x", "https://a b.example"), ("x", "no-scheme"),
+      ("x", "https://a.example/(open"), ("x](y", "https://a.example"),
+      // Reads back as a task item titled "y".
+      ("x] [y", "https://a.example"),
+    ] {
+      #expect(throws: BookmarkFile.EditError.self) {
+        try save(file, title, url, under: .heading(docs))
+      }
+    }
+    // A title with a lone bracket that still reads back is fine.
+    #expect(
+      try save(file, "a] [b", "https://a.example", under: .heading(docs)).text.contains("a] [b"))
+  }
+
+  @Test func refusesWhenTheFileChanged() throws {
+    let file = BookmarkFile(text: sample)
+    #expect(throws: BookmarkFile.EditError.changed) {
+      try file.moving(line: 3, text: "- [Other](https://o.example)", under: .newHeading("X"))
+    }
+    #expect(throws: BookmarkFile.EditError.changed) {
+      try save(file, "a", "https://a.example", under: .heading(.init(title: "Gone", line: 2)))
+    }
+  }
 }

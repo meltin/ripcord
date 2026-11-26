@@ -24,10 +24,14 @@ struct SearchView: View {
         } else if let logo = Bundle.main.image(forResource: "MenuBarIcon") {
           Image(nsImage: logo).renderingMode(.template).foregroundStyle(.secondary)
         }
-        if model.mode == .snippetForm {
+        if model.mode.isForm {
           // A form has no query, so the header names what it does instead.
-          Text(model.editing == nil ? "Create Snippet" : "Edit Snippet")
-            .font(.system(size: 15, weight: .semibold))
+          Text(
+            model.mode == .bookmarkForm
+              ? (model.bookmarkDraft.original == nil ? "Add Bookmark" : "Edit Bookmark")
+              : (model.editing == nil ? "Create Snippet" : "Edit Snippet")
+          )
+          .font(.system(size: 15, weight: .semibold))
           Spacer()
         } else {
           SearchField(
@@ -53,9 +57,11 @@ struct SearchView: View {
       .frame(height: LauncherController.fieldHeight)
       .background(DragArea())
       // Raycast's form has no rule under its header.
-      if model.mode != .snippetForm { Divider().opacity(0.5) }
+      if !model.mode.isForm { Divider().opacity(0.5) }
       if model.mode == .snippetForm {
         SnippetForm(model: model)
+      } else if model.mode == .bookmarkForm {
+        BookmarkForm(model: model)
       } else if model.sections.isEmpty {
         EmptyState(query: model.query, mode: model.mode)
       } else if [.repositories, .httpStatusCodes, .colors, .bookmarks].contains(model.mode) {
@@ -172,7 +178,7 @@ private struct EmptyState: View {
       "Save text you type again and again with Create Snippet."
     case .snippets:
       "No snippet contains “\(query)”."
-    case .snippetForm:
+    case .snippetForm, .bookmarkForm:
       ""
     case .repositories where query.trimmingCharacters(in: .whitespaces).isEmpty:
       "Repositories in the folders set under Settings › Git Repositories show up here."
@@ -334,6 +340,8 @@ private struct ResultIcon: View {
       }
     case .deleteColor, .deleteBookmark:
       tile("trash", .gray)
+    case .editBookmark, .moveBookmarkMenu, .moveBookmark:
+      tile("bookmark.fill", .yellow)
     case .cleanKeyboard:
       tile(BuiltinCommand.cleanKeyboard.symbol, BuiltinCommand.cleanKeyboard.color)
     case .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey, .deleteAlias:
@@ -439,6 +447,7 @@ extension BuiltinCommand {
     case .colorHistory: "swatchpalette.fill"
     case .cleanKeyboard: "keyboard"
     case .searchBookmarks: "bookmark.fill"
+    case .addBookmark: "bookmark.circle.fill"
     case .resetWindowPosition: "macwindow"
     case .quit: "power"
     }
@@ -453,7 +462,7 @@ extension BuiltinCommand {
     case .sleepTimer, .stopSleepTimer: .indigo
     case .pickColor, .colorHistory: .pink
     case .cleanKeyboard: .cyan
-    case .searchBookmarks: .yellow
+    case .searchBookmarks, .addBookmark: .yellow
     case .httpStatusCodes: .teal
     case .settings, .resetWindowPosition: .gray
     }
@@ -667,6 +676,89 @@ private struct SnippetForm: View {
   }
 }
 
+/// Add Bookmark's and Edit Bookmark's form: title, URL, description, and the group, picked
+/// from the file's headings or named new. ⌘↵ saves.
+private struct BookmarkForm: View {
+  @Bindable var model: LauncherModel
+  @FocusState private var focus: Field?
+
+  enum Field: CaseIterable { case title, url, description, newGroup }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      label("Title")
+      TextField("Title", text: $model.bookmarkDraft.title)
+        .focused($focus, equals: .title)
+        .tabs(from: .title, focus: $focus, among: fields)
+        .inputField(isFocused: focus == .title)
+      label("URL").padding(.top, 10)
+      TextField("https://example.com", text: $model.bookmarkDraft.url)
+        // No spelling fixes or predictions in a URL.
+        .autocorrectionDisabled()
+        .focused($focus, equals: .url)
+        .tabs(from: .url, focus: $focus, among: fields)
+        .inputField(isFocused: focus == .url)
+      label("Description").padding(.top, 10)
+      TextField("Optional", text: $model.bookmarkDraft.description)
+        .focused($focus, equals: .description)
+        .tabs(from: .description, focus: $focus, among: fields)
+        .inputField(isFocused: focus == .description)
+      label("Group").padding(.top, 10)
+      HStack(spacing: 10) {
+        Menu {
+          ForEach(model.bookmarkDraft.headings, id: \.line) { heading in
+            Button(heading.title.isEmpty ? "Top of the File" : heading.title) {
+              model.bookmarkDraft.heading = heading
+            }
+          }
+          if !model.bookmarkDraft.headings.isEmpty { Divider() }
+          Button("New Group…") {
+            model.bookmarkDraft.heading = nil
+            focus = .newGroup
+          }
+        } label: {
+          Label(groupLabel, systemImage: "number")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .padding(.horizontal, 12)
+        .frame(height: 36)
+        .field(isFocused: false)
+        if model.bookmarkDraft.heading == nil {
+          TextField("New group name", text: $model.bookmarkDraft.newGroup)
+            .focused($focus, equals: .newGroup)
+            .tabs(from: .newGroup, focus: $focus, among: fields)
+            .inputField(isFocused: focus == .newGroup)
+        }
+      }
+    }
+    .font(.system(size: 14))
+    .frame(maxWidth: 560, alignment: .leading)
+    .padding(.horizontal, 40)
+    .padding(.top, 4)
+    // Clear of the floating footer, with the same gap the sides have.
+    .padding(.bottom, LauncherController.footerHeight + 12)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    // On the next pass, as Create Snippet's form does: the search field it replaces is still
+    // first responder as it appears.
+    .onAppear { DispatchQueue.main.async { focus = .title } }
+  }
+
+  /// The fields Tab steps through: the new group's name only while it shows.
+  private var fields: [Field] {
+    model.bookmarkDraft.heading == nil ? Field.allCases : [.title, .url, .description]
+  }
+
+  private var groupLabel: String {
+    guard let heading = model.bookmarkDraft.heading else { return "New Group" }
+    return heading.title.isEmpty ? "Top of the File" : heading.title
+  }
+
+  private func label(_ text: String) -> some View {
+    Text(text).font(.system(size: 12)).foregroundStyle(.secondary)
+  }
+}
+
 /// What a snippet can hold besides text, each with what it becomes on hover.
 private struct PlaceholderList: View {
   let onInsert: (String) -> Void
@@ -738,8 +830,8 @@ private struct PlaceholderChip: View {
 extension View {
   /// Tab and ⇧Tab move through the form's fields in order, wrapping around: a panel that never
   /// activates its app gets no key view loop from AppKit, and the text box would type a tab.
-  fileprivate func tabs(
-    from field: SnippetForm.Field, focus: FocusState<SnippetForm.Field?>.Binding
+  fileprivate func tabs<Field: CaseIterable & Hashable>(
+    from field: Field, focus: FocusState<Field?>.Binding, among shown: [Field]? = nil
   ) -> some View {
     // Held keys repeat; ⇧Tab may arrive as backtab (U+0019) rather than Tab with ⇧.
     onKeyPress(keys: [.tab, KeyEquivalent("\u{19}")], phases: [.down, .repeat]) { press in
@@ -748,7 +840,7 @@ extension View {
       if (launcherPanel()?.firstResponder as? NSTextView)?.hasMarkedText() == true {
         return .ignored
       }
-      let fields = SnippetForm.Field.allCases
+      let fields = shown ?? Array(Field.allCases)
       let index = fields.firstIndex(of: field) ?? 0
       let backward = press.modifiers.contains(.shift) || press.key == KeyEquivalent("\u{19}")
       let step = backward ? fields.count - 1 : 1
@@ -1114,12 +1206,12 @@ private struct Footer: View {
       }
       Spacer()
       HStack(spacing: 2) {
-        if mode == .snippetForm {
+        if mode.isForm {
           HoverButton {
             onCommand(.submit)
           } label: {
             HStack(spacing: 6) {
-              Text("Save Snippet")
+              Text(mode == .bookmarkForm ? "Save Bookmark" : "Save Snippet")
               HStack(spacing: 2) {
                 Keycap("⌘")
                 Keycap("↵")
@@ -1142,7 +1234,7 @@ private struct Footer: View {
             .frame(height: 26)
           }
         }
-        if mode != .snippetForm {
+        if !mode.isForm {
           actionsButton
         }
       }
@@ -1591,7 +1683,7 @@ extension LauncherMode {
     case .httpStatusCodes: "Search HTTP Status Codes…"
     case .colors: "Search Colors…"
     case .bookmarks: "Search Bookmarks…"
-    case .snippetForm: ""
+    case .snippetForm, .bookmarkForm: ""
     }
   }
 }

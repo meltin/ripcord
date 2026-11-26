@@ -12,6 +12,9 @@ public struct Bookmark: Equatable, Sendable {
   /// Where it is in the file, and the line as it was read, to find it again before a change.
   public let line: Int
   public let text: String
+  /// What comes before the link on its line (indent, `- `, a task list's `[x] `), kept when the
+  /// bookmark is edited.
+  public let prefix: String
 }
 
 /// `bookmarks.md` as written: every line kept with its own line ending, so a change rewrites
@@ -20,6 +23,31 @@ public struct Bookmark: Equatable, Sendable {
 public struct BookmarkFile: Equatable, Sendable {
   /// Each line's text and the ending that followed it ("\n", "\r\n", or "" for the last line).
   public private(set) var lines: [(text: String, ending: String)]
+
+  /// A heading, which a bookmark goes under; line -1 stands for the top, above the first one.
+  public struct Heading: Equatable, Sendable {
+    public let title: String
+    public let line: Int
+
+    public init(title: String, line: Int) {
+      self.title = title
+      self.line = line
+    }
+  }
+
+  /// Where a saved or moved bookmark goes.
+  public enum Destination: Equatable, Sendable {
+    case heading(Heading)
+    /// A new `#` heading at the end of the file.
+    case newHeading(String)
+  }
+
+  public enum EditError: Error, Equatable {
+    /// The bookmark or heading isn't on its line any more: the file changed since it was read.
+    case changed
+    /// What's wrong with the title, URL or group, for the user.
+    case invalid(String)
+  }
 
   public init(text: String) {
     var lines: [(text: String, ending: String)] = []
@@ -38,27 +66,36 @@ public struct BookmarkFile: Equatable, Sendable {
 
   public static func == (lhs: BookmarkFile, rhs: BookmarkFile) -> Bool { lhs.text == rhs.text }
 
-  /// The bookmarks, in file order; lines that aren't bookmarks or headings, and anything in a
-  /// fenced code block, are left alone.
-  public var bookmarks: [Bookmark] {
-    var group = (title: "", line: -1)
+  /// The bookmarks, in file order.
+  public var bookmarks: [Bookmark] { scan.bookmarks }
+  /// The headings, in file order.
+  public var headings: [Heading] { scan.headings }
+
+  /// One pass over the lines for headings and bookmarks; lines that are neither, and anything
+  /// in a fenced code block, are left alone. Reading and changing the file both go by it.
+  private var scan: (headings: [Heading], bookmarks: [Bookmark]) {
+    var headings: [Heading] = []
+    var bookmarks: [Bookmark] = []
+    var group = Heading(title: "", line: -1)
     var fence: String?
-    return lines.enumerated().compactMap { index, line in
+    for (index, line) in lines.enumerated() {
       let trimmed = line.text.trimmingCharacters(in: Self.blank)
       if let open = fence {
         if trimmed.hasPrefix(open) { fence = nil }
-        return nil
+        continue
       }
       if let marker = ["```", "~~~"].first(where: trimmed.hasPrefix) {
         fence = marker
-        return nil
+        continue
       }
-      if let heading = Self.heading(trimmed) {
-        group = (heading, index)
-        return nil
+      if let title = Self.heading(trimmed) {
+        group = Heading(title: title, line: index)
+        headings.append(group)
+      } else if let bookmark = Self.bookmark(line.text, group: group, line: index) {
+        bookmarks.append(bookmark)
       }
-      return Self.bookmark(trimmed, group: group, line: index, text: line.text)
     }
+    return (headings, bookmarks)
   }
 
   /// Spaces, tabs and a UTF-8 byte order mark, which can start the first line.
@@ -77,6 +114,130 @@ public struct BookmarkFile: Equatable, Sendable {
     return file
   }
 
+  /// With a bookmark saved from the form: a new one when `original` is nil, otherwise that one
+  /// edited, in place while it stays under its heading. Also the line it ended up on.
+  public func saving(
+    title: String, url: String, description: String, replacing original: (line: Int, text: String)?,
+    under destination: Destination
+  ) throws(EditError) -> (file: BookmarkFile, line: Int, text: String) {
+    let title = title.trimmingCharacters(in: .whitespaces)
+    let url = url.trimmingCharacters(in: .whitespaces)
+    let description = description.trimmingCharacters(in: .whitespaces)
+    let found: Bookmark? = if let original { try bookmark(original) } else { nil }
+    guard !title.isEmpty else { throw .invalid("A bookmark needs a title.") }
+    guard !url.contains(where: \.isWhitespace), let parsedURL = URL(string: url),
+      parsedURL.scheme != nil
+    else { throw .invalid("“\(url)” isn't a full URL, such as https://example.com.") }
+    let text =
+      (found?.prefix ?? "- ") + "[\(title)](\(url))"
+      + (description.isEmpty ? "" : " - \(description)")
+    // Saved only as it reads back: a stray bracket would change what the line means.
+    guard let check = Self.bookmark(text, group: Heading(title: "", line: -1), line: 0),
+      check.title == title, check.url == parsedURL,
+      check.description == (description.isEmpty ? nil : description),
+      !text.contains(where: \.isNewline)
+    else {
+      throw .invalid(
+        "That title or URL can't be written as a Markdown link; take out brackets or parentheses that don't pair up."
+      )
+    }
+    return try placing(text, moving: found, under: destination)
+  }
+
+  /// With the bookmark moved under `destination`, its line kept as written.
+  public func moving(line: Int, text: String, under destination: Destination) throws(EditError)
+    -> (file: BookmarkFile, line: Int, text: String)
+  {
+    let found = try bookmark((line, text))
+    return try placing(found.text, moving: found, under: destination)
+  }
+
+  /// The bookmark on `original.line`, if that line still holds it.
+  private func bookmark(_ original: (line: Int, text: String)) throws(EditError) -> Bookmark {
+    guard
+      let found = bookmarks.first(where: { $0.line == original.line && $0.text == original.text })
+    else { throw .changed }
+    return found
+  }
+
+  /// `text` under `destination`: on `original`'s line when that's under it already, otherwise
+  /// after the last bookmark under that heading, with `original` taken out.
+  private func placing(_ text: String, moving original: Bookmark?, under destination: Destination)
+    throws(EditError) -> (file: BookmarkFile, line: Int, text: String)
+  {
+    let current = headings
+    let target: Heading
+    switch destination {
+    case .heading(let heading):
+      guard heading.line == -1 || current.contains(heading) else { throw .changed }
+      target = heading
+    case .newHeading(let title):
+      let title = title.trimmingCharacters(in: .whitespaces)
+      guard !title.isEmpty, Self.heading("# \(title)") == title else {
+        throw .invalid("A new group needs a name on one line.")
+      }
+      // One by that name already: there, rather than a second heading of the same name.
+      guard let existing = current.first(where: { $0.title == title }) else {
+        return appendingHeading(title, then: text, removing: original)
+      }
+      target = existing
+    }
+    if let original, original.groupLine == target.line {
+      var file = self
+      file.lines[original.line].text = text
+      return (file, original.line, text)
+    }
+    var file = self
+    var headingLine = target.line
+    if let original {
+      // Found by `bookmark`, so it's there to take out.
+      file = file.deleting(line: original.line, text: original.text) ?? file
+      if headingLine > original.line { headingLine -= 1 }
+    }
+    let after = file.scan
+    let next = after.headings.first { $0.line > headingLine }?.line ?? file.lines.count
+    let last =
+      after.bookmarks.last { $0.line > headingLine && $0.line < next }?.line ?? headingLine
+    file.insert(text, after: last)
+    return (file, last + 1, text)
+  }
+
+  /// With `# title` and then `text` at the end of the file, a blank line before them.
+  private func appendingHeading(_ title: String, then text: String, removing original: Bookmark?)
+    -> (file: BookmarkFile, line: Int, text: String)
+  {
+    var file = original.flatMap { deleting(line: $0.line, text: $0.text) } ?? self
+    let ending = file.lineEnding
+    // A file without a final newline stays without one.
+    let endsOpen = file.lines.last?.ending.isEmpty ?? false
+    if let last = file.lines.indices.last {
+      if endsOpen { file.lines[last].ending = ending }
+      if !file.lines[last].text.trimmingCharacters(in: Self.blank).isEmpty {
+        file.lines.append(("", ending))
+      }
+    }
+    file.lines.append(("# \(title)", ending))
+    file.lines.append((text, endsOpen ? "" : ending))
+    return (file, file.lines.count - 1, text)
+  }
+
+  /// Puts `text` after line `index` (-1 for the first line), with the ending its neighbour has.
+  private mutating func insert(_ text: String, after index: Int) {
+    guard lines.indices.contains(index) else {
+      return lines.insert((text, lineEnding), at: 0)
+    }
+    if lines[index].ending.isEmpty {
+      // After the last line, which has no newline: that line gets one, the new line doesn't.
+      lines[index].ending = lineEnding
+      lines.insert((text, ""), at: index + 1)
+    } else {
+      lines.insert((text, lines[index].ending), at: index + 1)
+    }
+  }
+
+  /// The file's line ending, "\n" for a file that has none yet.
+  private var lineEnding: String { lines.first { !$0.ending.isEmpty }?.ending ?? "\n" }
+
   /// `# Group` to `###### Group`, closing hashes (`## Group ##`) left out.
   static func heading(_ trimmed: String) -> String? {
     let hashes = trimmed.prefix { $0 == "#" }
@@ -91,9 +252,9 @@ public struct BookmarkFile: Equatable, Sendable {
 
   /// `- [Title](url) - description`, the URL allowed its own parentheses, as Wikipedia's have,
   /// and a task list's `[ ]` or `[x]` before the link.
-  static func bookmark(
-    _ trimmed: String, group: (title: String, line: Int), line index: Int, text: String
-  ) -> Bookmark? {
+  static func bookmark(_ text: String, group: Heading, line index: Int) -> Bookmark? {
+    let lead = text.prefix { $0.unicodeScalars.allSatisfy(blank.contains) }
+    let trimmed = text.trimmingCharacters(in: blank)
     guard trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") else { return nil }
     var item = trimmed.dropFirst(2)
     for box in ["[ ] ", "[x] ", "[X] "] where item.hasPrefix(box) {
@@ -127,7 +288,8 @@ public struct BookmarkFile: Equatable, Sendable {
       rest.hasPrefix("- ") ? String(rest.dropFirst(2)).trimmingCharacters(in: .whitespaces) : nil
     return Bookmark(
       title: title, url: url, description: description?.isEmpty == true ? nil : description,
-      group: group.title, groupLine: group.line, line: index, text: text)
+      group: group.title, groupLine: group.line, line: index, text: text,
+      prefix: String(lead) + trimmed[..<item.startIndex])
   }
 }
 
@@ -147,9 +309,25 @@ extension Search {
     }
     return headings.map { line in
       let rows = matches.filter { $0.groupLine == line }
+      // With the title, so a heading renamed in place redraws.
       return SearchSection(
         title: rows[0].group.isEmpty ? "Bookmarks" : rows[0].group,
-        results: rows.map(result(for:)), id: "heading:\(line)")
+        results: rows.map(result(for:)), id: "heading:\(line):\(rows[0].group)")
+    }
+  }
+
+  /// Move to Group's list: every heading but the bookmark's own.
+  public static func moveMenu(for bookmark: (line: Int, text: String), file: BookmarkFile)
+    -> [MenuAction]
+  {
+    let own = file.bookmarks.first { $0.line == bookmark.line && $0.text == bookmark.text }?
+      .groupLine
+    return file.headings.filter { $0.line != own }.map { heading in
+      MenuAction(
+        title: heading.title, symbol: "number", shortcut: "",
+        action: .moveBookmark(
+          line: bookmark.line, text: bookmark.text, headingLine: heading.line,
+          headingTitle: heading.title))
     }
   }
 
@@ -163,12 +341,19 @@ extension Search {
       MenuAction(
         title: "Copy Title", symbol: "doc.on.doc", shortcut: "⌥⌘C", action: .copy(bookmark.title)),
       MenuAction(
+        title: "Edit Bookmark", symbol: "pencil", shortcut: "⌘E",
+        action: .editBookmark(line: bookmark.line, text: bookmark.text), startsSection: true),
+      MenuAction(
+        title: "Move to Group…", symbol: "arrow.turn.up.right", shortcut: "⇧⌘M",
+        action: .moveBookmarkMenu(line: bookmark.line, text: bookmark.text)),
+      MenuAction(
         title: "Delete Bookmark", symbol: "trash", shortcut: "⌃X",
         action: .deleteBookmark(line: bookmark.line, text: bookmark.text), isDestructive: true,
         startsSection: true),
     ]
+    // With the line's text, so an edit that keeps the URL still redraws the row.
     return SearchResult(
-      id: "bookmark:\(bookmark.line):\(bookmark.url.absoluteString)", title: bookmark.title,
+      id: "bookmark:\(bookmark.line):\(bookmark.text)", title: bookmark.title,
       subtitle: bookmark.description ?? bookmark.url.host() ?? bookmark.url.absoluteString,
       keyword: nil, kind: .bookmark, action: menu[0].action, menu: menu)
   }

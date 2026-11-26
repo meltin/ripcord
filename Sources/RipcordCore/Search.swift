@@ -8,7 +8,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case sleepTimer, stopSleepTimer
   case pickColor, colorHistory
   case cleanKeyboard
-  case searchBookmarks
+  case searchBookmarks, addBookmark
   case resetWindowPosition, quit
 
   public var title: String {
@@ -29,6 +29,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .colorHistory: "Color History"
     case .cleanKeyboard: "Clean Keyboard"
     case .searchBookmarks: "Search Bookmarks"
+    case .addBookmark: "Add Bookmark"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .quit: "Quit Ripcord"
     }
@@ -41,7 +42,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .sleepTimer, .stopSleepTimer: "Sleep Timer"
     case .pickColor, .colorHistory: "Color Picker"
     case .cleanKeyboard: "Clean Keyboard"
-    case .searchBookmarks: "Bookmarks"
+    case .searchBookmarks, .addBookmark: "Bookmarks"
     default: "Ripcord"
     }
   }
@@ -65,6 +66,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .colorHistory: "command:color-history"
     case .cleanKeyboard: "command:clean-keyboard"
     case .searchBookmarks: "command:search-bookmarks"
+    case .addBookmark: "command:add-bookmark"
     case .resetWindowPosition: "command:reset-window-position"
     case .quit: "command:quit"
     }
@@ -173,6 +175,12 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case cleanKeyboard(TimeInterval)
     /// Removes a bookmark's line from bookmarks.md, if it still holds `text`.
     case deleteBookmark(line: Int, text: String)
+    /// Opens the form on the bookmark on `line`, if it still holds `text`.
+    case editBookmark(line: Int, text: String)
+    /// Swaps the ⌘K menu for the headings to move the bookmark under.
+    case moveBookmarkMenu(line: Int, text: String)
+    /// Moves the bookmark under the heading on `headingLine`, if it's still `headingTitle`.
+    case moveBookmark(line: Int, text: String, headingLine: Int, headingTitle: String)
   }
 
   public enum SnippetAction: Equatable, Sendable {
