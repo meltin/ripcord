@@ -208,7 +208,11 @@ private struct ResultIcon: View {
     case .reveal:
       tile("folder", .gray)
     case .snippet:
-      tile("text.quote", .gray)
+      // Plain, as Raycast draws a snippet's icon.
+      Image(systemName: result.symbol ?? "doc")
+        .font(.system(size: 15))
+        .foregroundStyle(.secondary)
+        .frame(width: 24, height: 24)
     case .clip:
       if let thumbnail = result.thumbnail {
         // Cropped to a rounded square, as Raycast draws them.
@@ -367,10 +371,38 @@ private struct SnippetForm: View {
           .foregroundStyle(.secondary)
       }
       VStack(alignment: .leading, spacing: 8) {
-        label("Name")
-        TextField("Snippet name", text: $model.draft.name)
-          .focused($focus, equals: .name)
-          .inputField(isFocused: focus == .name)
+        label("Name & Icon")
+        HStack(spacing: 0) {
+          TextField("Snippet name", text: $model.draft.name)
+            .focused($focus, equals: .name)
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 12)
+          Divider().frame(height: 20)
+          Button {
+            model.isPickingIcon.toggle()
+          } label: {
+            HStack(spacing: 6) {
+              Image(systemName: model.draft.icon ?? "doc").font(.system(size: 14))
+              Image(systemName: model.isPickingIcon ? "chevron.up" : "chevron.down")
+                .font(.system(size: 9, weight: .semibold))
+            }
+            .padding(.horizontal, 12)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .accessibilityLabel("Choose an icon")
+        }
+        .frame(height: 36)
+        .field(isFocused: focus == .name)
+        // Raycast's picker drops down from the field, over what's below it.
+        .overlay(alignment: .topTrailing) {
+          if model.isPickingIcon {
+            IconPicker(selection: $model.draft.icon) { model.isPickingIcon = false }
+              .offset(y: 44)
+          }
+        }
+        .zIndex(1)
         label("Keyword").padding(.top, 14)
         TextField(
           "Keyword",
@@ -410,6 +442,108 @@ extension View {
       .padding(.horizontal, 12)
       .frame(height: 36)
       .field(isFocused: isFocused)
+  }
+}
+
+/// SF Symbols to choose a snippet's icon from, named as Raycast names its icons.
+private let snippetIcons: [(name: String, symbol: String)] = [
+  ("Blank Document", "doc"), ("Text Document", "doc.text"), ("Note", "note.text"),
+  ("Quote", "quote.opening"), ("List", "list.bullet"), ("Checklist", "checklist"),
+  ("Pencil", "pencil"), ("Signature", "signature"), ("Envelope", "envelope"),
+  ("Paper Plane", "paperplane"), ("Message", "message"), ("Phone", "phone"), ("At", "at"),
+  ("Person", "person"), ("People", "person.2"), ("Building", "building.2"), ("House", "house"),
+  ("Location", "mappin.and.ellipse"), ("Globe", "globe"), ("Link", "link"),
+  ("Calendar", "calendar"), ("Clock", "clock"), ("Alarm", "alarm"), ("Bell", "bell"),
+  ("Key", "key"), ("Lock", "lock"), ("Number", "number"),
+  ("Code", "chevron.left.forwardslash.chevron.right"),
+  ("Terminal", "terminal"), ("Command", "command"), ("Keyboard", "keyboard"), ("Bug", "ant"),
+  ("Hammer", "hammer"), ("Wrench", "wrench.adjustable"), ("Gear", "gearshape"),
+  ("Light Bulb", "lightbulb"), ("Star", "star"), ("Heart", "heart"), ("Flag", "flag"),
+  ("Bookmark", "bookmark"), ("Tag", "tag"), ("Pin", "pin"), ("Bolt", "bolt"), ("Flame", "flame"),
+  ("Sparkles", "sparkles"), ("Magic Wand", "wand.and.stars"), ("Leaf", "leaf"),
+  ("Sun", "sun.max"), ("Moon", "moon"), ("Cloud", "cloud"), ("Umbrella", "umbrella"),
+  ("Coffee", "cup.and.saucer"), ("Fork & Knife", "fork.knife"), ("Cart", "cart"),
+  ("Bag", "bag"), ("Credit Card", "creditcard"), ("Gift", "gift"), ("Book", "book"),
+  ("Graduation Cap", "graduationcap"), ("Briefcase", "briefcase"), ("Folder", "folder"),
+  ("Tray", "tray"), ("Archive", "archivebox"), ("Paperclip", "paperclip"),
+  ("Checkmark", "checkmark.circle"), ("Question Mark", "questionmark.circle"),
+  ("Info", "info.circle"), ("Warning", "exclamationmark.triangle"), ("Smile", "face.smiling"),
+  ("Hand Wave", "hand.wave"), ("Thumbs Up", "hand.thumbsup"), ("Camera", "camera"),
+  ("Photo", "photo"), ("Music", "music.note"), ("Film", "film"), ("Microphone", "mic"),
+  ("Car", "car"), ("Airplane", "airplane"), ("Bike", "bicycle"), ("Bird", "bird"),
+  ("Paw", "pawprint"), ("Brain", "brain"),
+]
+
+/// A searchable list of `snippetIcons`. ↑↓ move, Return picks, a click picks.
+private struct IconPicker: View {
+  @Binding var selection: String?
+  let onClose: () -> Void
+  @State private var query = ""
+  @State private var highlighted = 0
+  @FocusState private var isSearchFocused: Bool
+
+  private var matches: [(name: String, symbol: String)] {
+    query.isEmpty ? snippetIcons : snippetIcons.filter { $0.name.localizedStandardContains(query) }
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
+      TextField("Search…", text: $query)
+        .textFieldStyle(.plain)
+        .font(.system(size: 14))
+        .padding(.horizontal, 14)
+        .frame(height: 40)
+        .focused($isSearchFocused)
+        .onChange(of: query) { highlighted = 0 }
+        .onKeyPress(.downArrow) {
+          highlighted = min(highlighted + 1, max(matches.count - 1, 0))
+          return .handled
+        }
+        .onKeyPress(.upArrow) {
+          highlighted = max(highlighted - 1, 0)
+          return .handled
+        }
+        .onSubmit { pick(highlighted) }
+      Divider().opacity(0.5)
+      ScrollViewReader { proxy in
+        ScrollView {
+          LazyVStack(spacing: 0) {
+            ForEach(Array(matches.enumerated()), id: \.element.symbol) { index, icon in
+              HStack(spacing: 10) {
+                Image(systemName: icon.symbol).frame(width: 20)
+                Text(icon.name)
+                Spacer()
+              }
+              .font(.system(size: 14))
+              .padding(.horizontal, 10)
+              .frame(height: 34)
+              .background(
+                RoundedRectangle(cornerRadius: 8)
+                  .fill(index == highlighted ? Color.primary.opacity(0.1) : .clear)
+              )
+              .contentShape(Rectangle())
+              .onHover { if $0 { highlighted = index } }
+              .onTapGesture { pick(index) }
+              .id(index)
+            }
+          }
+          .padding(6)
+        }
+        .scrollIndicators(.never)
+        .onChange(of: highlighted) { proxy.scrollTo(highlighted) }
+      }
+    }
+    .frame(width: 240, height: 300)
+    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+    .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
+    .onAppear { isSearchFocused = true }
+  }
+
+  private func pick(_ index: Int) {
+    guard matches.indices.contains(index) else { return }
+    // The blank document is the default, so it's stored as no icon.
+    selection = matches[index].symbol == "doc" ? nil : matches[index].symbol
+    onClose()
   }
 }
 

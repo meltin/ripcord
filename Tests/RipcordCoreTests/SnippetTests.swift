@@ -37,7 +37,7 @@ import Testing
     Snippet(name: "Signature", text: "Best,\nMe"),
     Snippet(name: "", text: ""),
     Snippet(name: "", text: "No name yet"),
-    Snippet(name: "Address", text: "1 Infinite Loop", keyword: "addr"),
+    Snippet(name: "Address", text: "1 Infinite Loop", keyword: "addr", icon: "house"),
     Snippet(name: "Greeting", text: "Hello on {date}", keyword: "sig"),
   ]
 
@@ -49,6 +49,11 @@ import Testing
     // By position, so an unnamed new snippet can't collide with another.
     #expect(
       sections[0].results.map(\.id) == ["snippet:3", "snippet:4", "snippet:0", "snippet:2"])
+  }
+
+  @Test func showsTheChosenIcon() {
+    let results = Search.snippetSections(for: "addr", snippets: snippets).flatMap(\.results)
+    #expect(results.map(\.symbol) == ["house"])
   }
 
   @Test func findsByNameKeywordOrText() {
@@ -70,6 +75,7 @@ import Testing
       Search.snippetSections(for: "Greeting", snippets: snippets).first?.results.first)
     #expect(result.kind.primaryAction == "Paste to App")
     #expect(result.keyword == "sig")
+    #expect(result.symbol == "doc")
     #expect(result.actions.map(\.shortcut) == ["↵", "⇧⌘C", "⌘E", "⌘N", "⌃X"])
     #expect(
       result.actions.map(\.action) == [

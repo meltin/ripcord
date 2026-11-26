@@ -7,11 +7,14 @@ public struct Snippet: Codable, Equatable, Sendable {
   public var text: String
   /// Typed in Search Snippets, it puts the snippet first; #7 will expand it in any app.
   public var keyword: String?
+  /// An SF Symbols name shown on its row; nil for a plain document.
+  public var icon: String?
 
-  public init(name: String, text: String, keyword: String? = nil) {
+  public init(name: String, text: String, keyword: String? = nil, icon: String? = nil) {
     self.name = name
     self.text = text
     self.keyword = keyword
+    self.icon = icon
   }
 
   /// The text with `{date}` as `date` and `{clipboard}` as `clipboard`. The clipboard goes in

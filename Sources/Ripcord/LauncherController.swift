@@ -43,6 +43,7 @@ final class LauncherModel {
   /// What Create Snippet's form holds; `editing` is the snippet's index when it's an edit.
   var draft = Snippet(name: "", text: "")
   var editing: Int?
+  var isPickingIcon = false
 
   /// Every row in display order; `selection` indexes into this.
   var results: [SearchResult] { sections.flatMap(\.results) }
@@ -143,7 +144,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
     panel.escapeHandler = { [weak self] in
       // Only the form: the search field turns Esc into .cancel itself.
       guard let self, model.mode == .snippetForm else { return false }
-      handle(.cancel)
+      // An open icon list closes first, as a menu does.
+      if model.isPickingIcon {
+        model.isPickingIcon = false
+      } else {
+        handle(.cancel)
+      }
       return true
     }
 
@@ -252,6 +258,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   private func hide() {
     panel.orderOut(nil)
+    model.isPickingIcon = false
     restoreInputSource()
     model.mode = .root
     update("")
@@ -480,7 +487,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     let draft = Snippet(
       name: model.draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
       text: model.draft.text,
-      keyword: model.draft.keyword?.trimmingCharacters(in: .whitespaces).nilIfEmpty)
+      keyword: model.draft.keyword?.trimmingCharacters(in: .whitespaces).nilIfEmpty,
+      icon: model.draft.icon)
     guard !draft.name.isEmpty, !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else { return NSSound.beep() }
     // The list can shrink while the form is open; an edit then has nothing left to replace.

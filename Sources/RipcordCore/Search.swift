@@ -143,6 +143,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   public let action: Action
   /// A clipboard image's file, drawn as the row's icon.
   public var thumbnail: URL? = nil
+  /// An SF Symbols name drawn as the row's icon, as a snippet's chosen one.
+  public var symbol: String? = nil
   public var isPinned = false
 }
 
@@ -331,7 +333,7 @@ public enum Search {
         // By position: a new snippet's name is empty, and names may repeat.
         id: "snippet:\(index)", title: title(snippet),
         subtitle: "", keyword: keyword(snippet), kind: .snippet,
-        action: .snippet(index, .paste))
+        action: .snippet(index, .paste), symbol: snippet.icon ?? "doc")
     }
     return results.isEmpty ? [] : [SearchSection(title: "Snippets", results: results)]
   }
