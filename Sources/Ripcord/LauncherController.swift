@@ -48,7 +48,7 @@ struct OpenMenu {
 
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
-  case root, clipboard, snippets, snippetForm, repositories
+  case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes
 
   /// The command whose list this is; nil for the root search.
   var command: BuiltinCommand? {
@@ -58,6 +58,7 @@ enum LauncherMode {
     case .snippets: .searchSnippets
     case .snippetForm: .createSnippet
     case .repositories: .searchRepositories
+    case .httpStatusCodes: .httpStatusCodes
     }
   }
 }
@@ -434,6 +435,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       model.clipboard = clipboard.history
       return Search.clipboardSections(for: query, history: clipboard.history)
     }
+    if model.mode == .httpStatusCodes { return Search.httpStatusSections(for: query) }
     if model.mode == .repositories {
       return Search.repositorySections(
         for: query, repositories: repositories, settings: repositorySettings)
@@ -625,6 +627,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.resetWindowPosition) { return resetPosition() }
     if action == .run(.clipboardHistory) { return open(.clipboard) }
     if action == .run(.searchSnippets) { return open(.snippets) }
+    if action == .run(.httpStatusCodes) { return open(.httpStatusCodes) }
     if action == .run(.searchRepositories) {
       // Not when its hotkey is closing the list.
       if !(panel.isVisible && model.mode == .repositories) { scanRepositories() }
@@ -697,7 +700,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .run(.decaffeinate):
       onDecaffeinate()
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
-      .run(.searchRepositories),
+      .run(.searchRepositories), .run(.httpStatusCodes),
       .run(.createSnippet), .clip, .snippet, .system, .window:
       break  // Handled above, without hiding the panel.
     case .run(.quit):

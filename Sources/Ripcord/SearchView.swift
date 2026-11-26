@@ -58,7 +58,7 @@ struct SearchView: View {
         SnippetForm(model: model)
       } else if model.sections.isEmpty {
         EmptyState(query: model.query, mode: model.mode)
-      } else if model.mode == .repositories {
+      } else if model.mode == .repositories || model.mode == .httpStatusCodes {
         resultList
       } else if model.mode != .root {
         // Raycast's layout: the list on the left, the selected item and its details on the right.
@@ -178,6 +178,8 @@ private struct EmptyState: View {
       "Repositories in the folders set under Settings › Git Repositories show up here."
     case .repositories:
       "No repository matches “\(query)”."
+    case .httpStatusCodes:
+      "No status code matches “\(query)”."
     }
   }
 
@@ -257,6 +259,10 @@ private struct ResultIcon: View {
 
   var body: some View {
     switch result.action {
+    case _ where result.kind == .statusCode:
+      // Colored by its hundred, so a 5xx stands apart from a 2xx at a glance.
+      let colors: [Character: Color] = ["1": .gray, "2": .green, "3": .blue, "4": .orange]
+      tile("number", result.title.first.flatMap { colors[$0] } ?? .red)
     case _ where result.kind == .repository:
       // Whichever app it opens in, a repository looks like one: a diamond in Git's red-orange,
       // as Raycast shows Git's logo.
@@ -381,6 +387,7 @@ extension BuiltinCommand {
     case .clipboardHistory: "list.clipboard.fill"
     case .searchSnippets: "doc.plaintext.fill"
     case .searchRepositories: "arrow.triangle.branch"
+    case .httpStatusCodes: "network"
     case .createSnippet: "doc.badge.plus"
     case .exportSnippets: "square.and.arrow.up"
     case .importSnippets: "square.and.arrow.down"
@@ -398,6 +405,7 @@ extension BuiltinCommand {
     case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .blue
     case .searchRepositories: .orange
     case .caffeinate, .decaffeinate: .brown
+    case .httpStatusCodes: .teal
     case .settings, .resetWindowPosition: .gray
     }
   }
@@ -1421,6 +1429,7 @@ extension SearchResult.Kind {
     case .image: "Image"
     case .snippet: "Snippet"
     case .repository: "Repository"
+    case .statusCode: "Status Code"
     }
   }
 }
@@ -1528,6 +1537,7 @@ extension LauncherMode {
     case .clipboard: "Search Clipboard History…"
     case .snippets: "Search Snippets…"
     case .repositories: "Search Repositories…"
+    case .httpStatusCodes: "Search HTTP Status Codes…"
     case .snippetForm: ""
     }
   }

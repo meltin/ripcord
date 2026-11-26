@@ -400,6 +400,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case windowManagement = "Window Management"
   case coffee = "Coffee"
   case repositories = "Git Repositories"
+  case httpStatusCodes = "HTTP Status Codes"
   case ripcord = "Ripcord"
 
   var id: Self { self }
@@ -416,6 +417,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .windowManagement: "rectangle.split.2x1.fill"
     case .coffee: "cup.and.saucer.fill"
     case .repositories: "arrow.triangle.branch"
+    case .httpStatusCodes: "network"
     case .ripcord: "command"
     }
   }
@@ -429,6 +431,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .windowManagement: .indigo
     case .coffee: .brown
     case .repositories: .orange
+    case .httpStatusCodes: .teal
     }
   }
 
@@ -453,6 +456,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       "Keep the Mac awake, until Decaffeinate or for a time typed after Caffeinate, as in “caffeinate 1h 30m”."
     case .repositories:
       "Find the Git repositories in your folders and open each in the app you pick for its Return."
+    case .httpStatusCodes:
+      "Look up a status code by number or name, open its MDN page, or copy it."
     case .ripcord: "Ripcord's own commands."
     }
   }
@@ -460,7 +465,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   /// The commands a page lists, by settings key; nil for pages built another way.
   var commandKeys: Set<String>? {
     switch self {
-    case .clipboardHistory, .snippets, .repositories, .coffee, .ripcord:
+    case .clipboardHistory, .snippets, .repositories, .coffee, .httpStatusCodes, .ripcord:
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
@@ -477,6 +482,7 @@ extension BuiltinCommand {
     case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .snippets
     case .searchRepositories: .repositories
     case .caffeinate, .decaffeinate: .coffee
+    case .httpStatusCodes: .httpStatusCodes
     case .settings, .resetWindowPosition, .quit: .ripcord
     }
   }
