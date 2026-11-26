@@ -40,6 +40,9 @@
   in any format
 - Clean Keyboard: turns every key off, media keys included, for 15 seconds to 5 minutes so the
   keyboard can be wiped, with the time left over the screen; ⌃⌥⌘↩ turns it back on early
+- Bookmarks: Search Bookmarks lists the Markdown links in `~/.config/ripcord/bookmarks.md`
+  (`- [Title](URL) - description`) under their `#` headings; Return opens one, ⌘K copies its URL
+  or title or deletes its line, and the rest of the file stays as you wrote it
 - HTTP Status Codes: look a code up by number or name, grouped by hundred; Return opens its MDN
   page and ⌘K copies the code or its name
 - CleanShot X: Capture Area, Window, Fullscreen and Previous Area, Scrolling Capture, Record

@@ -48,7 +48,7 @@ struct OpenMenu {
 
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
-  case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors
+  case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, bookmarks
 
   /// The command whose list this is; nil for the root search.
   var command: BuiltinCommand? {
@@ -60,6 +60,7 @@ enum LauncherMode {
     case .repositories: .searchRepositories
     case .httpStatusCodes: .httpStatusCodes
     case .colors: .colorHistory
+    case .bookmarks: .searchBookmarks
     }
   }
 }
@@ -237,6 +238,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     directory: URL.applicationSupportDirectory.appending(path: "Ripcord/Clipboard"))
   private var colors = ColorHistory(
     fileURL: URL.applicationSupportDirectory.appending(path: "Ripcord/colors.json"))
+  /// Read each time Search Bookmarks opens, so edits made by hand show up.
+  private var bookmarks = BookmarkFile(text: "")
+  static let bookmarksURL = URL.homeDirectory.appending(path: ".config/ripcord/bookmarks.md")
   /// What Pick Color copies, and Color History lists first.
   var colorFormat = ColorFormat.hex {
     didSet { if colorFormat != oldValue, model.mode == .colors { refreshRows() } }
@@ -322,6 +326,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.pasteTarget = NSWorkspace.shared.frontmostApplication?.localizedName
     if let resumed {
       // The query, selection and any draft are as they were; only the rows are re-read.
+      if resumed == .bookmarks, !loadBookmarks() { return show() }
       model.mode = resumed
       refreshRows(selecting: model.selected?.id)
     } else {
@@ -448,6 +453,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return Search.clipboardSections(for: query, history: clipboard.history)
     }
     if model.mode == .httpStatusCodes { return Search.httpStatusSections(for: query) }
+    if model.mode == .bookmarks { return Search.bookmarkSections(for: query, file: bookmarks) }
     if model.mode == .colors {
       return Search.colorSections(for: query, history: colors, format: colorFormat)
     }
@@ -644,6 +650,14 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.searchSnippets) { return open(.snippets) }
     if action == .run(.httpStatusCodes) { return open(.httpStatusCodes) }
     if action == .run(.colorHistory) { return open(.colors) }
+    if action == .run(.searchBookmarks) {
+      if loadBookmarks() { open(.bookmarks) }
+      return
+    }
+    if case .deleteBookmark(let line, let text) = action {
+      model.menu = nil
+      return deleteBookmark(line: line, text: text)
+    }
     if case .deleteColor(let hex) = action {
       model.menu = nil
       do { try colors.delete(hex: hex) } catch { onError(error.localizedDescription) }
@@ -742,7 +756,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onCleanKeyboard(seconds)
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
       .run(.searchRepositories), .run(.httpStatusCodes), .run(.sleepTimer), .run(.colorHistory),
-      .run(.cleanKeyboard),
+      .run(.cleanKeyboard), .run(.searchBookmarks), .deleteBookmark,
       .deleteColor,
       .run(.createSnippet), .clip, .snippet, .system, .window:
       break  // Handled above, without hiding the panel.
@@ -867,6 +881,54 @@ final class LauncherController: NSObject, NSWindowDelegate {
     } else if editor.kind == .alias {
       // The alias field had the focus.
       model.searchFieldID += 1
+    }
+  }
+
+  /// bookmarks.md as it is now; no file yet is an empty list, as looking never creates it.
+  private static func readBookmarks() throws -> BookmarkFile {
+    let data: Data
+    do {
+      data = try Data(contentsOf: bookmarksURL)
+    } catch CocoaError.fileReadNoSuchFile {
+      return BookmarkFile(text: "")
+    }
+    // Kept as is, a byte order mark included, so a change writes the same bytes back.
+    guard let text = String(validating: data, as: UTF8.self) else {
+      throw CocoaError(.fileReadInapplicableStringEncoding)
+    }
+    return BookmarkFile(text: text)
+  }
+
+  /// Reads bookmarks.md for the list; false, after saying why, when it can't be read.
+  private func loadBookmarks() -> Bool {
+    do {
+      bookmarks = try Self.readBookmarks()
+      return true
+    } catch {
+      onError("Ripcord can't read bookmarks.md as UTF-8 text: \(error.localizedDescription)")
+      return false
+    }
+  }
+
+  /// Removes the bookmark's line, after reading the file again: a line changed meanwhile isn't
+  /// the bookmark shown, so it's left alone.
+  private func deleteBookmark(line: Int, text: String) {
+    let id = model.selected?.id
+    do {
+      let current = try Self.readBookmarks()
+      guard let changed = current.deleting(line: line, text: text) else {
+        bookmarks = current
+        refreshRows(selecting: id)
+        return onError("bookmarks.md changed since it was read; the list now shows it as it is.")
+      }
+      // Through a symlink to the file it points at, as dotfiles managers link it, rather than
+      // over the link.
+      try Data(changed.text.utf8).write(
+        to: Self.bookmarksURL.resolvingSymlinksInPath(), options: .atomic)
+      bookmarks = changed
+      refreshRows(selecting: id)
+    } catch {
+      onError(error.localizedDescription)
     }
   }
 
