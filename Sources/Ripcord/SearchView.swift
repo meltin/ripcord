@@ -30,6 +30,7 @@ struct SearchView: View {
           SearchField(
             text: model.query,
             placeholder: model.mode.placeholder,
+            sidewaysArrows: model.mode == .emoji,
             onChange: onQueryChange, onCommand: onCommand
           )
           // A new one takes the focus back from Set Alias…'s field.
@@ -44,6 +45,11 @@ struct SearchView: View {
               selection: model.snippetTag
             ) { onCommand(.filterTag($0)) }
           }
+          if model.mode == .emoji {
+            CategoryFilter(groups: model.emojiGroups, selection: model.emojiCategory) {
+              onCommand(.filterCategory($0))
+            }
+          }
         }
       }
       .padding(.horizontal, 20)
@@ -57,6 +63,8 @@ struct SearchView: View {
         BookmarkForm(model: model)
       } else if model.sections.isEmpty {
         EmptyState(query: model.query, mode: model.mode)
+      } else if model.mode == .emoji {
+        EmojiGrid(model: model, onCommand: onCommand)
       } else if [.repositories, .httpStatusCodes, .colors, .bookmarks].contains(model.mode) {
         resultList
       } else if model.mode != .root {
@@ -187,6 +195,8 @@ private struct EmptyState: View {
       "Bookmarks you keep in ~/.config/ripcord/bookmarks.md show up here, one “- [Title](URL)” per line under “# Group” headings."
     case .bookmarks:
       "No bookmark matches “\(query)”."
+    case .emoji:
+      "No emoji or symbol matches “\(query)”."
     }
   }
 
@@ -333,6 +343,8 @@ private struct ResultIcon: View {
       tile("trash", .gray)
     case .editBookmark, .moveBookmarkMenu, .moveBookmark:
       tile("bookmark.fill", .yellow)
+    case .emoji, .emojiSkinToneMenu, .setEmojiSkinTone:
+      tile(BuiltinCommand.searchEmoji.symbol, BuiltinCommand.searchEmoji.color)
     case .cleanKeyboard:
       tile(BuiltinCommand.cleanKeyboard.symbol, BuiltinCommand.cleanKeyboard.color)
     case .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey, .deleteAlias:
@@ -436,6 +448,7 @@ extension BuiltinCommand {
     case .colorHistory: "swatchpalette.fill"
     case .cleanKeyboard: "keyboard"
     case .searchBookmarks: "bookmark.fill"
+    case .searchEmoji: "face.smiling"
     case .addBookmark: "bookmark.circle.fill"
     case .resetWindowPosition: "macwindow"
     case .quit: "power"
@@ -452,6 +465,7 @@ extension BuiltinCommand {
     case .pickColor, .colorHistory: .pink
     case .cleanKeyboard: .cyan
     case .searchBookmarks, .addBookmark: .yellow
+    case .searchEmoji: .orange
     case .httpStatusCodes: .teal
     case .settings, .resetWindowPosition: .gray
     }
@@ -1041,6 +1055,92 @@ private struct IconPicker: View {
   }
 }
 
+/// Search Emoji & Symbols' grid, as Raycast lays it out: each section's name and count over
+/// rows of rounded tiles.
+private struct EmojiGrid: View {
+  let model: LauncherModel
+  let onCommand: (SearchCommand) -> Void
+
+  private let columns = Array(
+    repeating: GridItem(.flexible(), spacing: 8), count: LauncherController.emojiColumns)
+
+  var body: some View {
+    ScrollViewReader { proxy in
+      ScrollView {
+        LazyVStack(alignment: .leading, spacing: 8) {
+          ForEach(model.sections) { section in
+            HStack(spacing: 8) {
+              Text(section.title).foregroundStyle(.secondary)
+              Text("\(section.results.count)").foregroundStyle(.tertiary)
+            }
+            .font(.system(size: 12, weight: .medium))
+            .padding(.horizontal, 4)
+            .padding(.top, 6)
+            LazyVGrid(columns: columns, spacing: 8) {
+              ForEach(section.results) { result in
+                tile(result, isSelected: result.id == model.selected?.id)
+                  .id(result.id)
+                  .onTapGesture { onCommand(.activate(result.id)) }
+              }
+            }
+          }
+        }
+        // Built afresh when the settings change; see LauncherModel.settingsVersion.
+        .id(model.settingsVersion)
+        .padding(.horizontal, 12)
+        .padding(.bottom, LauncherController.footerHeight + 8)
+      }
+      .scrollIndicators(.never)
+      .onChange(of: model.selection) {
+        if let id = model.selected?.id { proxy.scrollTo(id) }
+      }
+    }
+  }
+
+  private func tile(_ result: SearchResult, isSelected: Bool) -> some View {
+    Text(result.subtitle)
+      .font(.system(size: 34))
+      .frame(maxWidth: .infinity)
+      .frame(height: 64)
+      .background(
+        RoundedRectangle(cornerRadius: 10).fill(Color.primary.opacity(isSelected ? 0.12 : 0.05))
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 10)
+          .strokeBorder(Color.primary.opacity(isSelected ? 0.55 : 0), lineWidth: 2)
+      )
+      .contentShape(RoundedRectangle(cornerRadius: 10))
+      .accessibilityLabel(result.title)
+  }
+}
+
+/// Search Emoji & Symbols' "All Categories" dropdown, where Raycast puts it.
+private struct CategoryFilter: View {
+  let groups: [String]
+  let selection: Int?
+  let onSelect: (Int?) -> Void
+
+  var body: some View {
+    Menu {
+      Button("All Categories") { onSelect(nil) }
+      Divider()
+      ForEach(groups.indices, id: \.self) { index in
+        Button(groups[index]) { onSelect(index) }
+      }
+    } label: {
+      Label {
+        Text(selection.map { groups[$0] } ?? "All Categories")
+      } icon: {
+        Glyph("square.grid.2x2.fill")
+      }
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize()
+    .font(.system(size: 13))
+    .foregroundStyle(.secondary)
+  }
+}
+
 /// Search Snippets' "All Tags" dropdown, in the header's corner as Raycast puts it.
 private struct TagFilter: View {
   let tags: [String]
@@ -1210,7 +1310,14 @@ private struct Footer: View {
             .foregroundStyle(.white)
             .frame(width: 18, height: 18)
             .background(command.color.gradient, in: RoundedRectangle(cornerRadius: 5))
-          Text(command.title).foregroundStyle(.secondary)
+          // The emoji picked too, as Raycast names it beside the command.
+          Text(
+            mode == .emoji
+              ? [command.title, selected?.title].compactMap { $0 }.joined(separator: " – ")
+              : command.title
+          )
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
         }
         .padding(.horizontal, 10)
         .frame(height: 32)
@@ -1595,6 +1702,7 @@ extension SearchResult.Kind {
     case .statusCode: "Status Code"
     case .color: "Color"
     case .bookmark: "Bookmark"
+    case .emoji: "Emoji"
     }
   }
 }
@@ -1606,6 +1714,8 @@ struct SearchField: NSViewRepresentable {
   let text: String
   let placeholder: String
   var fontSize: CGFloat = 18
+  /// ← and → move a grid's selection instead of the caret.
+  var sidewaysArrows = false
   let onChange: (String) -> Void
   let onCommand: (SearchCommand) -> Void
   /// When the field stops being edited, as when another control is clicked.
@@ -1652,6 +1762,8 @@ struct SearchField: NSViewRepresentable {
         switch selector {
         case #selector(NSResponder.moveUp(_:)): .up
         case #selector(NSResponder.moveDown(_:)): .down
+        case #selector(NSResponder.moveLeft(_:)) where parent.sidewaysArrows: .left
+        case #selector(NSResponder.moveRight(_:)) where parent.sidewaysArrows: .right
         // ⌥↵ arrives as the second, so it reaches the Return variants too.
         case #selector(NSResponder.insertNewline(_:)),
           #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
@@ -1689,7 +1801,7 @@ final class FocusingTextField: NSTextField {
 extension SearchResult.Action {
   fileprivate var isPaste: Bool {
     switch self {
-    case .clip(_, .paste), .snippet(_, .paste): true
+    case .clip(_, .paste), .snippet(_, .paste), .emoji(_, _, .paste): true
     default: false
     }
   }
@@ -1705,6 +1817,7 @@ extension LauncherMode {
     case .httpStatusCodes: "Search HTTP Status Codes…"
     case .colors: "Search Colors…"
     case .bookmarks: "Search Bookmarks…"
+    case .emoji: "Search Emoji & Symbols…"
     case .snippetForm, .bookmarkForm: ""
     }
   }

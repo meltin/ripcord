@@ -44,6 +44,9 @@
   (`- [Title](URL) - description`) under their `#` headings; Return opens one, and ⌘K copies its
   URL or title, edits it, moves it to another group or deletes it. Add Bookmark opens a form for a
   new one. Only the lines a change touches are rewritten; the rest stays as you wrote it
+- Emoji & Symbols: Search Emoji & Symbols shows emoji and symbols (→ ° ⌘ and the like) in a grid by
+  category, Frequently Used first; search in English or Japanese (`cat`, `ねこ`), Return pastes,
+  ⌘↵ copies, and ⌘K picks a skin tone that's remembered
 - HTTP Status Codes: look a code up by number or name, grouped by hundred; Return opens its MDN
   page and ⌘K copies the code or its name
 - CleanShot X: Capture Area, Window, Fullscreen and Previous Area, Scrolling Capture, Record
@@ -170,5 +173,8 @@ Ripcord is licensed under [MIT](./LICENSE).
 
 The GitHub icon in the panel's actions comes from [it-icons](https://github.com/ouka-lab/it-icons), under
 [MIT](./Resources/ThirdParty/GitHub-LICENSE.txt).
+The emoji names come from Unicode's [CLDR](https://github.com/unicode-org/cldr-json) and
+[emoji-test.txt](https://unicode.org/Public/emoji/latest/emoji-test.txt), under the
+[Unicode License](./Resources/ThirdParty/Unicode-LICENSE.txt).
 The other icons are [Tabler Icons](https://github.com/tabler/tabler-icons), under
 [MIT](./Resources/ThirdParty/Tabler-LICENSE.txt).

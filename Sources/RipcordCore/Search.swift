@@ -9,6 +9,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case pickColor, colorHistory
   case cleanKeyboard
   case searchBookmarks, addBookmark
+  case searchEmoji
   case resetWindowPosition, quit
 
   public var title: String {
@@ -30,6 +31,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .cleanKeyboard: "Clean Keyboard"
     case .searchBookmarks: "Search Bookmarks"
     case .addBookmark: "Add Bookmark"
+    case .searchEmoji: "Search Emoji & Symbols"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .quit: "Quit Ripcord"
     }
@@ -43,6 +45,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .pickColor, .colorHistory: "Color Picker"
     case .cleanKeyboard: "Clean Keyboard"
     case .searchBookmarks, .addBookmark: "Bookmarks"
+    case .searchEmoji: "Emoji & Symbols"
     default: "Ripcord"
     }
   }
@@ -67,6 +70,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .cleanKeyboard: "command:clean-keyboard"
     case .searchBookmarks: "command:search-bookmarks"
     case .addBookmark: "command:add-bookmark"
+    case .searchEmoji: "command:search-emoji"
     case .resetWindowPosition: "command:reset-window-position"
     case .quit: "command:quit"
     }
@@ -181,6 +185,12 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case moveBookmarkMenu(line: Int, text: String)
     /// Moves the bookmark under the heading on `headingLine`, if it's still `headingTitle`.
     case moveBookmark(line: Int, text: String, headingLine: Int, headingTitle: String)
+    /// An emoji as shown (in the skin tone picked), and as listed, for Frequently Used.
+    case emoji(String, base: String, EmojiAction)
+    /// Swaps the ⌘K menu for the skin tones of this emoji.
+    case emojiSkinToneMenu(String)
+    /// Remembers the skin tone (1 lightest to 5 darkest; nil for none).
+    case setEmojiSkinTone(Int?)
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -192,9 +202,13 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case paste, copy, togglePin, delete
   }
 
+  public enum EmojiAction: Equatable, Sendable {
+    case paste, copy, pasteKeepingOpen
+  }
+
   public enum Kind: Equatable, Sendable {
     case application, calculator, quicklink, command, text, image, snippet, repository, statusCode
-    case color, bookmark
+    case color, bookmark, emoji
 
     public var primaryAction: String {
       switch self {
@@ -205,6 +219,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
       case .statusCode: "Open in Browser"
       case .color: "Copy"
       case .bookmark: "Open in Browser"
+      case .emoji: "Paste"
       }
     }
   }

@@ -34,6 +34,9 @@ cp Resources/ThirdParty/GitHub-LICENSE.txt "$app/Contents/Resources/"
 # Tabler Icons, drawn from their SVGs at any size.
 cp -R Resources/Tabler "$app/Contents/Resources/"
 cp Resources/ThirdParty/Tabler-LICENSE.txt "$app/Contents/Resources/"
+# Search Emoji & Symbols' list, made by scripts/make-emoji-data.py.
+cp -R Resources/Emoji "$app/Contents/Resources/"
+cp Resources/ThirdParty/Unicode-LICENSE.txt "$app/Contents/Resources/"
 # Signed with the certificate from scripts/create-signing-certificate.sh when it's in the keychain,
 # so macOS keeps permissions across builds; ad hoc otherwise (Nix, CI, a fresh clone).
 identity="Ripcord Self-Signed"

@@ -404,6 +404,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case colorPicker = "Color Picker"
   case cleanKeyboard = "Clean Keyboard"
   case bookmarks = "Bookmarks"
+  case emoji = "Emoji & Symbols"
   case cleanShot = "CleanShot X"
   case repositories = "Git Repositories"
   case httpStatusCodes = "HTTP Status Codes"
@@ -426,6 +427,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .colorPicker: "eyedropper"
     case .cleanKeyboard: "keyboard"
     case .bookmarks: "bookmark.fill"
+    case .emoji: "face.smiling"
     case .cleanShot: "camera.viewfinder"
     case .repositories: "arrow.triangle.branch"
     case .httpStatusCodes: "network"
@@ -445,6 +447,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .colorPicker: .pink
     case .cleanKeyboard: .cyan
     case .bookmarks: .yellow
+    case .emoji: .orange
     case .cleanShot: .purple
     case .repositories: .orange
     case .httpStatusCodes: .teal
@@ -478,6 +481,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       "Find the Git repositories in your folders and open each in the app you pick for its Return."
     case .httpStatusCodes:
       "Look up a status code by number or name, open its MDN page, or copy it."
+    case .emoji:
+      "Search emoji and symbols by their English or Japanese names, and paste or copy one."
     case .bookmarks:
       "Your bookmarks, kept in ~/.config/ripcord/bookmarks.md as Markdown links under # headings."
     case .cleanKeyboard:
@@ -492,7 +497,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   var commandKeys: Set<String>? {
     switch self {
     case .clipboardHistory, .snippets, .repositories, .coffee, .sleepTimer, .httpStatusCodes,
-      .colorPicker, .cleanKeyboard, .bookmarks, .ripcord:
+      .colorPicker, .cleanKeyboard, .bookmarks, .emoji, .ripcord:
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
@@ -514,6 +519,7 @@ extension BuiltinCommand {
     case .pickColor, .colorHistory: .colorPicker
     case .cleanKeyboard: .cleanKeyboard
     case .searchBookmarks, .addBookmark: .bookmarks
+    case .searchEmoji: .emoji
     case .httpStatusCodes: .httpStatusCodes
     case .settings, .resetWindowPosition, .quit: .ripcord
     }

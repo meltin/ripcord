@@ -69,7 +69,7 @@ struct BookmarkDraft {
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
   case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, bookmarks
-  case bookmarkForm
+  case bookmarkForm, emoji
 
   /// A form, with no query or rows: the footer names it, and ⌘↵ saves it.
   var isForm: Bool { self == .snippetForm || self == .bookmarkForm }
@@ -86,6 +86,7 @@ enum LauncherMode {
     case .colors: .colorHistory
     case .bookmarks: .searchBookmarks
     case .bookmarkForm: .addBookmark
+    case .emoji: .searchEmoji
     }
   }
 }
@@ -129,6 +130,9 @@ final class LauncherModel {
   /// The Tags field as typed; split into tags when saved, so a half-typed ", " stays put.
   var tagsText = ""
   var bookmarkDraft = BookmarkDraft()
+  /// Search Emoji & Symbols' categories, and the one picked; nil shows them all.
+  var emojiGroups: [String] = []
+  var emojiCategory: Int?
   /// A new bookmark's draft, kept while an edit has the form.
   var addDraft: BookmarkDraft?
 
@@ -147,7 +151,8 @@ final class LauncherModel {
 }
 
 enum SearchCommand {
-  case up, down, submit, cancel, back
+  case up, down, left, right, submit, cancel, back
+  case filterCategory(Int?)
   case activate(String)
   case toggleMenu(root: Bool)
   case filterTag(String?)
@@ -275,6 +280,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
     directory: URL.applicationSupportDirectory.appending(path: "Ripcord/Clipboard"))
   private var colors = ColorHistory(
     fileURL: URL.applicationSupportDirectory.appending(path: "Ripcord/colors.json"))
+  /// Search Emoji & Symbols' list, read from the app's resources the first time it opens.
+  private var emojiCatalog: EmojiCatalog?
+  private var emojiHistory = EmojiHistory(
+    fileURL: URL.applicationSupportDirectory.appending(path: "Ripcord/emoji.json"))
+  /// Search Emoji & Symbols' grid: rows of this many.
+  static let emojiColumns = 8
   /// Read each time Search Bookmarks opens, so edits made by hand show up.
   private var bookmarks = BookmarkFile(text: "")
   static let bookmarksURL = URL.homeDirectory.appending(path: ".config/ripcord/bookmarks.md")
@@ -491,6 +502,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     if model.mode == .httpStatusCodes { return Search.httpStatusSections(for: query) }
     if model.mode == .bookmarks { return Search.bookmarkSections(for: query, file: bookmarks) }
+    if model.mode == .emoji, let emojiCatalog {
+      return Search.emojiSections(
+        for: query, catalog: emojiCatalog, history: emojiHistory, category: model.emojiCategory)
+    }
     if model.mode == .colors {
       return Search.colorSections(for: query, history: colors, format: colorFormat)
     }
@@ -577,9 +592,17 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     if model.mode.isForm, case .submit = command { return saveForm() }
     let count = model.results.count
+    if model.mode == .emoji, let moved = gridSelection(after: command) {
+      model.selection = moved
+      return
+    }
     switch command {
     case .up: model.selection = max(model.selection - 1, 0)
     case .down: model.selection = min(model.selection + 1, max(count - 1, 0))
+    case .left, .right: break  // Only the emoji grid moves sideways, above.
+    case .filterCategory(let category):
+      model.emojiCategory = category
+      update(model.query)
     case .submit:
       guard let selected = model.selected else { return NSSound.beep() }
       // ⌥↵ and ⇧↵ reach here as Return; a row with an action for them runs it.
@@ -609,6 +632,34 @@ final class LauncherController: NSObject, NSWindowDelegate {
       }
     case .selectMenuItem(let index): model.menu?.selection = index
     case .editAlias: break  // Only while Set Alias… is open, above.
+    }
+  }
+
+  /// Where an arrow moves the emoji grid's selection: ←→ by one, ↑↓ to the same column of the
+  /// row above or below, across sections; nil for other commands.
+  private func gridSelection(after command: SearchCommand) -> Int? {
+    let columns = Self.emojiColumns
+    // Each item's section, row and column, in display order.
+    let cells = model.sections.enumerated().flatMap { section, entry in
+      entry.results.indices.map { (section: section, row: $0 / columns, column: $0 % columns) }
+    }
+    guard cells.indices.contains(model.selection) else { return nil }
+    let here = cells[model.selection]
+    let rows = cells.indices.map { (cells[$0].section, cells[$0].row) }
+    // Row keys in display order, each with its first index.
+    let starts = cells.indices.filter { $0 == 0 || rows[$0] != rows[$0 - 1] }
+    guard let rowIndex = starts.lastIndex(where: { $0 <= model.selection }) else { return nil }
+    func cell(inRow row: Int) -> Int {
+      let start = starts[row]
+      let end = row + 1 < starts.count ? starts[row + 1] : cells.count
+      return min(start + here.column, end - 1)
+    }
+    switch command {
+    case .left: return max(model.selection - 1, 0)
+    case .right: return min(model.selection + 1, cells.count - 1)
+    case .up: return rowIndex == 0 ? model.selection : cell(inRow: rowIndex - 1)
+    case .down: return rowIndex + 1 < starts.count ? cell(inRow: rowIndex + 1) : model.selection
+    default: return nil
     }
   }
 
@@ -695,6 +746,41 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if case .deleteBookmark(let line, let text) = action {
       model.menu = nil
       return deleteBookmark(line: line, text: text)
+    }
+    if action == .run(.searchEmoji) {
+      if emojiCatalog == nil {
+        guard
+          let url = Bundle.main.url(
+            forResource: "emoji", withExtension: "json", subdirectory: "Emoji"),
+          let catalog = try? EmojiCatalog(data: Data(contentsOf: url))
+        else { return onError("Ripcord's emoji list is missing; build the app with build-app.sh.") }
+        emojiCatalog = catalog
+        model.emojiGroups = catalog.groups
+      }
+      return open(.emoji)
+    }
+    if case .emoji(let shown, let base, let how) = action {
+      model.menu = nil
+      do { try emojiHistory.use(base) } catch { onError(error.localizedDescription) }
+      guard how == .pasteKeepingOpen else { return paste(shown, copyOnly: how == .copy) }
+      // The panel gives the key back for the paste, then comes back where it was.
+      hide(keepingMode: true)
+      paste(shown, copyOnly: false)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+        self?.show(resuming: true)
+      }
+      return
+    }
+    if case .emojiSkinToneMenu(let character) = action, let emojiCatalog {
+      model.menu = OpenMenu(
+        title: "Skin Tone", items: Search.skinToneMenu(for: character, catalog: emojiCatalog),
+        isRoot: false)
+      return
+    }
+    if case .setEmojiSkinTone(let tone) = action {
+      model.menu = nil
+      do { try emojiHistory.setSkinTone(tone) } catch { onError(error.localizedDescription) }
+      return refreshRows(selecting: model.selected?.id)
     }
     if action == .run(.addBookmark) {
       guard loadBookmarks() else { return }
@@ -840,6 +926,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       .run(.searchRepositories), .run(.httpStatusCodes), .run(.sleepTimer), .run(.colorHistory),
       .run(.cleanKeyboard), .run(.searchBookmarks), .run(.addBookmark), .deleteBookmark,
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
+      .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone,
       .deleteColor,
       .run(.createSnippet), .clip, .snippet, .system, .window:
       break  // Handled above, without hiding the panel.
