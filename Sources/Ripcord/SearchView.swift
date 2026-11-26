@@ -588,13 +588,14 @@ private struct IconPicker: View {
               .contentShape(Rectangle())
               .onHover { if $0 { highlighted = index } }
               .onTapGesture { pick(index) }
-              .id(index)
             }
           }
           .padding(6)
         }
         .scrollIndicators(.never)
-        .onChange(of: highlighted) { proxy.scrollTo(highlighted) }
+        .onChange(of: highlighted) {
+          if matches.indices.contains(highlighted) { proxy.scrollTo(matches[highlighted].symbol) }
+        }
       }
     }
     .frame(width: 240, height: 300)
