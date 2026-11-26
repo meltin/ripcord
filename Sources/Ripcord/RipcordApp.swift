@@ -50,13 +50,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
     }
     launcher.onSleepTimer = { [weak self] in self?.sleepTimer.start(after: $0, displayOnly: $1) }
+    keyboardCleaner.onChange = { [weak self] in self?.showTimersInMenuBar() }
     launcher.onCleanKeyboard = { [weak self] seconds in
-      if self?.keyboardCleaner.start(for: seconds) == false {
-        self?.showError(
-          "Clean Keyboard needs Accessibility: allow Ripcord under System Settings › Privacy & Security › Accessibility."
-        )
+      guard let self else { return }
+      do throws(KeyboardCleaner.Refusal) {
+        try keyboardCleaner.start(for: seconds)
+      } catch {
+        switch error {
+        case .noAccess:
+          showError(
+            "Clean Keyboard needs Accessibility: allow Ripcord under System Settings › Privacy & Security › Accessibility."
+          )
+        case .secureInput:
+          showError(
+            "Another app has secure input on, as a password field or a terminal's Secure Keyboard Entry does, so keys would get through. Close it, then try again."
+          )
+        }
       }
     }
+
     launcher.onStopSleepTimer = { [weak self] in
       guard self?.sleepTimer.isActive == true else { return NSSound.beep() }
       self?.sleepTimer.stop()
@@ -313,6 +325,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let caffeinator = Caffeinator()
   private let sleepTimer = SleepTimer()
   private let keyboardCleaner = KeyboardCleaner()
+  private let stopCleanKeyboardItem = NSMenuItem(
+    title: "Stop Clean Keyboard", action: #selector(stopCleanKeyboard), keyEquivalent: "")
+
+  @objc private func stopCleanKeyboard() { keyboardCleaner.stop() }
   private let stopSleepTimerItem = NSMenuItem(
     title: "Stop Sleep Timer", action: #selector(stopSleepTimer), keyEquivalent: "")
 
@@ -330,6 +346,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     guard let statusItem, let button = statusItem.button else { return }
     decaffeinateItem.isHidden = !caffeinator.isActive
     stopSleepTimerItem.isHidden = !sleepTimer.isActive
+    stopCleanKeyboardItem.isHidden = !keyboardCleaner.isActive
     let shown: (symbol: String, label: String, remaining: TimeInterval?)? =
       sleepTimer.isActive
       ? ("moon.zzz.fill", "Sleep timer", sleepTimer.remaining)
@@ -363,6 +380,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     menu.addItem(decaffeinateItem)
     stopSleepTimerItem.isHidden = true
     menu.addItem(stopSleepTimerItem)
+    stopCleanKeyboardItem.isHidden = true
+    menu.addItem(stopCleanKeyboardItem)
     menu.addItem(withTitle: "Open Ripcord", action: #selector(toggleLauncher), keyEquivalent: "")
     menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
     menu.addItem(.separator())

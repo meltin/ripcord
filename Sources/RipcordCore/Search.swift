@@ -314,7 +314,9 @@ public enum Search {
     let links = quicklinks.filter(\.isEnabled)
     let trimmed = query.trimmingCharacters(in: .whitespaces)
     guard trimmed.isEmpty else {
-      let found = results(for: trimmed, apps: apps, quicklinks: links, items: items)
+      // As typed: results trims it too, but a command's argument needs to see the space after
+      // its title.
+      let found = results(for: query, apps: apps, quicklinks: links, items: items)
       guard found.isEmpty else { return [SearchSection(title: "Results", results: found)] }
       // Like Raycast's fallback commands: hand the whole query to each Quicklink.
       let fallbacks = links.compactMap { link in
@@ -441,11 +443,18 @@ public enum Search {
       .map(\.result)
 
     // "clean keyboard 30s", or the usual times while none is typed yet.
+    // The usual times only once the command put its title and a space in the field: the title or
+    // an alias typed alone must not offer a row that turns the keyboard off on Return.
+    let cleanArguments = typedArguments(after: .cleanKeyboard, in: query, items: items)
     let cleanTimes: [TimeInterval] =
-      typedArgument(after: .cleanKeyboard, in: trimmed, items: items).map { text in
-        text.isEmpty ? [15, 30, 60, 120] : [Coffee.duration(from: text)].compactMap { $0 }
-      } ?? []
-    let cleanFor: [SearchResult] = cleanTimes.filter { $0 <= longestClean }.map { seconds in
+      cleanArguments.contains("")
+      ? [15, 30, 60, 120]
+      : cleanArguments.lazy.compactMap { text in
+        // A bare number is seconds here, as the usual times are.
+        text.allSatisfy(\.isNumber) ? Double(text) : Coffee.duration(from: text)
+      }.first.map { [$0] } ?? []
+    let cleanFor: [SearchResult] = cleanTimes.filter { $0 > 0 && $0 <= longestClean }.map {
+      seconds in
       SearchResult(
         id: "clean-keyboard-\(Int(seconds))",
         title: "Clean Keyboard for \(Coffee.format(seconds))", subtitle: "Clean Keyboard",
@@ -464,27 +473,22 @@ public enum Search {
   private static func typedDuration(
     after command: BuiltinCommand, in query: String, items: [String: ItemSettings]
   ) -> TimeInterval? {
-    typedArgument(after: command, in: query, items: items).flatMap(Coffee.duration(from:))
+    // Each name that starts the query in turn, so an alias that starts with the title still works.
+    typedArguments(after: command, in: query, items: items).lazy.compactMap(Coffee.duration(from:))
+      .first
   }
 
-  /// What's typed after `command`'s title or alias and a space, trimmed, empty when nothing yet;
-  /// nil when the query doesn't start with either or the command is switched off.
-  private static func typedArgument(
+  /// What's typed after `command`'s title or alias and a space, trimmed, for each of the two
+  /// that starts the query; none when the command is switched off.
+  private static func typedArguments(
     after command: BuiltinCommand, in query: String, items: [String: ItemSettings]
-  ) -> String? {
+  ) -> [String] {
     let settings = items[command.settingsKey] ?? ItemSettings()
-    guard settings.isEnabled else { return nil }
-    // The query comes trimmed, so "Clean Keyboard " arrives as the title alone.
+    guard settings.isEnabled else { return [] }
     return [command.title, settings.alias]
       .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
-      .filter { !$0.isEmpty }
-      .lazy.compactMap { name -> String? in
-        let lowered = query.lowercased()
-        if lowered == name.lowercased() { return "" }
-        guard lowered.hasPrefix(name.lowercased() + " ") else { return nil }
-        return String(query.dropFirst(name.count + 1)).trimmingCharacters(in: .whitespaces)
-      }
-      .first
+      .filter { !$0.isEmpty && query.lowercased().hasPrefix($0.lowercased() + " ") }
+      .map { String(query.dropFirst($0.count + 1)).trimmingCharacters(in: .whitespaces) }
   }
 
   /// Clipboard History's list: pinned items, then the rest by the day they were last copied,
