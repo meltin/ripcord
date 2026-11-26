@@ -164,7 +164,8 @@ private struct ResultRow: View {
     .padding(.horizontal, 12)
     .frame(height: LauncherController.rowHeight)
     .background(
-      RoundedRectangle(cornerRadius: 10).fill(isSelected ? Color.primary.opacity(0.1) : .clear)
+      // 0.12 darkens the background as much as Raycast's selected row does.
+      RoundedRectangle(cornerRadius: 10).fill(isSelected ? Color.primary.opacity(0.12) : .clear)
     )
     .contentShape(Rectangle())
   }
