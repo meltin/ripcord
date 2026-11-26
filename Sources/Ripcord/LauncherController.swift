@@ -48,7 +48,7 @@ struct OpenMenu {
 
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
-  case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors
+  case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, bookmarks
 
   /// The command whose list this is; nil for the root search.
   var command: BuiltinCommand? {
@@ -60,6 +60,7 @@ enum LauncherMode {
     case .repositories: .searchRepositories
     case .httpStatusCodes: .httpStatusCodes
     case .colors: .colorHistory
+    case .bookmarks: .searchBookmarks
     }
   }
 }
@@ -237,6 +238,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     directory: URL.applicationSupportDirectory.appending(path: "Ripcord/Clipboard"))
   private var colors = ColorHistory(
     fileURL: URL.applicationSupportDirectory.appending(path: "Ripcord/colors.json"))
+  /// Read each time Search Bookmarks opens, so edits made by hand show up.
+  private var bookmarks = BookmarkFile(text: "")
+  static let bookmarksURL = URL.homeDirectory.appending(path: ".config/ripcord/bookmarks.md")
   /// What Pick Color copies, and Color History lists first.
   var colorFormat = ColorFormat.hex {
     didSet { if colorFormat != oldValue, model.mode == .colors { refreshRows() } }
@@ -448,6 +452,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return Search.clipboardSections(for: query, history: clipboard.history)
     }
     if model.mode == .httpStatusCodes { return Search.httpStatusSections(for: query) }
+    if model.mode == .bookmarks { return Search.bookmarkSections(for: query, file: bookmarks) }
     if model.mode == .colors {
       return Search.colorSections(for: query, history: colors, format: colorFormat)
     }
@@ -644,6 +649,16 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.searchSnippets) { return open(.snippets) }
     if action == .run(.httpStatusCodes) { return open(.httpStatusCodes) }
     if action == .run(.colorHistory) { return open(.colors) }
+    if action == .run(.searchBookmarks) {
+      // No file yet lists nothing; it's never created just by looking.
+      bookmarks = BookmarkFile(
+        text: (try? String(contentsOf: Self.bookmarksURL, encoding: .utf8)) ?? "")
+      return open(.bookmarks)
+    }
+    if case .deleteBookmark(let line, let text) = action {
+      model.menu = nil
+      return deleteBookmark(line: line, text: text)
+    }
     if case .deleteColor(let hex) = action {
       model.menu = nil
       do { try colors.delete(hex: hex) } catch { onError(error.localizedDescription) }
@@ -742,7 +757,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onCleanKeyboard(seconds)
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
       .run(.searchRepositories), .run(.httpStatusCodes), .run(.sleepTimer), .run(.colorHistory),
-      .run(.cleanKeyboard),
+      .run(.cleanKeyboard), .run(.searchBookmarks), .deleteBookmark,
       .deleteColor,
       .run(.createSnippet), .clip, .snippet, .system, .window:
       break  // Handled above, without hiding the panel.
@@ -867,6 +882,26 @@ final class LauncherController: NSObject, NSWindowDelegate {
     } else if editor.kind == .alias {
       // The alias field had the focus.
       model.searchFieldID += 1
+    }
+  }
+
+  /// Removes the bookmark's line, after reading the file again: a line changed meanwhile isn't
+  /// the bookmark shown, so it's left alone.
+  private func deleteBookmark(line: Int, text: String) {
+    let id = model.selected?.id
+    do {
+      let current = BookmarkFile(
+        text: try String(contentsOf: Self.bookmarksURL, encoding: .utf8))
+      guard let changed = current.deleting(line: line, text: text) else {
+        bookmarks = current
+        refreshRows(selecting: id)
+        return onError("bookmarks.md changed since it was read; the list now shows it as it is.")
+      }
+      try changed.text.write(to: Self.bookmarksURL, atomically: true, encoding: .utf8)
+      bookmarks = changed
+      refreshRows(selecting: id)
+    } catch {
+      onError(error.localizedDescription)
     }
   }
 

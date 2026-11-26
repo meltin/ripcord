@@ -8,6 +8,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case sleepTimer, stopSleepTimer
   case pickColor, colorHistory
   case cleanKeyboard
+  case searchBookmarks
   case resetWindowPosition, quit
 
   public var title: String {
@@ -27,6 +28,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .pickColor: "Pick Color"
     case .colorHistory: "Color History"
     case .cleanKeyboard: "Clean Keyboard"
+    case .searchBookmarks: "Search Bookmarks"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .quit: "Quit Ripcord"
     }
@@ -39,6 +41,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .sleepTimer, .stopSleepTimer: "Sleep Timer"
     case .pickColor, .colorHistory: "Color Picker"
     case .cleanKeyboard: "Clean Keyboard"
+    case .searchBookmarks: "Bookmarks"
     default: "Ripcord"
     }
   }
@@ -61,6 +64,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .pickColor: "command:pick-color"
     case .colorHistory: "command:color-history"
     case .cleanKeyboard: "command:clean-keyboard"
+    case .searchBookmarks: "command:search-bookmarks"
     case .resetWindowPosition: "command:reset-window-position"
     case .quit: "command:quit"
     }
@@ -167,6 +171,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case deleteColor(String)
     /// Blocks the keyboard for this many seconds, to wipe it.
     case cleanKeyboard(TimeInterval)
+    /// Removes a bookmark's line from bookmarks.md, if it still holds `text`.
+    case deleteBookmark(line: Int, text: String)
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -180,7 +186,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
 
   public enum Kind: Equatable, Sendable {
     case application, calculator, quicklink, command, text, image, snippet, repository, statusCode
-    case color
+    case color, bookmark
 
     public var primaryAction: String {
       switch self {
@@ -190,6 +196,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
       case .repository: "Open"
       case .statusCode: "Open in Browser"
       case .color: "Copy"
+      case .bookmark: "Open in Browser"
       }
     }
   }

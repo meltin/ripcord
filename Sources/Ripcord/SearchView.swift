@@ -58,7 +58,7 @@ struct SearchView: View {
         SnippetForm(model: model)
       } else if model.sections.isEmpty {
         EmptyState(query: model.query, mode: model.mode)
-      } else if [.repositories, .httpStatusCodes, .colors].contains(model.mode) {
+      } else if [.repositories, .httpStatusCodes, .colors, .bookmarks].contains(model.mode) {
         resultList
       } else if model.mode != .root {
         // Raycast's layout: the list on the left, the selected item and its details on the right.
@@ -184,6 +184,10 @@ private struct EmptyState: View {
       "Colors you pick with Pick Color show up here."
     case .colors:
       "No color matches “\(query)”."
+    case .bookmarks where query.trimmingCharacters(in: .whitespaces).isEmpty:
+      "Bookmarks you keep in ~/.config/ripcord/bookmarks.md show up here, one “- [Title](URL)” per line under “# Group” headings."
+    case .bookmarks:
+      "No bookmark matches “\(query)”."
     }
   }
 
@@ -268,6 +272,8 @@ private struct ResultIcon: View {
 
   var body: some View {
     switch result.action {
+    case _ where result.kind == .bookmark:
+      tile("bookmark.fill", .yellow)
     case _ where result.kind == .color:
       // The color itself, from the row's ID ("color:#RRGGBB").
       let hex = UInt32(result.id.dropFirst("color:#".count), radix: 16) ?? 0
@@ -326,7 +332,7 @@ private struct ResultIcon: View {
       } else {
         tile("camera.viewfinder", .purple)
       }
-    case .deleteColor:
+    case .deleteColor, .deleteBookmark:
       tile("trash", .gray)
     case .cleanKeyboard:
       tile(BuiltinCommand.cleanKeyboard.symbol, BuiltinCommand.cleanKeyboard.color)
@@ -432,6 +438,7 @@ extension BuiltinCommand {
     case .pickColor: "eyedropper"
     case .colorHistory: "swatchpalette.fill"
     case .cleanKeyboard: "keyboard"
+    case .searchBookmarks: "bookmark.fill"
     case .resetWindowPosition: "macwindow"
     case .quit: "power"
     }
@@ -446,6 +453,7 @@ extension BuiltinCommand {
     case .sleepTimer, .stopSleepTimer: .indigo
     case .pickColor, .colorHistory: .pink
     case .cleanKeyboard: .cyan
+    case .searchBookmarks: .yellow
     case .httpStatusCodes: .teal
     case .settings, .resetWindowPosition: .gray
     }
@@ -1472,6 +1480,7 @@ extension SearchResult.Kind {
     case .repository: "Repository"
     case .statusCode: "Status Code"
     case .color: "Color"
+    case .bookmark: "Bookmark"
     }
   }
 }
@@ -1581,6 +1590,7 @@ extension LauncherMode {
     case .repositories: "Search Repositories…"
     case .httpStatusCodes: "Search HTTP Status Codes…"
     case .colors: "Search Colors…"
+    case .bookmarks: "Search Bookmarks…"
     case .snippetForm: ""
     }
   }

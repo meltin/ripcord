@@ -403,6 +403,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case sleepTimer = "Sleep Timer"
   case colorPicker = "Color Picker"
   case cleanKeyboard = "Clean Keyboard"
+  case bookmarks = "Bookmarks"
   case cleanShot = "CleanShot X"
   case repositories = "Git Repositories"
   case httpStatusCodes = "HTTP Status Codes"
@@ -424,6 +425,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .sleepTimer: "moon.zzz.fill"
     case .colorPicker: "eyedropper"
     case .cleanKeyboard: "keyboard"
+    case .bookmarks: "bookmark.fill"
     case .cleanShot: "camera.viewfinder"
     case .repositories: "arrow.triangle.branch"
     case .httpStatusCodes: "network"
@@ -442,6 +444,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .sleepTimer: .indigo
     case .colorPicker: .pink
     case .cleanKeyboard: .cyan
+    case .bookmarks: .yellow
     case .cleanShot: .purple
     case .repositories: .orange
     case .httpStatusCodes: .teal
@@ -475,6 +478,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       "Find the Git repositories in your folders and open each in the app you pick for its Return."
     case .httpStatusCodes:
       "Look up a status code by number or name, open its MDN page, or copy it."
+    case .bookmarks:
+      "Your bookmarks, kept in ~/.config/ripcord/bookmarks.md as Markdown links under # headings."
     case .cleanKeyboard:
       "Turn the keyboard off for a while to wipe it, as in “clean keyboard 30s”; ⌃⌥⌘↩ turns it back on early."
     case .colorPicker:
@@ -487,7 +492,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   var commandKeys: Set<String>? {
     switch self {
     case .clipboardHistory, .snippets, .repositories, .coffee, .sleepTimer, .httpStatusCodes,
-      .colorPicker, .cleanKeyboard, .ripcord:
+      .colorPicker, .cleanKeyboard, .bookmarks, .ripcord:
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
@@ -508,6 +513,7 @@ extension BuiltinCommand {
     case .sleepTimer, .stopSleepTimer: .sleepTimer
     case .pickColor, .colorHistory: .colorPicker
     case .cleanKeyboard: .cleanKeyboard
+    case .searchBookmarks: .bookmarks
     case .httpStatusCodes: .httpStatusCodes
     case .settings, .resetWindowPosition, .quit: .ripcord
     }
