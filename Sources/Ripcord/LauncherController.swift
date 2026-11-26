@@ -326,6 +326,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.pasteTarget = NSWorkspace.shared.frontmostApplication?.localizedName
     if let resumed {
       // The query, selection and any draft are as they were; only the rows are re-read.
+      if resumed == .bookmarks, !loadBookmarks() { return show() }
       model.mode = resumed
       refreshRows(selecting: model.selected?.id)
     } else {
@@ -650,10 +651,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.httpStatusCodes) { return open(.httpStatusCodes) }
     if action == .run(.colorHistory) { return open(.colors) }
     if action == .run(.searchBookmarks) {
-      // No file yet lists nothing; it's never created just by looking.
-      bookmarks = BookmarkFile(
-        text: (try? String(contentsOf: Self.bookmarksURL, encoding: .utf8)) ?? "")
-      return open(.bookmarks)
+      if loadBookmarks() { open(.bookmarks) }
+      return
     }
     if case .deleteBookmark(let line, let text) = action {
       model.menu = nil
@@ -885,19 +884,47 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
   }
 
+  /// bookmarks.md as it is now; no file yet is an empty list, as looking never creates it.
+  private static func readBookmarks() throws -> BookmarkFile {
+    let data: Data
+    do {
+      data = try Data(contentsOf: bookmarksURL)
+    } catch CocoaError.fileReadNoSuchFile {
+      return BookmarkFile(text: "")
+    }
+    // Kept as is, a byte order mark included, so a change writes the same bytes back.
+    guard let text = String(validating: data, as: UTF8.self) else {
+      throw CocoaError(.fileReadInapplicableStringEncoding)
+    }
+    return BookmarkFile(text: text)
+  }
+
+  /// Reads bookmarks.md for the list; false, after saying why, when it can't be read.
+  private func loadBookmarks() -> Bool {
+    do {
+      bookmarks = try Self.readBookmarks()
+      return true
+    } catch {
+      onError("Ripcord can't read bookmarks.md as UTF-8 text: \(error.localizedDescription)")
+      return false
+    }
+  }
+
   /// Removes the bookmark's line, after reading the file again: a line changed meanwhile isn't
   /// the bookmark shown, so it's left alone.
   private func deleteBookmark(line: Int, text: String) {
     let id = model.selected?.id
     do {
-      let current = BookmarkFile(
-        text: try String(contentsOf: Self.bookmarksURL, encoding: .utf8))
+      let current = try Self.readBookmarks()
       guard let changed = current.deleting(line: line, text: text) else {
         bookmarks = current
         refreshRows(selecting: id)
         return onError("bookmarks.md changed since it was read; the list now shows it as it is.")
       }
-      try changed.text.write(to: Self.bookmarksURL, atomically: true, encoding: .utf8)
+      // Through a symlink to the file it points at, as dotfiles managers link it, rather than
+      // over the link.
+      try Data(changed.text.utf8).write(
+        to: Self.bookmarksURL.resolvingSymlinksInPath(), options: .atomic)
       bookmarks = changed
       refreshRows(selecting: id)
     } catch {

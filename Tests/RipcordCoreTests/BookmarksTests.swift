@@ -53,6 +53,42 @@ import Testing
     #expect(file.deleting(line: 99, text: swift.text) == nil)
   }
 
+  @Test func readsMarkdownAsWrittenByHand() {
+    let file = BookmarkFile(
+      text: """
+        \u{FEFF}# Read ##
+        - [x] [Done](https://done.example)
+        - [ ] [Later](https://later.example "A tip")
+        ```
+        # not a heading
+        - [Code](https://code.example)
+        ```
+        #\tTools
+        - [Raycast](https://raycast.com)
+        """)
+    #expect(file.bookmarks.map(\.title) == ["Done", "Later", "Raycast"])
+    #expect(file.bookmarks.map(\.group) == ["Read", "Read", "Tools"])
+    #expect(file.bookmarks[1].url.absoluteString == "https://later.example")
+  }
+
+  @Test func keepsTwoHeadingsOfTheSameNameApart() {
+    let file = BookmarkFile(
+      text: """
+        - [A](https://a.example)
+        # Bookmarks
+        - [B](https://b.example)
+        # Work
+        ## Docs
+        - [C](https://c.example)
+        # Home
+        ## Docs
+        - [D](https://d.example)
+        """)
+    let sections = Search.bookmarkSections(for: "", file: file)
+    #expect(sections.map(\.title) == ["Bookmarks", "Bookmarks", "Docs", "Docs"])
+    #expect(Set(sections.map(\.id)).count == 4)
+  }
+
   @Test func searchesTitlesURLsAndDescriptions() {
     let file = BookmarkFile(text: text)
     #expect(Search.bookmarkSections(for: "", file: file).map(\.title) == ["Docs", "Tools"])

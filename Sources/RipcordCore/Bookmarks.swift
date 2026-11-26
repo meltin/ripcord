@@ -7,6 +7,8 @@ public struct Bookmark: Equatable, Sendable {
   public let description: String?
   /// The heading above it; empty before the first heading.
   public let group: String
+  /// The heading's line, which tells two headings of the same name apart; -1 before the first.
+  public let groupLine: Int
   /// Where it is in the file, and the line as it was read, to find it again before a change.
   public let line: Int
   public let text: String
@@ -36,17 +38,31 @@ public struct BookmarkFile: Equatable, Sendable {
 
   public static func == (lhs: BookmarkFile, rhs: BookmarkFile) -> Bool { lhs.text == rhs.text }
 
-  /// The bookmarks, in file order; lines that aren't bookmarks or headings are left alone.
+  /// The bookmarks, in file order; lines that aren't bookmarks or headings, and anything in a
+  /// fenced code block, are left alone.
   public var bookmarks: [Bookmark] {
-    var group = ""
+    var group = (title: "", line: -1)
+    var fence: String?
     return lines.enumerated().compactMap { index, line in
-      if let heading = Self.heading(line.text) {
-        group = heading
+      let trimmed = line.text.trimmingCharacters(in: Self.blank)
+      if let open = fence {
+        if trimmed.hasPrefix(open) { fence = nil }
         return nil
       }
-      return Self.bookmark(line.text, group: group, line: index)
+      if let marker = ["```", "~~~"].first(where: trimmed.hasPrefix) {
+        fence = marker
+        return nil
+      }
+      if let heading = Self.heading(trimmed) {
+        group = (heading, index)
+        return nil
+      }
+      return Self.bookmark(trimmed, group: group, line: index, text: line.text)
     }
   }
+
+  /// Spaces, tabs and a UTF-8 byte order mark, which can start the first line.
+  static let blank = CharacterSet.whitespaces.union(["\u{FEFF}"])
 
   /// Without the bookmark on `line`, or nil when that line no longer holds `text` (the file
   /// changed since it was read).
@@ -61,22 +77,30 @@ public struct BookmarkFile: Equatable, Sendable {
     return file
   }
 
-  /// `# Group` to `###### Group`.
-  static func heading(_ line: String) -> String? {
-    let trimmed = line.trimmingCharacters(in: .whitespaces)
+  /// `# Group` to `###### Group`, closing hashes (`## Group ##`) left out.
+  static func heading(_ trimmed: String) -> String? {
     let hashes = trimmed.prefix { $0 == "#" }
-    guard (1...6).contains(hashes.count), trimmed.dropFirst(hashes.count).first == " " else {
-      return nil
-    }
-    let title = trimmed.dropFirst(hashes.count).trimmingCharacters(in: .whitespaces)
+    guard (1...6).contains(hashes.count), let space = trimmed.dropFirst(hashes.count).first,
+      space == " " || space == "\t"
+    else { return nil }
+    let words = trimmed.dropFirst(hashes.count).split(whereSeparator: \.isWhitespace)
+    let title = words.reversed().drop { $0.allSatisfy { $0 == "#" } }.reversed().joined(
+      separator: " ")
     return title.isEmpty ? nil : title
   }
 
-  /// `- [Title](url) - description`, the URL allowed its own parentheses, as Wikipedia's have.
-  static func bookmark(_ line: String, group: String, line index: Int) -> Bookmark? {
-    let trimmed = line.trimmingCharacters(in: .whitespaces)
-    guard trimmed.hasPrefix("- [") || trimmed.hasPrefix("* [") else { return nil }
-    let afterBracket = trimmed.dropFirst(3)
+  /// `- [Title](url) - description`, the URL allowed its own parentheses, as Wikipedia's have,
+  /// and a task list's `[ ]` or `[x]` before the link.
+  static func bookmark(
+    _ trimmed: String, group: (title: String, line: Int), line index: Int, text: String
+  ) -> Bookmark? {
+    guard trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") else { return nil }
+    var item = trimmed.dropFirst(2)
+    for box in ["[ ] ", "[x] ", "[X] "] where item.hasPrefix(box) {
+      item = item.dropFirst(box.count).drop(while: \.isWhitespace)
+    }
+    guard item.hasPrefix("[") else { return nil }
+    let afterBracket = item.dropFirst()
     guard let titleEnd = afterBracket.range(of: "](") else { return nil }
     let title = String(afterBracket[..<titleEnd.lowerBound])
     var depth = 1
@@ -92,8 +116,10 @@ public struct BookmarkFile: Equatable, Sendable {
         break
       }
     }
-    guard let urlEnd, !title.isEmpty,
-      let url = URL(string: String(afterBracket[titleEnd.upperBound..<urlEnd])), url.scheme != nil
+    // A link title (`[T](https://x.com "Tip")`) follows the URL after a space.
+    let target = afterBracket[titleEnd.upperBound..<(urlEnd ?? afterBracket.endIndex)]
+      .prefix { !$0.isWhitespace }
+    guard let urlEnd, !title.isEmpty, let url = URL(string: String(target)), url.scheme != nil
     else { return nil }
     let rest = afterBracket[afterBracket.index(after: urlEnd)...]
       .trimmingCharacters(in: .whitespaces)
@@ -101,7 +127,7 @@ public struct BookmarkFile: Equatable, Sendable {
       rest.hasPrefix("- ") ? String(rest.dropFirst(2)).trimmingCharacters(in: .whitespaces) : nil
     return Bookmark(
       title: title, url: url, description: description?.isEmpty == true ? nil : description,
-      group: group, line: index, text: line)
+      group: group.title, groupLine: group.line, line: index, text: text)
   }
 }
 
@@ -115,14 +141,15 @@ extension Search {
         || [bookmark.title, bookmark.url.absoluteString, bookmark.description ?? ""]
           .contains { $0.localizedStandardContains(trimmed) }
     }
-    // Headings in the order the file has them.
-    let groups = matches.map(\.group).reduce(into: [String]()) { order, group in
-      if !order.contains(group) { order.append(group) }
+    // Each heading where the file has it, even two with the same name.
+    let headings = matches.map(\.groupLine).reduce(into: [Int]()) { order, line in
+      if order.last != line { order.append(line) }
     }
-    return groups.map { group in
-      SearchSection(
-        title: group.isEmpty ? "Bookmarks" : group,
-        results: matches.filter { $0.group == group }.map(result(for:)))
+    return headings.map { line in
+      let rows = matches.filter { $0.groupLine == line }
+      return SearchSection(
+        title: rows[0].group.isEmpty ? "Bookmarks" : rows[0].group,
+        results: rows.map(result(for:)), id: "heading:\(line)")
     }
   }
 

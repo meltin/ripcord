@@ -309,7 +309,14 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
 public struct SearchSection: Identifiable, Equatable, Sendable {
   public let title: String
   public let results: [SearchResult]
-  public var id: String { title }
+  /// The title, unless two sections can share one.
+  public let id: String
+
+  public init(title: String, results: [SearchResult], id: String? = nil) {
+    self.title = title
+    self.results = results
+    self.id = id ?? title
+  }
 }
 
 public enum Search {
