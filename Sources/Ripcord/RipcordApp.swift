@@ -34,6 +34,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.mainMenu = makeMainMenu()
     statusItem = makeStatusItem()
+    caffeinator.onChange = { [weak self] in self?.showCoffeeInMenuBar() }
+    launcher.onCaffeinate = { [weak self] seconds in
+      if self?.caffeinator.caffeinate(for: seconds) == false {
+        self?.showError("macOS didn't let Ripcord keep the Mac awake.")
+      }
+    }
+    launcher.onDecaffeinate = { [weak self] in
+      // Nothing to stop: a beep rather than a panel that just closes.
+      guard self?.caffeinator.isActive == true else { return NSSound.beep() }
+      self?.caffeinator.decaffeinate()
+    }
     launcher.onOpenSettings = { [weak self] in self?.openSettings() }
     launcher.onConfigure = { [weak self] in self?.settings.show(configuring: $0) }
     launcher.settings = settings.model
@@ -275,6 +286,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     return main
   }
 
+  private let caffeinator = Caffeinator()
+  private var statusIcon: NSImage?
+  private let decaffeinateItem = NSMenuItem(
+    title: "Decaffeinate", action: #selector(decaffeinate), keyEquivalent: "")
+
+  @objc private func decaffeinate() { caffeinator.decaffeinate() }
+
+  /// A cup in the menu bar while Coffee keeps the Mac awake, with the time left when timed, as
+  /// Raycast's Coffee shows it; Ripcord's icon otherwise.
+  private func showCoffeeInMenuBar() {
+    guard let statusItem, let button = statusItem.button else { return }
+    decaffeinateItem.isHidden = !caffeinator.isActive
+    guard caffeinator.isActive else {
+      button.image = statusIcon
+      button.title = ""
+      statusItem.length = NSStatusItem.squareLength
+      return
+    }
+    let cup = NSImage(
+      systemSymbolName: "cup.and.saucer.fill", accessibilityDescription: "Caffeinated")
+    cup?.isTemplate = true
+    button.image = cup
+    button.imagePosition = .imageLeading
+    button.title = caffeinator.remaining.map { " " + Coffee.format($0, seconds: false) } ?? ""
+    statusItem.length = NSStatusItem.variableLength
+  }
+
   private func makeStatusItem() -> NSStatusItem {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     // The bundle has the icon; a bare `swift run` doesn't, so fall back to a symbol there.
@@ -284,7 +322,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     icon?.isTemplate = true
     icon?.accessibilityDescription = "Ripcord"
     item.button?.image = icon
+    statusIcon = icon
     let menu = NSMenu()
+    decaffeinateItem.isHidden = true
+    menu.addItem(decaffeinateItem)
     menu.addItem(withTitle: "Open Ripcord", action: #selector(toggleLauncher), keyEquivalent: "")
     menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
     menu.addItem(.separator())

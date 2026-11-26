@@ -31,6 +31,8 @@
 - Git Repositories: Search Repositories lists the repositories in the folders you pick (`~/dev`
   and the like) and opens one in the app you assign to ↵, ⌘↵, ⌥↵, ⌃↵ or ⇧↵, an editor or a
   terminal; ⌘K adds Open on GitHub, Show in Finder and Copy Path
+- Coffee: Caffeinate keeps the Mac and its display awake until Decaffeinate; type a time after
+  it, as in `caffeinate 1h 30m`, to stop on its own. A cup with the time left shows in the menu bar
 - Window Management: put the frontmost window in a half, quarter or third, maximize or center
   it, move it to the next or previous display, or restore where it was; give each a hotkey such
   as ⌃⌥← on its settings page
