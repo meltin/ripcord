@@ -51,10 +51,12 @@ EOF
 /usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -config "$work/cert.cnf" \
   -keyout "$work/key.pem" -out "$work/cert.pem" 2>/dev/null
 password="$(/usr/bin/openssl rand -hex 16)"
-/usr/bin/openssl pkcs12 -export -inkey "$work/key.pem" -in "$work/cert.pem" \
+# -name labels the key, which macOS's prompts name; it'd be "identity" otherwise.
+/usr/bin/openssl pkcs12 -export -inkey "$work/key.pem" -in "$work/cert.pem" -name "$name" \
   -out "$work/identity.p12" -passout "pass:$password"
 
-# -T lets codesign use the key; if macOS still asks on the first build, choose Always Allow.
+# -T lets codesign use the key. If macOS still asks on the first build ("codesign wants to
+# access key"), choose Always Allow: it lets only codesign use this one key.
 security import "$work/identity.p12" -k "$keychain" -P "$password" -T /usr/bin/codesign >/dev/null
 # codesign only signs with a certificate trusted for code signing; this is the password prompt.
 security add-trusted-cert -r trustRoot -p codeSign -k "$keychain" "$work/cert.pem"
