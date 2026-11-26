@@ -40,18 +40,21 @@ enum ScriptRunner {
         return completion(Result(status: -1, output: "", errors: error.localizedDescription))
       }
       process.waitUntilExit()
+      // A moment for the handlers to take what's left, then stop: a child the script left
+      // running would hold the pipes open, and reading to their end would wait for it.
+      usleep(150_000)
       output.fileHandleForReading.readabilityHandler = nil
       errors.fileHandleForReading.readabilityHandler = nil
-      // What arrived after the last handler call.
-      collected.append(output.fileHandleForReading.readDataToEndOfFile(), to: .output)
-      collected.append(errors.fileHandleForReading.readDataToEndOfFile(), to: .errors)
+      try? output.fileHandleForReading.close()
+      try? errors.fileHandleForReading.close()
       let (out, err) = collected.text
       completion(Result(status: process.terminationStatus, output: out, errors: err))
     }
   }
 
-  /// The login shell's PATH, read once, so a script finds what a terminal finds (Homebrew, nix);
-  /// Raycast's own PATH plus /usr/local/bin when the shell can't say.
+  /// The login shell's PATH, read once, so a script finds what a login shell's profile adds
+  /// (Homebrew's or nix's in `.zprofile`; not what only `.zshrc` adds). Ripcord's own PATH plus
+  /// /usr/local/bin, as Raycast appends, when the shell can't say.
   static let loginPath: String = {
     let fallback =
       (ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin")

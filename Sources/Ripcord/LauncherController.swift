@@ -499,6 +499,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// `keepingMode` leaves a command's list or form as it is, to come back to (`leftOpen`).
   private func hide(keepingMode: Bool = false) {
     stashDraft()
+    model.toast = nil
     // A recording left running would keep every hotkey unregistered.
     closeEditor(backToMenu: false)
     panel.orderOut(nil)
@@ -762,17 +763,16 @@ final class LauncherController: NSObject, NSWindowDelegate {
     guard let script = scripts.first(where: { $0.url.path == path }) else {
       return onError("That script is gone from its folder.")
     }
-    scriptRun += 1
-    let run = scriptRun
-    if script.mode == .silent { hide() }
+    // Hidden already when its hotkey ran it: what was left open there stays.
+    if script.mode == .silent, panel.isVisible { hide() }
     ScriptRunner.run(script) { [weak self] result in
       DispatchQueue.main.async {
-        MainActor.assumeIsolated { self?.finish(script, result, run: run) }
+        MainActor.assumeIsolated { self?.finish(script, result) }
       }
     }
   }
 
-  private func finish(_ script: ScriptCommand, _ result: ScriptRunner.Result, run: Int) {
+  private func finish(_ script: ScriptCommand, _ result: ScriptRunner.Result) {
     let failed = result.status != 0
     let line =
       failed
@@ -783,6 +783,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     guard let line else { return }
     // Compact shows it in the panel while it's still open there; otherwise over the screen.
     guard script.mode == .compact, panel.isVisible else { return HUD.show(line, failed: failed) }
+    // Counted as it shows, so only a newer toast keeps this one's timer from clearing it.
+    scriptRun += 1
+    let run = scriptRun
     model.toast = (line, failed)
     DispatchQueue.main.asyncAfter(deadline: .now() + (failed ? 4 : 2.5)) { [weak self] in
       MainActor.assumeIsolated {
@@ -1060,6 +1063,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return refreshRows(selecting: model.selected?.id)
     }
     if case .runScript(let path) = action {
+      model.menu = nil
       return runScript(path)
     }
     if case .openDraft(let form) = action {

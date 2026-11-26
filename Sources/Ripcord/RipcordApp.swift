@@ -270,6 +270,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         launcher.perform(.window(layout))
       } else if let command = CleanShotCommand.allCases.first(where: { $0.settingsKey == key }) {
         launcher.perform(.cleanShot(command))
+      } else if key.hasPrefix("script:") {
+        launcher.perform(.runScript(String(key.dropFirst("script:".count))))
       } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: key)
         ?? (key.hasPrefix("/") ? URL(fileURLWithPath: key) : nil)
       {

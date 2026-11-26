@@ -292,6 +292,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case .system(let system, _): return [primary, .configure(system.settingsKey)]
     case .cleanShot(let command): return [primary, .configure(command.settingsKey)]
     case .window(let layout): return [primary, .configure(layout.settingsKey)]
+    case .runScript(let path): return [primary, .configure("script:\(path)")]
     default:
       return [primary]
     }

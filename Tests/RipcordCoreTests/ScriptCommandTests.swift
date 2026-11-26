@@ -30,6 +30,13 @@ import Testing
     #expect(js?.packageName == "Dev")
   }
 
+  @Test func takesOnlyEmojiForIcons() {
+    let base = ["# @raycast.schemaVersion 1", "# @raycast.title T", "# @raycast.mode silent"]
+    #expect(script(base[0], base[1], base[2], "# @raycast.icon 1password.png")?.icon == nil)
+    #expect(script(base[0], base[1], base[2], "# @raycast.icon images/x.png")?.icon == nil)
+    #expect(script(base[0], base[1], base[2], "# @raycast.icon 🛩")?.icon == "🛩")
+  }
+
   @Test func leavesOutWhatItDoesntRunYet() {
     let base = ["# @raycast.schemaVersion 1", "# @raycast.title T"]
     #expect(script(base[0], base[1]) == nil)  // no mode
@@ -64,7 +71,10 @@ import Testing
     try write("plain.sh", executable: false)
     try write("x.template.sh", executable: true)
     try write("sub/deep.sh", executable: true)
-    #expect(ScriptCommand.scan([folder]).map(\.title) == ["a.sh", "b.sh"])
+    // A symlink to a script counts, as one linked in from a checkout.
+    try FileManager.default.createSymbolicLink(
+      at: folder.appending(path: "c.sh"), withDestinationURL: folder.appending(path: "a.sh"))
+    #expect(ScriptCommand.scan([folder]).map(\.title) == ["a.sh", "b.sh", "a.sh"])
   }
 
   @Test func listsScriptsInTheRootSearch() throws {

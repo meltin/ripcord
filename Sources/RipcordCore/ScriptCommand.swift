@@ -63,8 +63,10 @@ public struct ScriptCommand: Equatable, Sendable {
         relativeTo: folder
       ).standardizedFileURL
     }
-    let icon = values["icon"].flatMap {
-      $0.unicodeScalars.first?.properties.isEmoji == true ? $0 : nil
+    // An emoji, not a file name: digits and # count as emoji too, so a picture is required.
+    let icon = values["icon"].flatMap { icon in
+      icon.unicodeScalars.first.map { $0.properties.isEmojiPresentation || $0.value > 0x2000 }
+        == true && !icon.contains(".") && !icon.contains("/") ? icon : nil
     }
     return ScriptCommand(
       url: url, title: title, mode: mode, icon: icon,
@@ -83,8 +85,10 @@ public struct ScriptCommand: Equatable, Sendable {
       let names = (try? fileManager.contentsOfDirectory(atPath: folder.path)) ?? []
       return names.sorted().compactMap { name -> ScriptCommand? in
         let url = folder.appending(path: name)
+        var isFolder: ObjCBool = false
         guard !name.contains(".template."), !name.hasPrefix("."),
-          (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+          // Following a symlink, as scripts are often linked in from a checkout.
+          fileManager.fileExists(atPath: url.path, isDirectory: &isFolder), !isFolder.boolValue,
           fileManager.isExecutableFile(atPath: url.path),
           let handle = try? FileHandle(forReadingFrom: url)
         else { return nil }
