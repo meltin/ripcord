@@ -106,6 +106,7 @@ import Testing
     #expect(found.firstMissing(in: ["Tokyo"]) == nil)
     #expect(found.processArguments(["New York & co", ""]) == ["New%20York%20%26%20co", ""])
     #expect(found.processArguments(["a"]) == ["a", ""])
+    #expect(found.processArguments(["it's (fun)!"]) == ["it's%20(fun)!", ""])
   }
 
   @Test func dropsColorCodes() {

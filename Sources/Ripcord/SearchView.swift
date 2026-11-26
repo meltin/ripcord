@@ -32,12 +32,15 @@ struct SearchView: View {
             placeholder: model.mode.placeholder,
             sidewaysArrows: model.mode == .emoji,
             takesTab: model.argumentScript != nil, caretAtEnd: true,
-            onChange: onQueryChange, onCommand: onCommand
+            onChange: onQueryChange, onCommand: onCommand,
+            onFocus: { model.isEditingArgument = false }
           )
           // A new one takes the focus back from Set Alias…'s field.
           .id(model.searchFieldID)
           if let path = model.argumentScript, let arguments = model.scriptArguments[path] {
             ArgumentFields(model: model, path: path, arguments: arguments, onCommand: onCommand)
+              // Another script's fields are new ones: a focused field gone hands the focus back.
+              .id(path)
           }
           if model.mode == .snippets {
             // Only tags of listed snippets: one on a snippet without text would list nothing.
@@ -1101,6 +1104,10 @@ private struct ArgumentFields: View {
   @FocusState private var focus: Int?
   /// ⇧Tab, which arrives as a key of its own.
   static let backTab = KeyEquivalent("\u{19}")
+  /// Whether the focused field holds text an input method is still composing.
+  static var isComposing: Bool {
+    (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true
+  }
 
   var body: some View {
     HStack(spacing: 6) {
@@ -1113,15 +1120,19 @@ private struct ArgumentFields: View {
           .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
           .focused($focus, equals: index)
           .onSubmit { onCommand(.submit) }
+          // While an input method composes, its keys pick candidates instead.
           .onKeyPress(keys: [.tab, Self.backTab]) { press in
+            if Self.isComposing { return .ignored }
             move(from: index, back: press.key == Self.backTab || press.modifiers.contains(.shift))
             return .handled
           }
           .onKeyPress(.upArrow) {
+            if Self.isComposing { return .ignored }
             onCommand(.up)
             return .handled
           }
           .onKeyPress(.downArrow) {
+            if Self.isComposing { return .ignored }
             onCommand(.down)
             return .handled
           }
@@ -1909,6 +1920,8 @@ struct SearchField: NSViewRepresentable {
   let onCommand: (SearchCommand) -> Void
   /// When the field stops being edited, as when another control is clicked.
   var onEnd: () -> Void = {}
+  /// When the field takes the focus, clicked or remounted.
+  var onFocus: () -> Void = {}
 
   func makeNSView(context: Context) -> FocusingTextField {
     let field = FocusingTextField()
@@ -1924,6 +1937,7 @@ struct SearchField: NSViewRepresentable {
 
   func updateNSView(_ field: FocusingTextField, context: Context) {
     context.coordinator.parent = self
+    field.onFocus = onFocus
     if field.placeholderString != placeholder { field.placeholderString = placeholder }
     let isComposing = (field.currentEditor() as? NSTextView)?.hasMarkedText() ?? false
     if !isComposing, field.stringValue != text { field.stringValue = text }
@@ -1974,6 +1988,7 @@ final class FocusingTextField: NSTextField {
   static let caretColor = NSColor(red: 1, green: 0.353, blue: 0.122, alpha: 1)
 
   var caretAtEnd = false
+  var onFocus: () -> Void = {}
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
@@ -1989,6 +2004,7 @@ final class FocusingTextField: NSTextField {
   /// The orange caret from the app icon.
   override func becomeFirstResponder() -> Bool {
     let became = super.becomeFirstResponder()
+    if became { onFocus() }
     if let editor = currentEditor() as? NSTextView {
       editor.insertionPointColor = Self.caretColor
       // The window's shared field editor paints a white well behind the text; this field is

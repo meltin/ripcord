@@ -42,10 +42,10 @@ public struct ScriptCommand: Equatable, Sendable {
     arguments.indices.map { index in
       let value = values.indices.contains(index) ? values[index] : ""
       guard arguments[index].percentEncoded == true else { return value }
-      // RFC 3986's unreserved characters only, so a space is %20 and & is %26 in a query.
-      let unreserved = CharacterSet(
-        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
-      return value.addingPercentEncoding(withAllowedCharacters: unreserved) ?? value
+      // What JavaScript's encodeURIComponent keeps, as Raycast encodes: a space is %20, & is %26.
+      let kept = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
+      return value.addingPercentEncoding(withAllowedCharacters: kept) ?? value
     }
   }
 

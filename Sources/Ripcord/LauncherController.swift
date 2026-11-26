@@ -524,6 +524,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     stashDraft()
     model.toast = nil
     model.argumentValues = [:]
+    model.argumentFocusRequest = nil
     if model.isEditingArgument {
       // The search field takes the focus back for next time.
       model.isEditingArgument = false
@@ -553,8 +554,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private func refreshApps() {
     Task {
       apps = await Task.detached(priority: .userInitiated) { AppIndex.scan() }.value
-      // Refresh the rows only: a ↓ or ⌘K pressed while the scan ran must survive it.
-      refreshRows()
+      // Refresh the rows only: a ↓ or ⌘K pressed while the scan ran must survive it, and the
+      // row stays selected by ID when new apps land above it.
+      refreshRows(selecting: model.selected?.id)
     }
   }
 
@@ -713,7 +715,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .back:
       goBack()
     case .nextField:
-      if model.argumentScript != nil { model.argumentFocusRequest = 0 }
+      // Not behind an open menu.
+      if model.menu == nil, model.argumentScript != nil { model.argumentFocusRequest = 0 }
     case .activate(let id): model.results.first { $0.id == id }.map { perform($0.action) }
     case .toggleMenu(let root): toggleMenu(root: root)
     case .filterTag(let tag):
@@ -802,7 +805,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
       }
     }
     // Once the panel is key: shown just now, it would hand the focus back to the search field.
-    DispatchQueue.main.async { [weak self] in self?.model.argumentFocusRequest = index }
+    // Only while the row is still there, or the request would wait for another script.
+    DispatchQueue.main.async { [weak self] in
+      guard let self, model.argumentScript == path else { return }
+      model.argumentFocusRequest = index
+    }
   }
 
   /// Runs a Script Command as its mode says: silent closes the panel and shows the last line
