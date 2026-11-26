@@ -21,7 +21,9 @@ public struct Bookmark: Equatable, Sendable {
   /// Whether the line holds only what the form shows, so an edit loses nothing written on it,
   /// such as a link title (`"Tip"`) or a note after the link.
   public var isEditable: Bool {
-    text == prefix + "[\(title)](\(rawURL))" + (description.map { " - \($0)" } ?? "")
+    // Spaces at the end of the line don't hold anything.
+    text.replacing(/\s+$/, with: "")
+      == prefix + "[\(title)](\(rawURL))" + (description.map { " - \($0)" } ?? "")
   }
 }
 
@@ -118,11 +120,12 @@ public struct BookmarkFile: Equatable, Sendable {
 
   static let blank = CharacterSet.whitespaces
 
-  /// Without the bookmark on `line`, or nil when that line no longer holds `text` (the file
-  /// changed since it was read).
+  /// Without the bookmark on `line` and what's indented under it, or nil when that line no
+  /// longer holds `text` (the file changed since it was read).
   public func deleting(line: Int, text: String) -> BookmarkFile? {
     guard lines.indices.contains(line), lines[line].text == text else { return nil }
-    return removing(line..<line + 1)
+    let found = bookmarks.first { $0.line == line }
+    return removing(found.map(block(of:)) ?? line..<line + 1)
   }
 
   /// Without `range`'s lines. Taking the last line away leaves the one before it last, without
@@ -143,7 +146,10 @@ public struct BookmarkFile: Equatable, Sendable {
     var end = bookmark.line + 1
     while end < lines.count {
       let text = lines[end].text
-      guard !text.allSatisfy(\.isWhitespace), text.prefix(while: \.isWhitespace).count > indent
+      let trimmed = text.trimmingCharacters(in: Self.blank)
+      // A heading or code block, however indented, starts something else.
+      guard !trimmed.isEmpty, text.prefix(while: \.isWhitespace).count > indent,
+        Self.heading(trimmed) == nil, !trimmed.hasPrefix("```"), !trimmed.hasPrefix("~~~")
       else { break }
       end += 1
     }
@@ -248,7 +254,10 @@ public struct BookmarkFile: Equatable, Sendable {
     let next = after.headings.first { $0.line > headingLine }?.line ?? file.lines.count
     let last =
       after.bookmarks.last { $0.line > headingLine && $0.line < next }
-      .map { file.block(of: $0).upperBound - 1 } ?? headingLine
+      .map { file.block(of: $0).upperBound - 1 }
+      // No group with nothing there yet: just above the first heading, below a title, front
+      // matter or prose that opens the file.
+      ?? (headingLine == -1 ? next - 1 : headingLine)
     for (offset, line) in placed.enumerated() { file.insert(line, after: last + offset) }
     return (file, last + 1, text)
   }

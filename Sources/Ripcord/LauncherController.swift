@@ -58,6 +58,12 @@ struct BookmarkDraft {
   var headings: [BookmarkFile.Heading] = []
   /// The bookmark being edited, its line as read; nil for a new one.
   var original: (line: Int, text: String)?
+
+  /// Whether anything has been typed or picked, so it's worth keeping.
+  var isStarted: Bool {
+    // A group picked other than No group counts; a new one only once it has a name.
+    !(title + url + description + newGroup).isEmpty || (heading.map { $0.line != -1 } ?? false)
+  }
 }
 
 /// What the panel lists: apps and commands, or one command's own list.
@@ -65,7 +71,7 @@ enum LauncherMode {
   case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, bookmarks
   case bookmarkForm
 
-  /// A form, with no query or rows: its header names it, and ⌘↵ saves it.
+  /// A form, with no query or rows: the footer names it, and ⌘↵ saves it.
   var isForm: Bool { self == .snippetForm || self == .bookmarkForm }
 
   /// The command whose list this is; nil for the root search.
@@ -123,6 +129,8 @@ final class LauncherModel {
   /// The Tags field as typed; split into tags when saved, so a half-typed ", " stays put.
   var tagsText = ""
   var bookmarkDraft = BookmarkDraft()
+  /// A new bookmark's draft, kept while an edit has the form.
+  var addDraft: BookmarkDraft?
 
   /// The command the footer names: an edit's form is the list's, where it came from.
   var footerCommand: BuiltinCommand? {
@@ -691,17 +699,21 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.addBookmark) {
       guard loadBookmarks() else { return }
       let draft = model.bookmarkDraft
-      // A new bookmark's draft survives the panel closing, as Create Snippet's does, as when
-      // clicking the browser to copy its URL; it's cleared once saved.
-      if draft.original == nil, !(draft.title + draft.url + draft.description).isEmpty {
-        model.bookmarkDraft = rebased(draft)
+      // A new bookmark's draft survives the panel closing, and an edit in between, as Create
+      // Snippet's does, as when clicking the browser to copy its URL; it's cleared once saved.
+      if let kept = draft.original == nil && draft.isStarted ? draft : model.addDraft {
+        model.bookmarkDraft = rebased(kept)
+        model.addDraft = nil
       } else {
         // Raycast's starts on No group: the top of the file, above the first heading.
         let choices = groupChoices()
         model.bookmarkDraft = BookmarkDraft(heading: choices.first, headings: choices)
       }
       // From an edit, a new form rather than closing the panel, as its hotkey closes its own.
-      if model.mode == .bookmarkForm, draft.original != nil { return update("") }
+      if panel.isVisible, model.mode == .bookmarkForm, draft.original != nil {
+        closesOnCancel = false
+        return update("")
+      }
       return open(.bookmarkForm)
     }
     if case .editBookmark(let line, let text) = action {
@@ -1050,11 +1062,15 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private func rebased(_ draft: BookmarkDraft) -> BookmarkDraft {
     var rebased = draft
     rebased.headings = groupChoices()
+    // The same line still there, or the one line with its text; two or more could be another.
     rebased.original = draft.original.flatMap { original in
-      bookmarks.bookmarks.first { $0.text == original.text }.map { ($0.line, $0.text) }
+      let same = bookmarks.bookmarks.filter { $0.text == original.text }
+      let found = same.first { $0.line == original.line } ?? (same.count == 1 ? same[0] : nil)
+      return found.map { ($0.line, $0.text) }
     }
     if let heading = draft.heading {
-      rebased.heading = rebased.headings.first { $0.title == heading.title }
+      let named = rebased.headings.filter { $0.title == heading.title }
+      rebased.heading = named.first { $0.line == heading.line } ?? named.first
       if rebased.heading == nil { rebased.newGroup = heading.title }
     }
     return rebased
@@ -1073,6 +1089,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return onError(
         "This bookmark's line has text the form doesn't show, which saving would drop; edit it in bookmarks.md instead."
       )
+    }
+    // A new bookmark being typed waits for Add Bookmark.
+    if model.bookmarkDraft.original == nil, model.bookmarkDraft.isStarted {
+      model.addDraft = model.bookmarkDraft
     }
     // The URL as written, not percent-encoded, so an edit leaves it alone.
     model.bookmarkDraft = BookmarkDraft(

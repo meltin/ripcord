@@ -273,4 +273,24 @@ import Testing
       try save(file, "x", "https://x.example", under: .newHeading("New"))
     }
   }
+
+  @Test func addsToNoGroupBelowWhatOpensTheFile() throws {
+    let file = BookmarkFile(text: "---\ntitle: x\n---\n# Dev\n- [A](https://a.example)\n")
+    #expect(
+      try save(file, "N", "https://n.example", under: .heading(.init(title: "", line: -1))).file
+        .text == "---\ntitle: x\n---\n- [N](https://n.example)\n# Dev\n- [A](https://a.example)\n")
+  }
+
+  @Test func deletesANoteWithItsBookmarkAndStopsAtAHeading() throws {
+    let file = BookmarkFile(
+      text: "- [Z](https://z.example)\n- [A](https://a.example)\n  - note about A\n  ## B\n")
+    let a = try #require(file.bookmarks.last)
+    #expect(
+      file.deleting(line: a.line, text: a.text)?.text == "- [Z](https://z.example)\n  ## B\n")
+  }
+
+  @Test func editsALineWithTrailingSpaces() throws {
+    let file = BookmarkFile(text: "- [A](https://a.example)  \n")
+    #expect(try #require(file.bookmarks.first).isEditable)
+  }
 }
