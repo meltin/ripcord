@@ -22,7 +22,10 @@ public struct Hotkey: Equatable, Sendable {
     let known = Self.ordered.map(\.flag).reduce(0, |)
     // Shift alone would take a capital letter away from every app on the Mac.
     let required = UInt32(cmdKey | optionKey | controlKey)
-    guard Self.keyCodes.values.contains(keyCode), modifiers & required != 0 else { return nil }
+    guard Self.keyCodes.values.contains(keyCode), modifiers & required != 0,
+      // ⌘↵ saves in the panel's forms; taken globally it would never reach them.
+      !(keyCode == UInt32(kVK_Return) && modifiers & known == UInt32(cmdKey))
+    else { return nil }
     self.keyCode = keyCode
     self.modifiers = modifiers & known
   }
@@ -55,7 +58,7 @@ public struct Hotkey: Equatable, Sendable {
   ]
 
   private static let keycapNames = [
-    "space": "Space", "return": "↩", "left": "←", "right": "→", "up": "↑", "down": "↓",
+    "space": "Space", "return": "↵", "left": "←", "right": "→", "up": "↑", "down": "↓",
   ]
 
   private static let keyCodes: [String: UInt32] = [

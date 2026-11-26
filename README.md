@@ -75,11 +75,10 @@ launch, on the first paste. Until then, Return only copies the item and beeps. R
 permission whenever a new build replaces the app: after an update, remove Ripcord from that list
 and add it again, or run `tccutil reset Accessibility io.github.meltin.ripcord`.
 
-System Actions use Accessibility for the music and volume keys too, and Window Management for
-moving windows. Empty Trash, Toggle System
-Appearance and Log Out, Restart and Shut Down ask macOS to let Ripcord control Finder, System
-Events and the login window; allow it in the prompt, or later under System Settings › Privacy &
-Security › Automation.
+System Actions use Accessibility for the music and volume keys too, as Window Management does to
+move windows. Empty Trash, Toggle System Appearance and Log Out, Restart and Shut Down ask macOS
+to let Ripcord control Finder, System Events and the login window; allow it in the prompt, or
+later under System Settings › Privacy & Security › Automation.
 
 ## Configuration
 

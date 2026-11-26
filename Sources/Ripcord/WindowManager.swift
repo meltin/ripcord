@@ -4,8 +4,9 @@ import RipcordCore
 /// Moves and resizes the frontmost app's focused window through the Accessibility API.
 @MainActor
 final class WindowManager {
-  /// Each window's frame before its last layout, for Restore; a few windows' worth.
-  private var previousFrames: [(window: AXUIElement, frame: CGRect)] = []
+  /// For Restore: each window's frame before Ripcord first placed it, and where it last put it,
+  /// so a run of layouts still restores the frame from before them; a few windows' worth.
+  private var history: [(window: AXUIElement, original: CGRect, placed: CGRect)] = []
 
   /// Nil when done, or a message to show.
   func apply(_ layout: WindowLayout, to app: NSRunningApplication?) -> String? {
@@ -19,8 +20,14 @@ final class WindowManager {
       return
         "Allow Ripcord under System Settings › Privacy & Security › Accessibility, then try again."
     }
-    guard let app, app != NSRunningApplication.current else { return noWindow }
+    // Ripcord's own windows (Settings) aren't moved.
+    guard let app, app != NSRunningApplication.current else {
+      NSSound.beep()
+      return nil
+    }
     let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    // Half a second, not the default six, per call: a hung app mustn't hang Ripcord with it.
+    AXUIElementSetMessagingTimeout(appElement, 0.5)
     guard let window: AXUIElement = attribute(appElement, kAXFocusedWindowAttribute),
       let frame = frame(of: window)
     else { return noWindow }
@@ -32,11 +39,11 @@ final class WindowManager {
     let target: CGRect
     switch layout {
     case .restore:
-      guard let saved = previousFrames.last(where: { CFEqual($0.window, window) }) else {
+      guard let saved = history.last(where: { CFEqual($0.window, window) }) else {
         NSSound.beep()
         return nil
       }
-      target = saved.frame
+      target = saved.original
     case .nextDisplay, .previousDisplay:
       guard screens.count > 1 else {
         NSSound.beep()
@@ -52,11 +59,18 @@ final class WindowManager {
       target = placed
     }
 
-    if layout != .restore {
-      previousFrames = Array(
-        (previousFrames.filter { !CFEqual($0.window, window) } + [(window, frame)]).suffix(20))
+    guard move(window, of: appElement, to: target) else {
+      // Full screen, or a window that can't be moved or resized.
+      NSSound.beep()
+      return nil
     }
-    move(window, of: appElement, to: target)
+    let earlier = history.last { CFEqual($0.window, window) }
+    // Still where Ripcord put it: keep the frame from before the first layout.
+    let original = earlier.flatMap { $0.placed == frame ? $0.original : nil } ?? frame
+    history = Array(
+      (history.filter { !CFEqual($0.window, window) }
+        + (layout == .restore ? [] : [(window, original, self.frame(of: window) ?? target)]))
+        .suffix(20))
     return nil
   }
 
@@ -64,22 +78,23 @@ final class WindowManager {
 
   /// Position, then size, then position again: a window can't grow past the screen's edge from
   /// where it is, and one with a minimum size ends up a little off until it's moved back.
-  private func move(_ window: AXUIElement, of app: AXUIElement, to frame: CGRect) {
+  /// False when the window refused the new position or size.
+  private func move(_ window: AXUIElement, of app: AXUIElement, to frame: CGRect) -> Bool {
     // Apps with AXEnhancedUserInterface on (VoiceOver turns it on) animate each change and drop
     // some; it's off while moving, as Rectangle does.
     let enhanced = "AXEnhancedUserInterface" as CFString
     let wasEnhanced: Bool = attribute(app, enhanced) ?? false
     if wasEnhanced { AXUIElementSetAttributeValue(app, enhanced, kCFBooleanFalse) }
+    defer { if wasEnhanced { AXUIElementSetAttributeValue(app, enhanced, kCFBooleanTrue) } }
     var origin = frame.origin
     var size = frame.size
-    if let position = AXValueCreate(.cgPoint, &origin),
+    guard let position = AXValueCreate(.cgPoint, &origin),
       let dimensions = AXValueCreate(.cgSize, &size)
-    {
-      AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, position)
-      AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, dimensions)
-      AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, position)
-    }
-    if wasEnhanced { AXUIElementSetAttributeValue(app, enhanced, kCFBooleanTrue) }
+    else { return false }
+    let moved = AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, position)
+    let resized = AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, dimensions)
+    AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, position)
+    return moved == .success || resized == .success
   }
 
   private func frame(of window: AXUIElement) -> CGRect? {
@@ -111,6 +126,9 @@ final class WindowManager {
     func flipped(_ rect: CGRect) -> CGRect {
       CGRect(x: rect.minX, y: primaryHeight - rect.maxY, width: rect.width, height: rect.height)
     }
+    // Left to right, then top to bottom, so Next Display goes the way the screens are laid out
+    // rather than in the order macOS lists them.
     return NSScreen.screens.map { (flipped($0.frame), flipped($0.visibleFrame)) }
+      .sorted { ($0.full.minX, $0.full.minY) < ($1.full.minX, $1.full.minY) }
   }
 }

@@ -55,9 +55,13 @@ public enum WindowLayout: String, CaseIterable, Sendable {
   /// need more than one screen or the window's history (next and previous display, restore).
   public func frame(for window: CGRect, in visible: CGRect) -> CGRect? {
     let (x, y, w, h) = (visible.minX, visible.minY, visible.width, visible.height)
+    // Edges rounded, sizes taken from them, so neighbors meet and none ends past the screen.
     func part(_ fx: CGFloat, _ fy: CGFloat, _ fw: CGFloat, _ fh: CGFloat) -> CGRect {
-      CGRect(x: x + w * fx, y: y + h * fy, width: w * fw, height: h * fh)
-        .rounded
+      let left = (x + w * fx).rounded()
+      let top = (y + h * fy).rounded()
+      let right = (x + w * (fx + fw)).rounded()
+      let bottom = (y + h * (fy + fh)).rounded()
+      return CGRect(x: left, y: top, width: right - left, height: bottom - top)
     }
     // Thirds run along the long side, so they split a portrait screen top to bottom.
     let wide = w >= h

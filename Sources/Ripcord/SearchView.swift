@@ -281,8 +281,8 @@ extension WindowLayout {
     case .maximize: "arrow.up.left.and.arrow.down.right"
     case .almostMaximize: "rectangle.inset.filled"
     case .center: "rectangle.center.inset.filled"
-    case .nextDisplay: "rectangle.portrait.and.arrow.right"
-    case .previousDisplay: "rectangle.portrait.and.arrow.forward"
+    case .nextDisplay: "rectangle.righthalf.inset.filled.arrow.right"
+    case .previousDisplay: "rectangle.lefthalf.inset.filled.arrow.left"
     case .restore: "arrow.uturn.backward"
     }
   }

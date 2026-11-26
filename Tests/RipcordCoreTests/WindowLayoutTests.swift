@@ -23,6 +23,13 @@ import Testing
         == CGPoint(x: 720, y: 463))
   }
 
+  @Test func neighborsMeetAndStayOnTheScreen() {
+    let top = WindowLayout.topHalf.frame(for: window, in: screen)
+    let bottom = WindowLayout.bottomHalf.frame(for: window, in: screen)
+    #expect(top?.maxY == bottom?.minY)
+    #expect(bottom?.maxY == screen.maxY)
+  }
+
   @Test func thirdsRunAlongTheLongSide() {
     #expect(WindowLayout.firstThird.frame(for: window, in: screen)?.width == 480)
     #expect(WindowLayout.lastTwoThirds.frame(for: window, in: screen)?.minX == 480)
@@ -35,7 +42,7 @@ import Testing
     #expect(WindowLayout.maximize.frame(for: window, in: screen) == screen)
     #expect(
       WindowLayout.almostMaximize.frame(for: window, in: screen)
-        == CGRect(x: 72, y: 69, width: 1296, height: 788))
+        == CGRect(x: 72, y: 69, width: 1296, height: 787))
   }
 
   @Test func centerKeepsTheSizeWithinTheScreen() {
@@ -67,6 +74,8 @@ import Testing
     let left = try #require(Hotkey("ctrl+option+left"))
     #expect(left.keycaps == ["⌃", "⌥", "←"])
     #expect(left.spec == "ctrl+option+left")
-    #expect(Hotkey("ctrl+option+return")?.keycaps == ["⌃", "⌥", "↩"])
+    #expect(Hotkey("ctrl+option+return")?.keycaps == ["⌃", "⌥", "↵"])
+    // The panel's forms save on ⌘↵.
+    #expect(Hotkey("cmd+return") == nil)
   }
 }
