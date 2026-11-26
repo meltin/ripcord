@@ -4,6 +4,14 @@ import RipcordCore
 import SwiftUI
 
 /// The ⌘K actions of a row, or the root menu behind the footer's left button.
+/// Raycast's in-panel alert: Return runs `action`, Esc cancels.
+struct Confirmation {
+  let title: String
+  let message: String
+  let confirmTitle: String
+  let action: SearchResult.Action
+}
+
 struct OpenMenu {
   let title: String
   let items: [MenuAction]
@@ -38,6 +46,8 @@ final class LauncherModel {
   var sections: [SearchSection] = []
   var selection = 0
   var menu: OpenMenu?
+  /// A question asked over the panel before something that can't be undone.
+  var confirmation: Confirmation?
   /// The config's snippets, for the preview of the selected one.
   var snippets: [Snippet] = []
   /// What Create Snippet's form holds; `editing` is the snippet's index when it's an edit.
@@ -289,6 +299,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     panel.orderOut(nil)
     model.isPickingIcon = false
     model.menu = nil
+    model.confirmation = nil
     restoreInputSource()
     if keepingMode, model.mode != .root {
       leftOpen = (model.mode, .now)
@@ -355,6 +366,18 @@ final class LauncherController: NSObject, NSWindowDelegate {
   }
 
   private func handle(_ command: SearchCommand) {
+    // A question takes Return and Esc, and nothing else gets through while it's up.
+    if let confirmation = model.confirmation {
+      switch command {
+      case .submit:
+        model.confirmation = nil
+        perform(confirmation.action)
+      case .cancel, .back:
+        model.confirmation = nil
+      default: break
+      }
+      return
+    }
     // An open menu takes the arrows, Return and Esc.
     if let menu = model.menu {
       switch command {
@@ -419,7 +442,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private func handleKeyEquivalent(_ event: NSEvent) -> Bool {
     let flags = event.modifierFlags.intersection([.control, .option, .shift, .command])
     // ⌃ too, for Raycast's ⌃X Delete.
-    guard !flags.isDisjoint(with: [.command, .control]),
+    // Shortcuts would act behind a question; only its Return and Esc count.
+    guard model.confirmation == nil, !flags.isDisjoint(with: [.command, .control]),
       let key = event.charactersIgnoringModifiers?.lowercased()
     else { return false }
     // An accessory app has no Edit menu, so ⌘X/C/V/A never reach the search field otherwise.
@@ -590,13 +614,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .duplicate: edit(index, duplicate: true)
     case .delete:
       // Asked first, as Raycast does by default: a deleted snippet has no undo.
-      model.menu = OpenMenu(
-        title: "Delete “\(snippets[index].name)”?",
-        items: [
-          MenuAction(
-            title: "Delete Snippet", symbol: "trash", shortcut: "↵",
-            action: .snippet(index, .confirmDelete))
-        ], isRoot: false)
+      model.menu = nil
+      model.confirmation = Confirmation(
+        title: "Delete Snippet",
+        message: "“\(snippets[index].name)” will be deleted. This can't be undone.",
+        confirmTitle: "Delete Snippet", action: .snippet(index, .confirmDelete))
     case .confirmDelete:
       model.menu = nil
       let original = snippets[index]

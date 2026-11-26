@@ -93,6 +93,11 @@ struct SearchView: View {
         }
       }
     }
+    .overlay {
+      if let confirmation = model.confirmation {
+        ConfirmationCard(confirmation: confirmation, onCommand: onCommand)
+      }
+    }
   }
 
   private var resultList: some View {
@@ -975,6 +980,65 @@ private struct Footer: View {
       }
       .padding(.horizontal, 10)
       .frame(height: 26)
+    }
+  }
+}
+
+/// Raycast's alert over a dimmed panel: what's about to happen, a red button for it and Cancel.
+private struct ConfirmationCard: View {
+  let confirmation: Confirmation
+  let onCommand: (SearchCommand) -> Void
+
+  var body: some View {
+    ZStack {
+      // A click outside the card cancels, as Esc does.
+      Color.black.opacity(0.25)
+        .contentShape(Rectangle())
+        .onTapGesture { onCommand(.cancel) }
+      VStack(spacing: 14) {
+        Image(systemName: "trash.fill")
+          .font(.system(size: 20, weight: .semibold))
+          .foregroundStyle(.white)
+          .frame(width: 44, height: 44)
+          .background(Color.red.gradient, in: Circle())
+        VStack(spacing: 6) {
+          Text(confirmation.title).font(.system(size: 15, weight: .semibold))
+          Text(confirmation.message)
+            .font(.system(size: 12))
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        VStack(spacing: 8) {
+          Button {
+            onCommand(.submit)
+          } label: {
+            HStack(spacing: 6) {
+              Text(confirmation.confirmTitle)
+              Keycap("↵")
+            }
+            .frame(maxWidth: .infinity, minHeight: 32)
+            .foregroundStyle(.white)
+            .background(Color.red, in: RoundedRectangle(cornerRadius: 8))
+          }
+          Button {
+            onCommand(.cancel)
+          } label: {
+            HStack(spacing: 6) {
+              Text("Cancel")
+              Keycap("esc")
+            }
+            .frame(maxWidth: .infinity, minHeight: 32)
+            .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+          }
+        }
+        .buttonStyle(.plain)
+        .font(.system(size: 13, weight: .medium))
+      }
+      .padding(20)
+      .frame(width: 280)
+      .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18))
+      .shadow(color: .black.opacity(0.2), radius: 20, y: 8)
     }
   }
 }
