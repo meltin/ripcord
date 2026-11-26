@@ -46,6 +46,8 @@ import Testing
     let mode = "# @raycast.mode silent"
     let unknown = #"# @raycast.argument1 { "type": "date", "placeholder": "q" }"#
     #expect(script(base[0], base[1], mode, unknown) == nil)
+    let empty = #"# @raycast.argument1 { "type": "dropdown", "placeholder": "q", "data": [] }"#
+    #expect(script(base[0], base[1], mode, empty) == nil)
     #expect(script(base[0], base[1], mode, "# @raycast.argument1 {broken") == nil)
     // argument2 without argument1.
     #expect(

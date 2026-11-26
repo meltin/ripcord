@@ -121,7 +121,10 @@ public struct ScriptCommand: Equatable, Sendable {
         try? JSONDecoder().decode(Argument.self, from: Data($0.utf8))
       }
     }
-    guard arguments.count == given.count else { return nil }
+    // A dropdown with nothing to pick could never run.
+    guard arguments.count == given.count,
+      !arguments.contains(where: { $0.type == .dropdown && ($0.data ?? []).isEmpty })
+    else { return nil }
     let folder = url.deletingLastPathComponent()
     let directory = values["currentDirectoryPath"].map { path in
       URL(

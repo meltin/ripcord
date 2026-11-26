@@ -1112,30 +1112,34 @@ private struct ArgumentFields: View {
   var body: some View {
     HStack(spacing: 6) {
       ForEach(arguments.indices, id: \.self) { index in
-        field(index)
-          .textFieldStyle(.plain)
-          .font(.system(size: 13))
-          .padding(.horizontal, 8)
-          .frame(width: 130, height: 26)
-          .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
-          .focused($focus, equals: index)
-          .onSubmit { onCommand(.submit) }
-          // While an input method composes, its keys pick candidates instead.
-          .onKeyPress(keys: [.tab, Self.backTab]) { press in
-            if Self.isComposing { return .ignored }
-            move(from: index, back: press.key == Self.backTab || press.modifiers.contains(.shift))
-            return .handled
-          }
-          .onKeyPress(.upArrow) {
-            if Self.isComposing { return .ignored }
-            onCommand(.up)
-            return .handled
-          }
-          .onKeyPress(.downArrow) {
-            if Self.isComposing { return .ignored }
-            onCommand(.down)
-            return .handled
-          }
+        if arguments[index].type == .dropdown {
+          dropdown(index).frame(width: 130)
+        } else {
+          textField(index)
+            .textFieldStyle(.plain)
+            .font(.system(size: 13))
+            .padding(.horizontal, 8)
+            .frame(width: 130, height: 26)
+            .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
+            .focused($focus, equals: index)
+            .onSubmit { onCommand(.submit) }
+            // While an input method composes, its keys pick candidates instead.
+            .onKeyPress(keys: [.tab, Self.backTab]) { press in
+              if Self.isComposing { return .ignored }
+              move(from: index, back: press.key == Self.backTab || press.modifiers.contains(.shift))
+              return .handled
+            }
+            .onKeyPress(.upArrow) {
+              if Self.isComposing { return .ignored }
+              onCommand(.up)
+              return .handled
+            }
+            .onKeyPress(.downArrow) {
+              if Self.isComposing { return .ignored }
+              onCommand(.down)
+              return .handled
+            }
+        }
       }
     }
     .onChange(of: model.argumentFocusRequest, initial: true) { _, request in
@@ -1154,15 +1158,21 @@ private struct ArgumentFields: View {
     }
   }
 
-  @ViewBuilder private func field(_ index: Int) -> some View {
-    let text = Binding(get: { value(at: index) }, set: { set($0, at: index) })
-    if arguments[index].type == .dropdown {
-      Picker(arguments[index].placeholder, selection: text) {
-        ForEach(arguments[index].data ?? [], id: \.self) { Text($0.title).tag($0.value) }
-      }
-      .labelsHidden()
-      .pickerStyle(.menu)
-    } else if arguments[index].type == .password {
+  private func binding(_ index: Int) -> Binding<String> {
+    Binding(get: { value(at: index) }, set: { set($0, at: index) })
+  }
+
+  private func dropdown(_ index: Int) -> some View {
+    Picker(arguments[index].placeholder, selection: binding(index)) {
+      ForEach(arguments[index].data ?? [], id: \.self) { Text($0.title).tag($0.value) }
+    }
+    .labelsHidden()
+    .pickerStyle(.menu)
+  }
+
+  @ViewBuilder private func textField(_ index: Int) -> some View {
+    let text = binding(index)
+    if arguments[index].type == .password {
       SecureField(arguments[index].placeholder, text: text)
     } else {
       TextField(arguments[index].placeholder, text: text)

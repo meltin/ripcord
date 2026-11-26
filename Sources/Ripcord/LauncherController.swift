@@ -636,6 +636,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
           return
         }
         model.confirmation = nil
+        // Answered yes: that script runs this once without asking again.
+        if case .runScript(let path) = confirmation.action { confirmedScript = path }
         perform(confirmation.action)
       case .cancel, .back:
         model.confirmation = nil
@@ -811,7 +813,6 @@ final class LauncherController: NSObject, NSWindowDelegate {
       openedForQuestion = true
     }
     model.menu = nil
-    confirmedScript = script.url.path
     model.confirmation = Confirmation(
       icon: .script, title: "Run “\(script.title)”?",
       message: "This script asks to be confirmed before it runs.", confirmTitle: "Run Script",
@@ -852,6 +853,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
     confirmedScript = nil
     // Typed for this run, as Raycast's fields empty once it runs; a password isn't kept.
     model.argumentValues[path] = nil
+    // Opened only to ask, from a hotkey: it goes with the question, as System Actions' does,
+    // unless the output is to show in it.
+    if openedForQuestion {
+      openedForQuestion = false
+      if script.mode == .compact, panel.isVisible { hide() }
+    }
     // Hidden already when its hotkey ran it: what was left open there stays.
     if script.mode == .silent, panel.isVisible { hide() }
     if script.mode == .fullOutput {
