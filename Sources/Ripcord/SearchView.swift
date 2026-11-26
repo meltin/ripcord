@@ -1505,7 +1505,7 @@ private struct MenuCard: View {
         .foregroundStyle(.secondary)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-      ForEach(Array(menu.items.enumerated()), id: \.offset) { index, item in
+      ForEach(Array(menu.shown.enumerated()), id: \.offset) { index, item in
         if item.startsSection, index > 0 {
           Divider().opacity(0.5).padding(.vertical, 4)
         }
@@ -1544,6 +1544,24 @@ private struct MenuCard: View {
         // The pointer moves the selection, so Return and the click agree.
         .onHover { if $0 { onCommand(.selectMenuItem(index)) } }
       }
+      if menu.shown.isEmpty {
+        Text("No Results").font(.system(size: 13)).foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity).frame(height: 34)
+      }
+      // Raycast's "Search for actions…": typing while the menu is open lands here.
+      Divider().opacity(0.5).padding(.top, 4)
+      HStack(spacing: 0) {
+        Text(menu.filter.isEmpty ? "Search for actions…" : menu.filter)
+          .foregroundStyle(menu.filter.isEmpty ? .tertiary : .primary)
+        if !menu.filter.isEmpty {
+          // A caret, as the field the text appears to be typed into would show.
+          Rectangle().fill(Color(nsColor: FocusingTextField.caretColor)).frame(width: 2, height: 16)
+        }
+        Spacer()
+      }
+      .font(.system(size: 13))
+      .padding(.horizontal, 10)
+      .frame(height: 34)
     }
     .padding(6)
     // Room for "Open in Visual Studio Code" and its keys on one line.
@@ -1791,6 +1809,9 @@ struct SearchField: NSViewRepresentable {
 }
 
 final class FocusingTextField: NSTextField {
+  /// The app icon's orange.
+  static let caretColor = NSColor(red: 1, green: 0.353, blue: 0.122, alpha: 1)
+
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
     window?.makeFirstResponder(self)
@@ -1800,7 +1821,7 @@ final class FocusingTextField: NSTextField {
   override func becomeFirstResponder() -> Bool {
     let became = super.becomeFirstResponder()
     if let editor = currentEditor() as? NSTextView {
-      editor.insertionPointColor = NSColor(red: 1, green: 0.353, blue: 0.122, alpha: 1)
+      editor.insertionPointColor = Self.caretColor
       // The window's shared field editor paints a white well behind the text; this field is
       // bare, like the panel it sits in.
       editor.drawsBackground = false
