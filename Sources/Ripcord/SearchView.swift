@@ -998,31 +998,31 @@ private struct ConfirmationCard: View {
       Color.black.opacity(0.2)
         .contentShape(Rectangle())
         .onTapGesture { onCommand(.cancel) }
-      VStack(alignment: .leading, spacing: 18) {
-        HStack(alignment: .top, spacing: 12) {
+      VStack(alignment: .leading, spacing: 22) {
+        HStack(alignment: .top, spacing: 14) {
           if let command {
             Image(systemName: command.symbol)
-              .font(.system(size: 15, weight: .semibold))
+              .font(.system(size: 18, weight: .semibold))
               .foregroundStyle(.white)
-              .frame(width: 34, height: 34)
-              .background(command.color.gradient, in: RoundedRectangle(cornerRadius: 9))
+              .frame(width: 42, height: 42)
+              .background(command.color.gradient, in: RoundedRectangle(cornerRadius: 11))
           }
-          VStack(alignment: .leading, spacing: 4) {
-            Text(confirmation.title).font(.system(size: 14, weight: .semibold))
+          VStack(alignment: .leading, spacing: 5) {
+            Text(confirmation.title).font(.system(size: 15, weight: .semibold))
             Text(confirmation.message)
-              .font(.system(size: 12))
+              .font(.system(size: 13))
               .foregroundStyle(.secondary)
               .fixedSize(horizontal: false, vertical: true)
           }
         }
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
           button("Cancel", key: "esc", command: .cancel, tint: .primary, fill: 0.07)
           button(confirmation.confirmTitle, key: "↵", command: .submit, tint: .red, fill: 0.14)
         }
       }
-      .padding(18)
-      .frame(width: 300)
-      .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18))
+      .padding(22)
+      .frame(width: 360)
+      .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20))
       .shadow(color: .black.opacity(0.18), radius: 18, y: 6)
     }
   }
@@ -1038,9 +1038,9 @@ private struct ConfirmationCard: View {
         Keycap(key)
       }
       .font(.system(size: 13, weight: .medium))
-      .frame(maxWidth: .infinity, minHeight: 32)
-      .background(tint.opacity(fill), in: RoundedRectangle(cornerRadius: 9))
-      .contentShape(RoundedRectangle(cornerRadius: 9))
+      .frame(maxWidth: .infinity, minHeight: 36)
+      .background(tint.opacity(fill), in: RoundedRectangle(cornerRadius: 10))
+      .contentShape(RoundedRectangle(cornerRadius: 10))
     }
     .buttonStyle(.plain)
   }
