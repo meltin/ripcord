@@ -288,7 +288,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
       escMonitor = nil
     }
     // An accessory again once neither window is open.
-    if !isSettingsOpen, welcomeWindow == nil { NSApp.setActivationPolicy(.accessory) }
+    if !isSettingsOpen, welcomeWindow == nil {
+      NSApp.setActivationPolicy(.accessory)
+      // Switchers such as AltTab note the policy only as apps activate and deactivate; without
+      // this, Ripcord stays listed with no windows after Settings closes.
+      NSApp.deactivate()
+    }
   }
 
   /// Picks up edits made to the file in an editor while the window was in the background.
