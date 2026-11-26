@@ -50,8 +50,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self?.applyConfig()
       }
     }
+    // Before applyConfig, which writes the defaults when there's no file yet.
+    let firstLaunch = !FileManager.default.fileExists(atPath: configURL.path)
     applyConfig()
-    settings.showWelcomeIfNew()
+    settings.showWelcomeIfNew(firstLaunch: firstLaunch)
   }
 
   /// Opening Ripcord.app again shows the panel, a way in when the hotkey or menu bar icon fails.

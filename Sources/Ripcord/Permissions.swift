@@ -67,11 +67,10 @@ enum Permission: CaseIterable, Identifiable {
       _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
       return
     }
-    // System Events only answers while running.
-    if self == .systemEvents,
-      NSRunningApplication.runningApplications(
-        withBundleIdentifier: bundleIdentifier
-      ).isEmpty,
+    // An app answers only while running; Finder or System Events may have quit.
+    if NSRunningApplication.runningApplications(
+      withBundleIdentifier: bundleIdentifier
+    ).isEmpty,
       let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)
     {
       let configuration = NSWorkspace.OpenConfiguration()
@@ -93,12 +92,16 @@ enum Permission: CaseIterable, Identifiable {
 
   /// Forgets the Accessibility grant and asks again: an ad-hoc signed build is a new app to
   /// macOS, so the grant an earlier build got no longer applies to it.
-  static func resetAccessibility() {
-    let reset = Process()
-    reset.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
-    reset.arguments = ["reset", "Accessibility", Bundle.main.bundleIdentifier ?? ""]
-    try? reset.run()
-    reset.waitUntilExit()
+  static func resetAccessibility() async {
+    // Never without an ID: tccutil with none resets every app's Accessibility grant.
+    guard let id = Bundle.main.bundleIdentifier, !id.isEmpty else { return }
+    await Task.detached {
+      let reset = Process()
+      reset.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+      reset.arguments = ["reset", "Accessibility", id]
+      try? reset.run()
+      reset.waitUntilExit()
+    }.value
     _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
   }
 
@@ -108,9 +111,11 @@ enum Permission: CaseIterable, Identifiable {
       AEDuplicateDesc(descriptor, &target) == noErr
     else { return .unknown }
     defer { AEDisposeDesc(&target) }
-    // Any event: the permission covers the app, not one command.
-    let wildcard = AEEventClass(typeWildCard)
-    switch AEDeterminePermissionToAutomateTarget(&target, wildcard, AEEventID(wildcard), ask) {
+    // A concrete event: the permission covers the whole app, and macOS may only answer, never
+    // ask, for the wildcard.
+    switch AEDeterminePermissionToAutomateTarget(
+      &target, AEEventClass(kCoreEventClass), AEEventID(kAEOpenApplication), ask)
+    {
     case noErr: return .granted
     case OSStatus(errAEEventNotPermitted): return .denied
     case OSStatus(errAEEventWouldRequireUserConsent): return .notAsked

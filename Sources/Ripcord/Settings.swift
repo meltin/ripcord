@@ -219,11 +219,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
   }()
 
   private var welcomeWindow: NSWindow?
+  /// Tracked rather than read from `window`, which is lazy and would be built just to ask.
+  private var isSettingsOpen = false
   private static let welcomeShownKey = "welcomeShown"
 
-  /// The first launch's guide, once; closing it any way counts as seen.
-  func showWelcomeIfNew() {
-    guard !UserDefaults.standard.bool(forKey: Self.welcomeShownKey) else { return }
+  /// The guide on a first launch (no config file before it), once; closing it counts as seen.
+  func showWelcomeIfNew(firstLaunch: Bool) {
+    guard firstLaunch, !UserDefaults.standard.bool(forKey: Self.welcomeShownKey) else { return }
     model.load()
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 640, height: 640),
@@ -252,6 +254,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
   /// Becomes a regular app while the window is open, as Raycast does: macOS 14 only lets an
   /// accessory app ask to come forward, and the request loses to the app the user was in.
   func show() {
+    isSettingsOpen = true
     NSApp.setActivationPolicy(.regular)
     // On top of other apps' windows even if macOS turns the activation request down.
     window.orderFrontRegardless()
@@ -280,12 +283,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
       UserDefaults.standard.set(true, forKey: Self.welcomeShownKey)
       welcomeWindow = nil
     } else {
+      isSettingsOpen = false
       if let escMonitor { NSEvent.removeMonitor(escMonitor) }
       escMonitor = nil
     }
     // An accessory again once neither window is open.
-    let settingsOpen = (notification.object as? NSWindow) !== window && window.isVisible
-    if !settingsOpen, welcomeWindow == nil { NSApp.setActivationPolicy(.accessory) }
+    if !isSettingsOpen, welcomeWindow == nil { NSApp.setActivationPolicy(.accessory) }
   }
 
   /// Picks up edits made to the file in an editor while the window was in the background.
@@ -988,8 +991,8 @@ private struct HotkeyRecorder: View {
   }
 }
 
-/// Each permission with its state and a button to grant it; rechecked every second, so a change
-/// made in System Settings shows up when the user comes back.
+/// Each permission with its state and a button to grant it; rechecked whenever Ripcord comes
+/// back to the front, so a change made in System Settings shows up when the user returns.
 private struct PermissionsCard: View {
   /// The reset note, for the Permissions page; a first run has nothing to reset.
   var showsReset = true
@@ -1013,19 +1016,18 @@ private struct PermissionsCard: View {
             .fixedSize(horizontal: false, vertical: true)
           Spacer(minLength: 12)
           Button("Reset Accessibility") {
-            Permission.resetAccessibility()
-            Task { await refresh() }
+            Task {
+              await Permission.resetAccessibility()
+              await refresh()
+            }
           }
         }
         .padding(.horizontal, 4)
       }
     }
-    .task {
-      while !Task.isCancelled {
-        await refresh()
-        try? await Task.sleep(for: .seconds(1))
-      }
-    }
+    .task { await refresh() }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
+    { _ in Task { await refresh() } }
   }
 
   private func refresh() async {
@@ -1067,18 +1069,24 @@ private struct PermissionRow: View {
       state("Not Granted", "xmark.circle.fill", .red)
       // macOS won't ask again once it's been turned down; only System Settings can change it.
       Button("Open System Settings") { permission.openSystemSettings() }
-    case .notAsked, .unknown:
+    case .notAsked:
       state("Not Granted", "xmark.circle.fill", .red)
-      Button("Grant Access") {
-        Task {
-          await permission.request()
-          // Accessibility is switched on in System Settings; macOS's request only points there.
-          if permission == .accessibility { permission.openSystemSettings() }
-          await onChange()
-        }
-      }
+      grantButton
+    case .unknown:
+      // The app isn't running, so macOS can't say; no red mark for what may well be granted.
+      grantButton
     case nil:
       ProgressView().controlSize(.small)
+    }
+  }
+
+  /// macOS's request; Accessibility's carries its own Open System Settings button.
+  private var grantButton: some View {
+    Button("Grant Access") {
+      Task {
+        await permission.request()
+        await onChange()
+      }
     }
   }
 
@@ -1098,6 +1106,7 @@ struct WelcomeView: View {
   var body: some View {
     // Sized to fit, no scrolling: the window takes this view's height.
     VStack(alignment: .leading, spacing: 16) {
+      LoadErrorBanner(model: model)
       HStack(spacing: 14) {
         Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 56, height: 56)
         VStack(alignment: .leading, spacing: 3) {
