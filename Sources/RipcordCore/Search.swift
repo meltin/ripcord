@@ -193,6 +193,10 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case setEmojiSkinTone(Int?)
     /// Adds the item with this key to Favorites, or takes it out.
     case toggleFavorite(String)
+    /// Reopens a form left unfinished, with what was typed.
+    case openDraft(SavedDrafts.Form)
+    /// Throws a form's draft away.
+    case discardDraft(SavedDrafts.Form)
     /// Moves a favorite past the one shown next to it, up or down.
     case moveFavorite(String, swappingWith: String)
   }
@@ -212,7 +216,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
 
   public enum Kind: Equatable, Sendable {
     case application, calculator, quicklink, command, text, image, snippet, repository, statusCode
-    case color, bookmark, emoji
+    case color, bookmark, emoji, draft
 
     public var primaryAction: String {
       switch self {
@@ -224,6 +228,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
       case .color: "Copy"
       case .bookmark: "Open in Browser"
       case .emoji: "Paste"
+      case .draft: "Open Draft"
       }
     }
   }
@@ -351,7 +356,8 @@ public enum Search {
   /// The start screen for an empty query; otherwise one "Results" section.
   public static func sections(
     for query: String, apps: [AppEntry], running: [AppEntry], quicklinks: [Quicklink],
-    items: [String: ItemSettings] = [:], favorites: [String] = []
+    items: [String: ItemSettings] = [:], favorites: [String] = [],
+    drafts: SavedDrafts = SavedDrafts()
   ) -> [SearchSection] {
     let links = quicklinks.filter(\.isEnabled)
     let trimmed = query.trimmingCharacters(in: .whitespaces)
@@ -386,20 +392,21 @@ public enum Search {
     }
     let decorate = { (result: SearchResult) in withFavoriteActions(result, favorites: shown) }
     // Ripcord's own commands live in the footer's root menu; typing still finds them.
-    return [
-      SearchSection(title: "Favorites", results: favored.map(decorate)),
-      // Capped so Quicklinks stay in view.
-      SearchSection(
-        title: "Running",
-        results: shownRunning.prefix(5).map {
-          decorate(result(for: $0, alias: items[$0.settingsKey]?.alias))
-        }),
-      SearchSection(
-        title: "Quicklinks",
-        results: links.compactMap(result(for:)).filter {
-          !shown.contains($0.itemKey ?? "")
-        }.map(decorate)),
-    ].filter { !$0.results.isEmpty }
+    return [draftSection(drafts)].compactMap { $0 }
+      + [
+        SearchSection(title: "Favorites", results: favored.map(decorate)),
+        // Capped so Quicklinks stay in view.
+        SearchSection(
+          title: "Running",
+          results: shownRunning.prefix(5).map {
+            decorate(result(for: $0, alias: items[$0.settingsKey]?.alias))
+          }),
+        SearchSection(
+          title: "Quicklinks",
+          results: links.compactMap(result(for:)).filter {
+            !shown.contains($0.itemKey ?? "")
+          }.map(decorate)),
+      ].filter { !$0.results.isEmpty }
   }
 
   /// The favorites that can be listed, once each, in the user's order: one for an app that's

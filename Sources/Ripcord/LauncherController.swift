@@ -288,6 +288,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     directory: URL.applicationSupportDirectory.appending(path: "Ripcord/Clipboard"))
   private var colors = ColorHistory(
     fileURL: URL.applicationSupportDirectory.appending(path: "Ripcord/colors.json"))
+  /// Forms left unfinished, listed under Drafts in the root search.
+  private var draftStore = DraftStore(
+    fileURL: URL.applicationSupportDirectory.appending(path: "Ripcord/drafts.json"))
   /// Search Emoji & Symbols' list, read from the app's resources the first time it opens.
   private var emojiCatalog: EmojiCatalog?
   private var emojiHistory = EmojiHistory(
@@ -458,6 +461,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// `keepingMode` leaves a command's list or form as it is, to come back to (`leftOpen`).
   private func hide(keepingMode: Bool = false) {
+    stashDraft()
     // A recording left running would keep every hotkey unregistered.
     closeEditor(backToMenu: false)
     panel.orderOut(nil)
@@ -545,7 +549,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       }
     return Search.sections(
       for: query, apps: apps, running: running, quicklinks: quicklinks, items: items,
-      favorites: favorites)
+      favorites: favorites, drafts: draftStore.drafts)
   }
 
   private func handle(_ command: SearchCommand) {
@@ -646,6 +650,49 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .selectMenuItem(let index): model.menu?.selection = index
     case .editAlias: break  // Only while Set Alias… is open, above.
     }
+  }
+
+  /// Whether anything is typed in Create Snippet's form.
+  private var snippetStarted: Bool {
+    !(model.draft.name + model.draft.text + (model.draft.keyword ?? "") + model.tagsText).isEmpty
+      || model.draft.icon != nil
+  }
+
+  /// Keeps what's typed in a new snippet or bookmark as a draft as its form is left, or drops
+  /// the draft once the form is emptied, as Raycast's Drafts do.
+  private func stashDraft() {
+    switch model.mode {
+    case .snippetForm where model.formSource == nil:
+      let started = snippetStarted
+      let snippet = model.draft
+      let tags = model.tagsText
+      saveDrafts { drafts in
+        drafts.snippet = started ? snippet : nil
+        drafts.snippetTags = started ? tags : nil
+      }
+    case .bookmarkForm:
+      // An edit keeps the new bookmark waiting behind it, if there is one; with none held, the
+      // saved draft stays as it is.
+      let editing = model.bookmarkDraft.original != nil
+      if editing, model.addDraft == nil { return }
+      let new = editing ? model.addDraft : model.bookmarkDraft
+      let fields = new.flatMap { draft -> BookmarkDraftFields? in
+        guard draft.isStarted else { return nil }
+        return BookmarkDraftFields(
+          title: draft.title, url: draft.url, description: draft.description,
+          group: draft.heading.map { $0.line == -1 ? nil : $0.title } ?? "",
+          newGroup: draft.newGroup)
+      }
+      saveDrafts { $0.bookmark = fields }
+    default: break
+    }
+  }
+
+  /// Changes the saved drafts, saying why when they can't be written.
+  private func saveDrafts(_ change: (inout SavedDrafts) -> Void) {
+    var drafts = draftStore.drafts
+    change(&drafts)
+    do { try draftStore.save(drafts) } catch { onError(error.localizedDescription) }
   }
 
   /// Selects the row of the item with `key` after a favorite moved it: its row ID can differ
@@ -823,6 +870,30 @@ final class LauncherController: NSObject, NSWindowDelegate {
       do { try emojiHistory.setSkinTone(tone) } catch { onError(error.localizedDescription) }
       return refreshRows(selecting: model.selected?.id)
     }
+    if case .openDraft(let form) = action {
+      return perform(.run(form == .snippet ? .createSnippet : .addBookmark))
+    }
+    if case .discardDraft(let form) = action {
+      model.menu = nil
+      saveDrafts { drafts in
+        if form == .snippet {
+          drafts.snippet = nil
+          drafts.snippetTags = nil
+        } else {
+          drafts.bookmark = nil
+        }
+      }
+      // The form's own copy goes too, or opening the command would bring it back.
+      if form == .snippet, model.formSource == nil {
+        model.draft = Snippet(name: "", text: "")
+        model.tagsText = ""
+      }
+      if form == .bookmark {
+        model.addDraft = nil
+        if model.bookmarkDraft.original == nil { model.bookmarkDraft = BookmarkDraft() }
+      }
+      return refreshRows(selecting: model.selected?.id)
+    }
     if action == .run(.addBookmark) {
       guard loadBookmarks() else { return }
       let draft = model.bookmarkDraft
@@ -831,6 +902,16 @@ final class LauncherController: NSObject, NSWindowDelegate {
       if let kept = model.addDraft ?? (draft.original == nil && draft.isStarted ? draft : nil) {
         model.bookmarkDraft = rebased(kept)
         model.addDraft = nil
+      } else if let saved = draftStore.drafts.bookmark,
+        !(panel.isVisible && model.mode == .bookmarkForm)
+      {
+        // The draft left last time, its group found again by name.
+        model.bookmarkDraft = rebased(
+          BookmarkDraft(
+            title: saved.title, url: saved.url, description: saved.description,
+            heading: saved.group.map { $0.isEmpty ? nil : BookmarkFile.Heading(title: $0, line: 0) }
+              ?? BookmarkFile.Heading(title: "", line: -1),
+            newGroup: saved.newGroup))
       } else {
         // Raycast's starts on No group: the top of the file, above the first heading.
         let choices = groupChoices()
@@ -968,6 +1049,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       .run(.cleanKeyboard), .run(.searchBookmarks), .run(.addBookmark), .deleteBookmark,
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,
+      .openDraft, .discardDraft,
       .moveFavorite,
       .deleteColor,
       .run(.createSnippet), .clip, .snippet, .system, .window:
@@ -1245,6 +1327,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
           replacing: draft.original, under: destination)
       })
     else { return }
+    if draft.original == nil { saveDrafts { $0.bookmark = nil } }
     model.bookmarkDraft = BookmarkDraft()
     // The list, on the bookmark saved, as Raycast shows it after Add Bookmark. An edit came from
     // the list, so Esc does there what it did before.
@@ -1281,6 +1364,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// Opens a command's own list, from its row or its hotkey.
   private func open(_ mode: LauncherMode) {
+    // A form left for another command's list keeps what was typed.
+    if model.mode != mode { stashDraft() }
     // A command's hotkey would change the list under Set Alias…'s card.
     closeEditor(backToMenu: false)
     // Its hotkey closes its own list, as the launcher hotkey closes the panel.
@@ -1293,6 +1378,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// An edit goes back to Search Snippets, where it started; anything else to the root search.
   private func goBack() {
+    stashDraft()
     model.isPickingIcon = false
     if model.mode == .bookmarkForm {
       // An edit goes back to the list, on the bookmark as it was.
@@ -1333,6 +1419,14 @@ final class LauncherController: NSObject, NSWindowDelegate {
       model.draft = Snippet(name: "", text: "")
       model.tagsText = ""
     }
+    // Create Snippet with nothing typed since launch picks up the draft left last time; not
+    // when it's open already, where its hotkey closes it and an emptied form stays empty.
+    if index == nil, !snippetStarted, !(panel.isVisible && model.mode == .snippetForm),
+      let saved = draftStore.drafts.snippet
+    {
+      model.draft = saved
+      model.tagsText = draftStore.drafts.snippetTags ?? ""
+    }
     if index != nil {
       model.mode = .snippetForm
       return update("")
@@ -1362,6 +1456,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return current.enumerated().map { $0.offset == at ? draft : $0.element }
     }
     guard saved else { return NSSound.beep() }
+    if editing == nil, model.formSource == nil {
+      saveDrafts { drafts in
+        drafts.snippet = nil
+        drafts.snippetTags = nil
+      }
+    }
     model.draft = Snippet(name: "", text: "")
     model.tagsText = ""
     model.editing = nil
