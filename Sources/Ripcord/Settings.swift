@@ -1300,11 +1300,14 @@ private struct OpenWithRow: View {
           } else {
             Text(key == .plain ? "Finder" : "–").foregroundStyle(.secondary)
           }
+          Spacer(minLength: 6)
           Glyph("chevron.up.chevron.down", pointSize: 10)
             .foregroundStyle(.secondary)
         }
+        .lineLimit(1)
         .padding(.horizontal, 10)
-        .frame(height: 28)
+        // One width for every Return, so the dropdowns line up whatever app each names.
+        .frame(width: 220, height: 28)
         .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
         .contentShape(RoundedRectangle(cornerRadius: 7))
       }
