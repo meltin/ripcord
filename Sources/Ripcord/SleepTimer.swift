@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import os
 
 /// Sleep Timer: sleeps the Mac, or only turns its display off, when the time is up.
@@ -12,6 +12,16 @@ final class SleepTimer {
   var onChange: () -> Void = {}
   /// When the time is up, with whether only the display should go off.
   var onFire: (_ displayOnly: Bool) -> Void = { _ in }
+
+  init() {
+    // Asleep already: a timer left running would put the Mac back to sleep, or its display off,
+    // the moment it wakes, as its time passed meanwhile.
+    NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.stop() }
+    }
+  }
 
   var isActive: Bool { endsAt != nil }
   var remaining: TimeInterval? { endsAt.map { max(0, $0.timeIntervalSinceNow) } }

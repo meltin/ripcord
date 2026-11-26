@@ -424,7 +424,8 @@ public enum Search {
       .prefix(30)
       .map(\.result)
 
-    return [calculation, caffeinateFor].compactMap { $0 } + expanded + sleepIn + ranked
+    return [calculation].compactMap { $0 } + expanded + [caffeinateFor].compactMap { $0 } + sleepIn
+      + ranked
   }
 
   /// The time typed after `command`'s title or alias, as in "caffeinate 1h 30m"; nil when it's

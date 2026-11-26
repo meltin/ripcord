@@ -633,6 +633,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.httpStatusCodes) { return open(.httpStatusCodes) }
     if action == .run(.sleepTimer) {
       // As Raycast asks for its argument: the title in the field, the time to be typed after it.
+      // Set Alias…'s card would stay up over rows that changed under it.
+      closeEditor(backToMenu: false)
       if !panel.isVisible { show() }
       model.mode = .root
       return update(BuiltinCommand.sleepTimer.title + " ")

@@ -29,6 +29,14 @@ import Testing
       })
   }
 
+  @Test func aQuicklinkKeywordStillComesFirst() {
+    let items = [BuiltinCommand.caffeinate.settingsKey: ItemSettings(alias: "g")]
+    let links = [Quicklink(name: "Google", url: "https://g.co/?q={query}", keyword: "g")]
+    #expect(
+      Search.results(for: "g 5", apps: [], quicklinks: links, items: items).first?.id
+        == "quicklink-query:Google")
+  }
+
   @Test func listsItsCommandsUnderSleepTimer() {
     let row = Search.results(for: "stop sleep timer", apps: [], quicklinks: []).first
     #expect(row?.action == .run(.stopSleepTimer))
