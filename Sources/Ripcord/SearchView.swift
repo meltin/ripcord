@@ -164,7 +164,8 @@ private struct ResultRow: View {
     .padding(.horizontal, 12)
     .frame(height: LauncherController.rowHeight)
     .background(
-      RoundedRectangle(cornerRadius: 10).fill(isSelected ? Color.primary.opacity(0.1) : .clear)
+      // 0.12 darkens the background as much as Raycast's selected row does.
+      RoundedRectangle(cornerRadius: 10).fill(isSelected ? Color.primary.opacity(0.12) : .clear)
     )
     .contentShape(Rectangle())
   }
@@ -322,7 +323,7 @@ private struct ClipPreview: View {
     .padding(.horizontal, 8)
     .frame(height: 24)
     .background(
-      index.isMultiple(of: 2) ? Color.primary.opacity(0.05) : .clear,
+      index.isMultiple(of: 2) ? Color.primary.opacity(0.025) : .clear,
       in: RoundedRectangle(cornerRadius: 6))
   }
 }
