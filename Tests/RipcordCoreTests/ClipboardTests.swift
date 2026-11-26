@@ -111,7 +111,8 @@ private func temporaryDirectory() -> URL {
       pasteboard.setData(data, forType: .png)
       pasteboard.setString("Gone.png", forType: .string)
       #expect(
-        ClipCapture.read(pasteboard) == .image(data, fileExtension: "png", width: 5, height: 4))
+        ClipCapture.read(pasteboard)
+          == .image(data, fileExtension: "png", width: 5, height: 4, name: "Gone.png"))
     }
     let notes = directory.appending(path: "notes.txt")
     try Data("hi".utf8).write(to: notes)
@@ -327,6 +328,12 @@ private func temporaryDirectory() -> URL {
     #expect(row.title == "CleanShot 1.png")
     #expect(row.subtitle.isEmpty)
     #expect(ClipboardHistory(directory: directory).items.first?.name == "CleanShot 1.png")
+    #expect(history.items.first?.size == data.count)
+    // The same picture copied again as a file under another name takes that name.
+    try history.add(.image(data, fileExtension: "png", width: 2, height: 2, name: "Invoice.png"))
+    #expect(history.items.map(\.name) == ["Invoice.png"])
+    try history.add(.image(data, fileExtension: "png", width: 2, height: 2))
+    #expect(history.items.map(\.name) == ["Invoice.png"])
   }
 
   @Test func offersPasteCopyPinAndDelete() throws {

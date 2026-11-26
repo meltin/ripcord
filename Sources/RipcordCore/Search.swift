@@ -219,7 +219,8 @@ public enum Search {
   }
 
   /// Clipboard History's list: pinned items, then the rest by the day they were last copied,
-  /// newest first, each kept to items whose text contains the query. Images match "image".
+  /// newest first, each kept to items whose text contains the query. Images match "image" or
+  /// their file name.
   public static func clipboardSections(
     for query: String, history: ClipboardHistory, now: Date = .now,
     calendar: Calendar = .current

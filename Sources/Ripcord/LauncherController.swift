@@ -323,6 +323,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .copy(let text):
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(text, forType: .string)
+      // Signed as Ripcord's, by the nspasteboard.org convention, so the history credits it.
+      NSPasteboard.general.setString(
+        Bundle.main.bundleIdentifier ?? "", forType: .init("org.nspasteboard.source"))
     case .reveal(let url):
       NSWorkspace.shared.activateFileViewerSelecting([url])
     case .run(.settings):

@@ -34,17 +34,20 @@ final class ClipboardMonitor {
     self.timer = timer
   }
 
-  private var frontmostAtLastPoll: String?
+  private var frontmostAtLastPoll: NSRunningApplication?
 
   private func poll() {
-    defer { frontmostAtLastPoll = NSWorkspace.shared.frontmostApplication?.bundleIdentifier }
+    let frontmost = NSWorkspace.shared.frontmostApplication
+    defer { frontmostAtLastPoll = frontmost }
     guard isEnabled, pasteboard.changeCount != changeCount else { return }
     changeCount = pasteboard.changeCount
     guard let capture = ClipCapture.read(pasteboard) else { return }
-    // shortcut: without the nspasteboard.org marker, the app in front at the previous poll. A
-    // copy needs a selection first, so it rarely comes within 0.5 s of switching apps, while
-    // CleanShot X leaves the front right after copying; exact needs a per-app event tap.
-    let source = ClipCapture.source(pasteboard) ?? frontmostAtLastPoll
+    // shortcut: without the nspasteboard.org marker, the app in front now, except when a menu
+    // bar app such as CleanShot X was in front at the previous poll: those come forward for an
+    // overlay and leave right after copying. A ⌘C followed within 0.5 s by ⌘Tab is still
+    // credited to the next app; exact needs a per-app event tap.
+    let overlay = frontmostAtLastPoll.flatMap { $0.activationPolicy == .accessory ? $0 : nil }
+    let source = ClipCapture.source(pasteboard) ?? (overlay ?? frontmost)?.bundleIdentifier
     update { try $0.add(capture, from: source) }
   }
 

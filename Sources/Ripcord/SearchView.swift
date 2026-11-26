@@ -220,7 +220,7 @@ private struct ResultIcon: View {
 private struct ClipPreview: View {
   let item: ClipItem
   let imageURL: URL?
-  // Worked out once per item, not on every redraw: counting a 1 MB clip is slow.
+  // Worked out when the preview is built rather than in body, which redraws more often.
   private let details: [(label: String, value: String)]
   private let sourceApp: URL?
 
@@ -236,8 +236,7 @@ private struct ClipPreview: View {
         ]
       case .image(_, let width, let height):
         [("Type", "Image"), ("Dimensions", "\(width)×\(height)")]
-          + (imageURL.flatMap { try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize }
-            .map { [("Size", Int64($0).formatted(.byteCount(style: .file)))] } ?? [])
+          + (item.size.map { [("Size", Int64($0).formatted(.byteCount(style: .file)))] } ?? [])
       }
     details =
       content + [
@@ -356,11 +355,17 @@ private struct Thumbnail: View {
       image = Self.cache.object(forKey: key)
       if image != nil { return }
       let made = await Task.detached(priority: .userInitiated) {
-        [url, maxPixelSize] () -> CGImage? in
+        [url, maxPixelSize, fill] () -> CGImage? in
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        // Filling a square crops the long side, so decode with the short side at maxPixelSize.
+        let fullSize = CGImageSourceCreateImageAtIndex(source, 0, nil).map {
+          (long: max($0.width, $0.height), short: max(min($0.width, $0.height), 1))
+        }
+        let size =
+          fill ? min(maxPixelSize * (fullSize.map { $0.long / $0.short } ?? 1), 2048) : maxPixelSize
         let options: [CFString: Any] = [
           kCGImageSourceCreateThumbnailFromImageAlways: true,
-          kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+          kCGImageSourceThumbnailMaxPixelSize: size,
           kCGImageSourceCreateThumbnailWithTransform: true,
         ]
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)

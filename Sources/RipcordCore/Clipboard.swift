@@ -25,6 +25,8 @@ public struct ClipItem: Codable, Identifiable, Equatable, Sendable {
   public var firstCopied: Date?
   /// The file name of a copied image file, shown in place of "Image".
   public var name: String?
+  /// An image's size in bytes.
+  public var size: Int?
 
   public var copies: Int { timesCopied ?? 1 }
   public var firstDate: Date { firstCopied ?? date }
@@ -63,7 +65,13 @@ public enum ClipCapture: Equatable, Sendable {
       }
       // Too big or unreadable: use the image the copying app put alongside, as CleanShot X
       // does, never the file name a Finder copy also carries as text.
-      return pasteboardImage(pasteboard)
+      guard
+        case .image(let data, let fileExtension, let width, let height, _) =
+          pasteboardImage(pasteboard)
+      else { return nil }
+      return .image(
+        data, fileExtension: fileExtension, width: width, height: height,
+        name: url.lastPathComponent)
     }
     // shortcut: a fixed cap keeps history.json small; becomes a setting with #5.
     if let text = pasteboard.string(forType: .string),
@@ -148,17 +156,22 @@ public struct ClipboardHistory: Sendable {
     throws
   {
     let digest = capture.digest
+    let name: String?
+    let size: Int?
+    if case .image(let data, _, _, _, let fileName) = capture {
+      (name, size) = (fileName, data.count)
+    } else {
+      (name, size) = (nil, nil)
+    }
     if let item = items.first(where: { $0.digest == digest }) {
-      return try touch(item.id, at: date)
+      return try touch(item.id, at: date, name: name)
     }
     let id = UUID()
     let content: ClipItem.Content
-    var name: String?
     switch capture {
     case .text(let text):
       content = .text(text)
-    case .image(let data, let fileExtension, let width, let height, let fileName):
-      name = fileName
+    case .image(let data, let fileExtension, let width, let height, _):
       let file = "\(id.uuidString).\(fileExtension)"
       try FileManager.default.createDirectory(at: imagesURL, withIntermediateDirectories: true)
       try data.write(to: imagesURL.appending(path: file), options: .atomic)
@@ -167,7 +180,7 @@ public struct ClipboardHistory: Sendable {
     let added = [
       ClipItem(
         id: id, content: content, digest: digest, date: date, isPinned: false, source: source,
-        timesCopied: 1, firstCopied: date, name: name)
+        timesCopied: 1, firstCopied: date, name: name, size: size)
     ]
     let dropped = Set((added + items).filter { !$0.isPinned }.dropFirst(Self.limit).map(\.id))
     items = (added + items).filter { item in
@@ -178,9 +191,10 @@ public struct ClipboardHistory: Sendable {
     try save()
   }
 
-  /// Counts another copy of `id` and moves it to the top.
-  public mutating func touch(_ id: UUID, at date: Date = .now) throws {
+  /// Counts another copy of `id` and moves it to the top; a copied file's `name` renames it.
+  public mutating func touch(_ id: UUID, at date: Date = .now, name: String? = nil) throws {
     guard var item = item(id) else { return }
+    item.name = name ?? item.name
     // Kept before `date` moves on, for items saved before firstCopied existed.
     item.firstCopied = item.firstDate
     item.date = date
