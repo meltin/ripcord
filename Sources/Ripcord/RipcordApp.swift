@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     NSApp.mainMenu = makeMainMenu()
     statusItem = makeStatusItem()
     launcher.onOpenSettings = { [weak self] in self?.openSettings() }
+    launcher.editSnippets = { [weak self] change in self?.editSnippets(change) ?? false }
     settings.model.onSave = { [weak self] in self?.applyConfig() }
     settings.model.onRecordingChange = { [weak self] isRecording in
       self?.isRecording = isRecording
@@ -59,6 +60,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   @objc private func toggleLauncher() {
     if !launcher.isVisible { applyConfig() }
     launcher.toggle()
+  }
+
+  /// Through the settings window's model, so an open window shows the change and can't write
+  /// back a list from before it. Read first, so edits made to the file meanwhile are kept.
+  private func editSnippets(_ change: (inout [Snippet]) -> Void) -> Bool {
+    let model = settings.model
+    model.load()
+    guard model.loadError == nil else {
+      showError(model.loadError ?? "")
+      return false
+    }
+    change(&model.config.snippets)
+    // Saving calls applyConfig, which hands the launcher the new list.
+    model.saveIfChanged()
+    return model.loadError == nil
   }
 
   @objc private func openSettings() {

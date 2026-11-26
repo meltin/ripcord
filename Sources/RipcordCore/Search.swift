@@ -2,12 +2,13 @@ import Foundation
 
 /// Commands Ripcord runs itself, listed alongside apps.
 public enum BuiltinCommand: CaseIterable, Sendable {
-  case clipboardHistory, searchSnippets, settings, resetWindowPosition, quit
+  case clipboardHistory, searchSnippets, createSnippet, settings, resetWindowPosition, quit
 
   public var title: String {
     switch self {
     case .clipboardHistory: "Clipboard History"
     case .searchSnippets: "Search Snippets"
+    case .createSnippet: "Create Snippet"
     case .settings: "Ripcord Settings"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .quit: "Quit Ripcord"
@@ -19,6 +20,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     switch self {
     case .clipboardHistory: "command:clipboard-history"
     case .searchSnippets: "command:search-snippets"
+    case .createSnippet: "command:create-snippet"
     case .settings: "command:settings"
     case .resetWindowPosition: "command:reset-window-position"
     case .quit: "command:quit"
@@ -50,12 +52,12 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case reveal(URL)
     case run(BuiltinCommand)
     case clip(UUID, ClipAction)
-    /// A snippet's text, placeholders not yet filled in.
-    case snippet(String, SnippetAction)
+    /// The snippet at this index in the config.
+    case snippet(Int, SnippetAction)
   }
 
   public enum SnippetAction: Equatable, Sendable {
-    case paste, copy
+    case paste, copy, edit, delete
   }
 
   public enum ClipAction: Equatable, Sendable {
@@ -105,12 +107,19 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
           shortcut: "⇧⌘P", action: .clip(id, .togglePin)),
         MenuAction(title: "Delete", symbol: "trash", shortcut: "⌃X", action: .clip(id, .delete)),
       ]
-    case .snippet(let text, _):
+    case .snippet(let index, _):
       return [
         primary,
         MenuAction(
           title: "Copy to Clipboard", symbol: "doc.on.doc", shortcut: "⇧⌘C",
-          action: .snippet(text, .copy)),
+          action: .snippet(index, .copy)),
+        MenuAction(
+          title: "Edit Snippet", symbol: "pencil", shortcut: "⌘E", action: .snippet(index, .edit)),
+        MenuAction(
+          title: "Create Snippet", symbol: "plus", shortcut: "⌘N", action: .run(.createSnippet)),
+        MenuAction(
+          title: "Delete Snippet", symbol: "trash", shortcut: "⌃X", action: .snippet(index, .delete)
+        ),
       ]
     default:
       return [primary]
@@ -314,7 +323,7 @@ public enum Search {
         // By position: a new snippet's name is empty, and names may repeat.
         id: "snippet:\(index)", title: title(snippet),
         subtitle: "", keyword: keyword(snippet), kind: .snippet,
-        action: .snippet(snippet.text, .paste))
+        action: .snippet(index, .paste))
     }
     return results.isEmpty ? [] : [SearchSection(title: "Snippets", results: results)]
   }

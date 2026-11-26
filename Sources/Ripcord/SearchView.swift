@@ -24,16 +24,23 @@ struct SearchView: View {
         } else if let logo = Bundle.main.image(forResource: "MenuBarIcon") {
           Image(nsImage: logo).renderingMode(.template).foregroundStyle(.secondary)
         }
-        SearchField(
-          text: model.query,
-          placeholder: model.mode.placeholder,
-          onChange: onQueryChange, onCommand: onCommand)
+        if model.mode == .snippetForm {
+          // A form has no query; the field would take its keys.
+          Spacer()
+        } else {
+          SearchField(
+            text: model.query,
+            placeholder: model.mode.placeholder,
+            onChange: onQueryChange, onCommand: onCommand)
+        }
       }
       .padding(.horizontal, 20)
       .frame(height: LauncherController.fieldHeight)
       .background(DragArea())
       Divider().opacity(0.5)
-      if model.sections.isEmpty {
+      if model.mode == .snippetForm {
+        SnippetForm(model: model)
+      } else if model.sections.isEmpty {
         EmptyState(query: model.query, mode: model.mode)
       } else if model.mode != .root {
         // Raycast's layout: the list on the left, the selected item and its details on the right.
@@ -44,8 +51,10 @@ struct SearchView: View {
             let item = history.item(id)
           {
             ClipPreview(item: item, imageURL: history.imageURL(of: item))
-          } else if let selected = model.selected, case .snippet(let text, _) = selected.action {
-            SnippetPreview(result: selected, text: text)
+          } else if let selected = model.selected, case .snippet(let index, _) = selected.action,
+            model.snippets.indices.contains(index)
+          {
+            SnippetPreview(result: selected, text: model.snippets[index].text)
           } else {
             Spacer()
           }
@@ -118,9 +127,11 @@ private struct EmptyState: View {
     case .clipboard:
       "Nothing copied contains “\(query)”."
     case .snippets where query.trimmingCharacters(in: .whitespaces).isEmpty:
-      "Add snippets in Settings, then paste them from here."
+      "Save text you type again and again with Create Snippet."
     case .snippets:
       "No snippet contains “\(query)”."
+    case .snippetForm:
+      ""
     }
   }
 
@@ -224,6 +235,7 @@ extension BuiltinCommand {
     switch self {
     case .clipboardHistory: "list.clipboard.fill"
     case .searchSnippets: "text.quote"
+    case .createSnippet: "text.badge.plus"
     case .settings: "gearshape.fill"
     case .resetWindowPosition: "macwindow"
     case .quit: "power"
@@ -233,7 +245,7 @@ extension BuiltinCommand {
   fileprivate var color: Color {
     switch self {
     case .clipboardHistory, .quit: .red
-    case .searchSnippets: .orange
+    case .searchSnippets, .createSnippet: .orange
     case .settings, .resetWindowPosition: .gray
     }
   }
@@ -319,6 +331,70 @@ private struct ClipPreview: View {
         }
       }
     }
+  }
+}
+
+/// Create Snippet's form, as Raycast lays it out: the text on the left, name and keyword on the
+/// right. ⌘↵ saves; Return types a new line.
+private struct SnippetForm: View {
+  @Bindable var model: LauncherModel
+  @FocusState private var isTextFocused: Bool
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 24) {
+      VStack(alignment: .leading, spacing: 8) {
+        label("Snippet")
+        TextEditor(text: $model.draft.text)
+          .font(.system(size: 13))
+          .scrollContentBackground(.hidden)
+          .padding(8)
+          .field()
+          .focused($isTextFocused)
+        Text("{date} and {clipboard} are filled in with today's date and the copied text.")
+          .font(.system(size: 11))
+          .foregroundStyle(.secondary)
+      }
+      VStack(alignment: .leading, spacing: 8) {
+        label("Name")
+        TextField("Snippet name", text: $model.draft.name)
+          .textFieldStyle(.plain)
+          .padding(.horizontal, 10)
+          .frame(height: 32)
+          .field()
+        label("Keyword").padding(.top, 12)
+        TextField(
+          "Keyword",
+          text: Binding {
+            model.draft.keyword ?? ""
+          } set: {
+            model.draft.keyword = $0.isEmpty ? nil : $0
+          }
+        )
+        .textFieldStyle(.plain)
+        .padding(.horizontal, 10)
+        .frame(height: 32)
+        .field()
+        Spacer()
+      }
+      .frame(width: 260)
+    }
+    .font(.system(size: 13))
+    .padding(.horizontal, 24)
+    .padding(.top, 16)
+    .padding(.bottom, LauncherController.footerHeight + 12)
+    .onAppear { isTextFocused = true }
+  }
+
+  private func label(_ text: String) -> some View {
+    Text(text).font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+  }
+}
+
+extension View {
+  /// A form field's rounded well, as Raycast draws them.
+  fileprivate func field() -> some View {
+    background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+      .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
   }
 }
 
@@ -473,7 +549,21 @@ private struct Footer: View {
       }
       Spacer()
       HStack(spacing: 2) {
-        if let selected {
+        if mode == .snippetForm {
+          HoverButton {
+            onCommand(.submit)
+          } label: {
+            HStack(spacing: 6) {
+              Text("Save Snippet")
+              HStack(spacing: 2) {
+                Keycap("⌘")
+                Keycap("↵")
+              }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+          }
+        } else if let selected {
           HoverButton {
             onCommand(.submit)
           } label: {
@@ -485,18 +575,8 @@ private struct Footer: View {
             .frame(height: 26)
           }
         }
-        HoverButton {
-          onCommand(.toggleMenu(root: false))
-        } label: {
-          HStack(spacing: 6) {
-            Text("Actions").foregroundStyle(.secondary)
-            HStack(spacing: 2) {
-              Keycap("⌘")
-              Keycap("K")
-            }
-          }
-          .padding(.horizontal, 10)
-          .frame(height: 26)
+        if mode != .snippetForm {
+          actionsButton
         }
       }
       .padding(.horizontal, 3)
@@ -507,6 +587,22 @@ private struct Footer: View {
     .padding(.horizontal, 8)
     .frame(height: LauncherController.footerHeight)
     .background(DragArea())
+  }
+
+  private var actionsButton: some View {
+    HoverButton {
+      onCommand(.toggleMenu(root: false))
+    } label: {
+      HStack(spacing: 6) {
+        Text("Actions").foregroundStyle(.secondary)
+        HStack(spacing: 2) {
+          Keycap("⌘")
+          Keycap("K")
+        }
+      }
+      .padding(.horizontal, 10)
+      .frame(height: 26)
+    }
   }
 }
 
@@ -708,6 +804,7 @@ extension LauncherMode {
     case .root: "Search apps, calculate, open Quicklinks…"
     case .clipboard: "Search Clipboard History…"
     case .snippets: "Search Snippets…"
+    case .snippetForm: ""
     }
   }
 }

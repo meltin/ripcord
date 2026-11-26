@@ -13,7 +13,7 @@ struct OpenMenu {
 
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
-  case root, clipboard, snippets
+  case root, clipboard, snippets, snippetForm
 
   /// The command whose list this is; nil for the root search.
   var command: BuiltinCommand? {
@@ -21,6 +21,7 @@ enum LauncherMode {
     case .root: nil
     case .clipboard: .clipboardHistory
     case .snippets: .searchSnippets
+    case .snippetForm: .createSnippet
     }
   }
 }
@@ -37,6 +38,11 @@ final class LauncherModel {
   var sections: [SearchSection] = []
   var selection = 0
   var menu: OpenMenu?
+  /// The config's snippets, for the preview of the selected one.
+  var snippets: [Snippet] = []
+  /// What Create Snippet's form holds; `editing` is the snippet's index when it's an edit.
+  var draft = Snippet(name: "", text: "")
+  var editing: Int?
 
   /// Every row in display order; `selection` indexes into this.
   var results: [SearchResult] { sections.flatMap(\.results) }
@@ -54,8 +60,22 @@ enum SearchCommand {
 /// A panel that takes keys without activating Ripcord, so the previous app stays frontmost.
 final class LauncherPanel: NSPanel {
   var keyEquivalentHandler: ((NSEvent) -> Bool)?
+  /// Sees Esc before the focused field; true when it handled it. A text editor would otherwise
+  /// take Esc to show word completions.
+  var escapeHandler: (() -> Bool)?
 
   override var canBecomeKey: Bool { true }
+
+  override func sendEvent(_ event: NSEvent) {
+    if event.type == .keyDown, event.keyCode == UInt16(kVK_Escape),
+      // Esc first cancels Japanese input that's still being composed.
+      (firstResponder as? NSTextView)?.hasMarkedText() != true,
+      escapeHandler?() == true
+    {
+      return
+    }
+    super.sendEvent(event)
+  }
 
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
     keyEquivalentHandler?(event) == true || super.performKeyEquivalent(with: event)
@@ -81,8 +101,13 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
   }
   var snippets: [Snippet] = [] {
-    didSet { if snippets != oldValue, model.mode == .snippets { refreshRows() } }
+    didSet {
+      model.snippets = snippets
+      if snippets != oldValue, model.mode == .snippets { refreshRows() }
+    }
   }
+  /// Saves a change to the config's snippets; false when the file couldn't be written.
+  var editSnippets: (_ change: (inout [Snippet]) -> Void) -> Bool = { _ in false }
   /// The input source selected while the panel is open, by TIS ID; nil leaves it alone.
   var inputSource: String?
   /// What the panel switched away from, put back when it closes.
@@ -114,6 +139,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
     panel.isMovableByWindowBackground = true
     panel.delegate = self
     panel.keyEquivalentHandler = { [weak self] in self?.handleKeyEquivalent($0) ?? false }
+    panel.escapeHandler = { [weak self] in
+      // Only the form: the search field turns Esc into .cancel itself.
+      guard let self, model.mode == .snippetForm else { return false }
+      handle(.cancel)
+      return true
+    }
 
     let glass = NSGlassEffectView()
     glass.cornerRadius = 22
@@ -286,6 +317,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       default: break
       }
     }
+    if model.mode == .snippetForm, case .submit = command { return saveDraft() }
     let count = model.results.count
     switch command {
     case .up: model.selection = max(model.selection - 1, 0)
@@ -294,11 +326,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .cancel:
       // Like Raycast: Esc leaves a command's list for the root search first.
       guard model.mode != .root, !closesOnCancel else { return hide() }
-      model.mode = .root
-      update("")
+      goBack()
     case .back:
-      model.mode = .root
-      update("")
+      goBack()
     case .activate(let id): model.results.first { $0.id == id }.map { perform($0.action) }
     case .toggleMenu(let root): toggleMenu(root: root)
     case .runMenuItem(let index):
@@ -340,6 +370,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if flags == .command, let selector = editing[key] {
       return NSApp.sendAction(selector, to: nil, from: panel)
     }
+    if flags == .command, key == "\r", model.mode == .snippetForm {
+      saveDraft()
+      return true
+    }
     if flags == .command, key == "k" {
       toggleMenu(root: false)
       return true
@@ -360,9 +394,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.resetWindowPosition) { return resetPosition() }
     if action == .run(.clipboardHistory) { return open(.clipboard) }
     if action == .run(.searchSnippets) { return open(.snippets) }
+    if action == .run(.createSnippet) { return edit(nil) }
     if case .clip(let id, let clipAction) = action { return perform(clipAction, on: id) }
-    if case .snippet(let text, let snippetAction) = action {
-      return perform(snippetAction, with: text)
+    if case .snippet(let index, let snippetAction) = action {
+      return perform(snippetAction, on: index)
     }
     // Open Settings while the panel still holds the key press, so macOS treats it as the
     // user's request to bring Ripcord forward.
@@ -381,8 +416,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       NSWorkspace.shared.activateFileViewerSelecting([url])
     case .run(.settings):
       break  // Opened before hide(), above.
-    case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets), .clip,
-      .snippet:
+    case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
+      .run(.createSnippet), .clip, .snippet:
       break  // Handled above, without hiding the panel.
     case .run(.quit):
       NSApp.terminate(nil)
@@ -399,8 +434,64 @@ final class LauncherController: NSObject, NSWindowDelegate {
     update("")
   }
 
+  /// An edit goes back to Search Snippets, where it started; anything else to the root search.
+  private func goBack() {
+    let fromList = model.mode == .snippetForm && model.editing != nil
+    model.mode = fromList ? .snippets : .root
+    update("")
+  }
+
+  /// Opens the form on a new snippet, or on the one at `index`.
+  private func edit(_ index: Int?) {
+    model.editing = index.flatMap { snippets.indices.contains($0) ? $0 : nil }
+    model.draft = model.editing.map { snippets[$0] } ?? Snippet(name: "", text: "")
+    if index != nil {
+      model.mode = .snippetForm
+      return update("")
+    }
+    open(.snippetForm)
+  }
+
+  /// Saves the form, then shows the snippet in Search Snippets. A name and text are required.
+  private func saveDraft() {
+    let draft = Snippet(
+      name: model.draft.name.trimmingCharacters(in: .whitespaces), text: model.draft.text,
+      keyword: model.draft.keyword?.trimmingCharacters(in: .whitespaces).nilIfEmpty)
+    guard !draft.name.isEmpty, !draft.text.isEmpty else { return NSSound.beep() }
+    let editing = model.editing
+    var index = 0
+    let saved = editSnippets { snippets in
+      if let editing, snippets.indices.contains(editing) {
+        snippets[editing] = draft
+        index = editing
+      } else {
+        snippets.append(draft)
+        index = snippets.count - 1
+      }
+    }
+    guard saved else { return NSSound.beep() }
+    model.mode = .snippets
+    update("")
+    refreshRows(selecting: "snippet:\(index)")
+  }
+
+  private func perform(_ action: SearchResult.SnippetAction, on index: Int) {
+    guard snippets.indices.contains(index) else { return NSSound.beep() }
+    switch action {
+    case .paste, .copy: paste(snippets[index].text, copyOnly: action == .copy)
+    case .edit: edit(index)
+    case .delete:
+      model.menu = nil
+      let saved = editSnippets { snippets in
+        if snippets.indices.contains(index) { snippets.remove(at: index) }
+      }
+      if !saved { NSSound.beep() }
+    }
+  }
+
   /// Paste borrows the pasteboard and puts back what the user had copied; Copy replaces it.
-  private func perform(_ action: SearchResult.SnippetAction, with text: String) {
+  private func paste(_ text: String, copyOnly: Bool) {
+    let action: SearchResult.SnippetAction = copyOnly ? .copy : .paste
     let date = Date.now.formatted(date: .abbreviated, time: .omitted)
     // Read before writing, which replaces what {clipboard} stands for.
     let copied = NSPasteboard.general.string(forType: .string) ?? ""
@@ -441,4 +532,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       refreshRows(selecting: action == .togglePin ? "clip:\(id)" : selected)
     }
   }
+}
+
+extension String {
+  fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
 }

@@ -65,20 +65,25 @@ import Testing
     #expect(results.map(\.title) == ["Greeting", "Signature"])
   }
 
-  @Test func pastesOrCopiesTheSavedText() throws {
+  @Test func offersPasteCopyEditCreateAndDelete() throws {
     let result = try #require(
       Search.snippetSections(for: "Greeting", snippets: snippets).first?.results.first)
     #expect(result.kind.primaryAction == "Paste to App")
     #expect(result.keyword == "sig")
-    #expect(result.actions.map(\.shortcut) == ["↵", "⇧⌘C"])
+    #expect(result.actions.map(\.shortcut) == ["↵", "⇧⌘C", "⌘E", "⌘N", "⌃X"])
     #expect(
       result.actions.map(\.action) == [
-        .snippet("Hello on {date}", .paste), .snippet("Hello on {date}", .copy),
+        .snippet(4, .paste), .snippet(4, .copy), .snippet(4, .edit), .run(.createSnippet),
+        .snippet(4, .delete),
       ])
   }
 
-  @Test func theCommandIsFoundByTyping() {
-    let results = Search.results(for: "snippets", apps: [], quicklinks: [])
-    #expect(results.first?.action == .run(.searchSnippets))
+  @Test func theCommandsAreFoundByTyping() {
+    #expect(
+      Search.results(for: "search snippets", apps: [], quicklinks: []).first?.action
+        == .run(.searchSnippets))
+    #expect(
+      Search.results(for: "create snippet", apps: [], quicklinks: []).first?.action
+        == .run(.createSnippet))
   }
 }
