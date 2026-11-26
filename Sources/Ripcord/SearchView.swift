@@ -1400,7 +1400,7 @@ private struct MenuCard: View {
             } else {
               Glyph(item.symbol, pointSize: 13)
                 .frame(width: 18)
-                // Latin glyphs: text.cursor draws あ under a Japanese locale.
+                // For the SF Symbol fallback: text.cursor draws あ under a Japanese locale.
                 .environment(\.locale, Locale(identifier: "en"))
             }
             Text(title(of: item.action, else: item.title, pasteTarget))

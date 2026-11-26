@@ -184,8 +184,12 @@ enum Tabler {
       let url = Bundle.main.url(
         forResource: (name as NSString).lastPathComponent, withExtension: "svg",
         subdirectory: "Tabler/" + (name as NSString).deletingLastPathComponent),
-      let image = NSImage(contentsOf: url)
+      var svg = try? String(contentsOf: url, encoding: .utf8)
     else { return nil }
+    // Tabler's 2-unit stroke grows with the icon; big ones get a lighter line, as the light SF
+    // Symbols they replace had.
+    if size >= 32 { svg = svg.replacing("stroke-width=\"2\"", with: "stroke-width=\"1.25\"") }
+    guard let image = NSImage(data: Data(svg.utf8)) else { return nil }
     // An SVG scales as a vector, so setting the size draws it sharp at any size.
     image.size = NSSize(width: size, height: size)
     image.isTemplate = true
@@ -200,7 +204,7 @@ enum Tabler {
 /// the current foreground style. Falls back to the SF Symbol where there's no Tabler icon.
 struct Glyph: View {
   let symbol: String
-  var pointSize: CGFloat = 13
+  let pointSize: CGFloat
 
   init(_ symbol: String, pointSize: CGFloat = 13) {
     self.symbol = symbol
@@ -212,7 +216,9 @@ struct Glyph: View {
 
   var body: some View {
     if let image = Tabler.image(symbol, size: side) {
+      // Decoration beside text that names the thing, as SF Symbols in labels were.
       Image(nsImage: image).renderingMode(.template).frame(width: side, height: side)
+        .accessibilityHidden(true)
     } else {
       Image(systemName: symbol).font(.system(size: pointSize))
     }
