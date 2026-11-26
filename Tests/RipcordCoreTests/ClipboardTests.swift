@@ -180,7 +180,7 @@ private func temporaryDirectory() -> URL {
     let sections = Search.clipboardSections(for: "", history: history)
     #expect(sections.map(\.title) == ["Pinned", "Recent"])
     #expect(sections[0].results.map(\.title) == ["pin me"])
-    #expect(sections[1].results.map(\.title) == ["first line"])
+    #expect(sections[1].results.map(\.title) == ["first line second line"])
   }
 
   @Test func filtersByTheCopiedTextAndFindsImagesByTheWordImage() throws {

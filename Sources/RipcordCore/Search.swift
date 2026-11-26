@@ -230,9 +230,8 @@ public enum Search {
       switch item.content {
       case .text(let text):
         guard trimmed.isEmpty || text.localizedStandardContains(trimmed) else { return nil }
-        let line =
-          text.split(whereSeparator: \.isNewline)
-          .map { $0.trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? ""
+        // All of it on one line, as Raycast shows it, so a second line isn't hidden.
+        let line = text.prefix(1000).split(whereSeparator: \.isWhitespace).joined(separator: " ")
         return SearchResult(
           id: id, title: String(line.prefix(200)), subtitle: "", keyword: nil, kind: .text,
           action: action, isPinned: item.isPinned)
