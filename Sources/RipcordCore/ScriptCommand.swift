@@ -105,7 +105,9 @@ public struct ScriptCommand: Equatable, Sendable {
   /// `output` without terminal color codes, which fullOutput would show as junk: colors aren't
   /// drawn yet.
   public static func plain(_ output: String) -> String {
-    output.replacing(/\u{1B}\[[0-9;?]*[A-Za-z]/, with: "")
+    output
+      .replacing(/\u{1B}\][^\u{07}\u{1B}]*(\u{07}|\u{1B}\\)/, with: "")  // OSC, as links
+      .replacing(/\u{1B}\[[0-?]*[ -\/]*[@-~]/, with: "")
   }
 
   /// The last line of `output` with text, for a toast; nil for none.

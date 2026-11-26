@@ -90,6 +90,7 @@ import Testing
 
   @Test func dropsColorCodes() {
     #expect(ScriptCommand.plain("\u{1B}[31;42mred\u{1B}[0m plain") == "red plain")
+    #expect(ScriptCommand.plain("\u{1B}]8;;https://a.b\u{1B}\\link\u{1B}]8;;\u{07}") == "link")
   }
 
   @Test func findsTheLastLineWithText() {

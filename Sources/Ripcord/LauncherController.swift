@@ -248,6 +248,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private var scripts: [ScriptCommand] = []
   /// Which compact run's toast is showing, so an older one doesn't clear a newer.
   private var scriptRun = 0
+  /// The fullOutput run the output view waits for, so an earlier one's result never shows there.
+  private var outputRun = 0
   /// The root search's Favorites, by item key.
   var favorites: [String] = [] {
     didSet {
@@ -761,8 +763,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
   }
 
   /// Runs a Script Command as its mode says: silent closes the panel and shows the last line
-  /// over the screen; compact keeps the panel and shows it over the footer. A failure shows the
-  /// exit code and the last line of what the script printed.
+  /// over the screen; compact keeps the panel and shows it over the footer; fullOutput opens a
+  /// view that shows all of it once the script ends. A failure shows the exit code and the last
+  /// line of what the script printed.
   private func runScript(_ path: String) {
     guard let script = scripts.first(where: { $0.url.path == path }) else {
       return onError("That script is gone from its folder.")
@@ -770,24 +773,29 @@ final class LauncherController: NSObject, NSWindowDelegate {
     // Hidden already when its hotkey ran it: what was left open there stays.
     if script.mode == .silent, panel.isVisible { hide() }
     if script.mode == .fullOutput {
+      outputRun += 1
       model.scriptOutput = (script.title, nil, false)
-      open(.scriptOutput)
+      // Already showing another's output: open() would take it as a toggle and close.
+      if !(panel.isVisible && model.mode == .scriptOutput) { open(.scriptOutput) }
     }
+    let run = outputRun
     ScriptRunner.run(script) { [weak self] result in
       DispatchQueue.main.async {
-        MainActor.assumeIsolated { self?.finish(script, result) }
+        MainActor.assumeIsolated { self?.finish(script, result, run: run) }
       }
     }
   }
 
-  private func finish(_ script: ScriptCommand, _ result: ScriptRunner.Result) {
+  private func finish(_ script: ScriptCommand, _ result: ScriptRunner.Result, run: Int) {
     let failed = result.status != 0
     if script.mode == .fullOutput {
-      // Shown only while its view is still the one open for it.
-      guard model.mode == .scriptOutput, model.scriptOutput.title == script.title else { return }
-      let shown = ScriptCommand.plain(
-        result.output + (failed ? "\n\(result.errors)\nExit code \(result.status)" : ""))
-      model.scriptOutput = (script.title, shown, failed)
+      // Shown only while its view is still the one open for this run.
+      guard model.mode == .scriptOutput, run == outputRun else { return }
+      // Both streams, as a terminal shows them: many tools log to stderr even when they succeed.
+      let parts = [result.output, result.errors, failed ? "Exit code \(result.status)" : ""]
+        .map { $0.trimmingCharacters(in: .newlines) }.filter { !$0.isEmpty }
+      let shown = ScriptCommand.plain(parts.joined(separator: "\n"))
+      model.scriptOutput = (script.title, shown.isEmpty ? "No output" : shown, failed)
       return
     }
     let line =
