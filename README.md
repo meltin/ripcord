@@ -51,7 +51,8 @@
   a new one, filled with the tab you're on in Safari, Chrome or Arc. Only the lines a change
   touches are rewritten; the rest stays as you wrote it
 - Notes: Ripcord Notes opens a window floating over your apps, without taking them out of front,
-  on one note at a time; ⌘N starts another and ⌘P searches them. Each note is a Markdown file in
+  on one note at a time, formatting its Markdown as you type (headings, emphasis, code, quotes,
+  lists, checkboxes, links); ⌘N starts another and ⌘P searches them. Each note is a Markdown file in
   `~/.config/ripcord/notes`, titled by its first line and saved as you type; one changed outside
   Ripcord is never saved over. Search Notes finds notes by their text, and ⌃X moves one to the
   Trash
