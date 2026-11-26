@@ -19,7 +19,7 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Ripcord's System Actions ask Finder to empty the Trash, System Events to switch between Light and Dark, and the login window to log out, restart or shut down.</string>
+	<string>Ripcord's System Actions ask Finder to empty the Trash, System Events to switch between Light and Dark, and the login window to log out, restart or shut down. Add Bookmark asks Safari, Chrome or Arc for the tab you're on.</string>
 	<key>LSUIElement</key>
 	<true/>
 </dict>

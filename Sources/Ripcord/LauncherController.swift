@@ -306,6 +306,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     directory: URL.applicationSupportDirectory.appending(path: "Ripcord/Clipboard"))
   private var colors = ColorHistory(
     fileURL: URL.applicationSupportDirectory.appending(path: "Ripcord/colors.json"))
+  /// The app in front when the panel opened, whose tab Add Bookmark reads if it's a browser.
+  private var frontmostBundleID: String?
   /// Forms left unfinished, listed under Drafts in the root search.
   private var draftStore = DraftStore(
     fileURL: URL.applicationSupportDirectory.appending(path: "Ripcord/drafts.json"))
@@ -402,6 +404,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     leftOpen = nil
     refreshApps()
     model.pasteTarget = NSWorkspace.shared.frontmostApplication?.localizedName
+    frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
     if let resumed {
       // The query, selection and any draft are as they were; only the rows are re-read.
       if resumed == .bookmarks, !loadBookmarks() { return show() }
@@ -676,6 +679,45 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .selectMenuItem(let index): model.menu?.selection = index
     case .editAlias: break  // Only while Set Alias… is open, above.
     }
+  }
+
+  /// Fills a fresh Add Bookmark from the browser that was in front, as Raycast's does: the
+  /// script runs off the main thread, as the first run waits on macOS's Automation question, and
+  /// its answer goes in only while the form is still empty.
+  private func fillFromBrowser() {
+    guard let id = frontmostBundleID, let script = BrowserTab.script(forBundleID: id) else {
+      return
+    }
+    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+      let output = Self.runAppleScript(script)
+      DispatchQueue.main.async {
+        MainActor.assumeIsolated { self?.fill(fromTab: output) }
+      }
+    }
+  }
+
+  private func fill(fromTab output: String) {
+    let draft = model.bookmarkDraft
+    guard model.mode == .bookmarkForm, draft.original == nil, draft.title.isEmpty,
+      draft.url.isEmpty, let tab = BrowserTab.parse(output)
+    else { return }
+    model.bookmarkDraft.url = tab.url
+    model.bookmarkDraft.title = tab.title
+  }
+
+  /// Runs `script` with osascript, which macOS asks about as Ripcord's; its output, or "" when
+  /// it fails, as when Automation is refused.
+  private nonisolated static func runAppleScript(_ script: String) -> String {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+    process.arguments = ["-e", script]
+    let output = Pipe()
+    process.standardOutput = output
+    process.standardError = Pipe()
+    do { try process.run() } catch { return "" }
+    let data = output.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    return process.terminationStatus == 0 ? String(decoding: data, as: UTF8.self) : ""
   }
 
   /// Whether anything is typed in Create Snippet's form.
@@ -992,6 +1034,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
         // Raycast's starts on No group: the top of the file, above the first heading.
         let choices = groupChoices()
         model.bookmarkDraft = BookmarkDraft(heading: choices.first, headings: choices)
+        fillFromBrowser()
       }
       // From an edit, a new form rather than closing the panel, as its hotkey closes its own.
       if panel.isVisible, model.mode == .bookmarkForm, draft.original != nil {
