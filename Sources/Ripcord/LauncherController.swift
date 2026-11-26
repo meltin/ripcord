@@ -624,7 +624,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     guard action == .paste else { return }
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [clipboard] in
       guard clipboard.pasteIntoFrontmostApp(thenLeft: expansion.charactersAfterCursor) else {
-        // Not pasted: leave the snippet copied so Return still did something, and say so.
+        // Not pasted (no Accessibility yet): put back what was copied, or the retry after
+        // granting it would fill {clipboard} with this snippet.
+        clipboard.restore(saved)
         return NSSound.beep()
       }
       // shortcut: the app reads the pasteboard when it handles ⌘V, which 0.5 s covers for
