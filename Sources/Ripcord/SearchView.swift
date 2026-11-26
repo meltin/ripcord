@@ -477,17 +477,53 @@ private struct PlaceholderList: View {
       ForEach(rows.indices, id: \.self) { row in
         HStack(spacing: 6) {
           ForEach(rows[row], id: \.token) { placeholder in
-            Text(verbatim: placeholder.token)
-              .font(.system(size: 11, design: .monospaced))
-              .foregroundStyle(.tint)
-              .padding(.horizontal, 7)
-              .padding(.vertical, 3)
-              .background(Color.accentColor.opacity(0.12), in: Capsule())
+            PlaceholderChip(token: placeholder.token)
               .help(placeholder.help)
           }
         }
       }
     }
+  }
+}
+
+/// A placeholder that, clicked, goes into the snippet where its caret last was.
+private struct PlaceholderChip: View {
+  let token: String
+  @State private var isHovered = false
+
+  var body: some View {
+    Button {
+      insert()
+    } label: {
+      Text(verbatim: token)
+        .font(.system(size: 11, design: .monospaced))
+        .foregroundStyle(.tint)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Color.accentColor.opacity(isHovered ? 0.22 : 0.12), in: Capsule())
+        .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .onHover { isHovered = $0 }
+    .accessibilityLabel("Insert \(token)")
+  }
+
+  /// Through the text box's own NSTextView: it keeps its selection while another field has focus,
+  /// and inserting there updates the binding and can be undone.
+  private func insert() {
+    guard let window = NSApp.keyWindow, let content = window.contentView,
+      let editor = Self.textBox(in: content)
+    else { return NSSound.beep() }
+    window.makeFirstResponder(editor)
+    editor.insertText(token, replacementRange: editor.selectedRange())
+  }
+
+  /// The form's one multi-line editor; single-line fields edit through a shared field editor.
+  private static func textBox(in view: NSView) -> NSTextView? {
+    if let textView = view as? NSTextView, !textView.isFieldEditor, textView.isEditable {
+      return textView
+    }
+    return view.subviews.lazy.compactMap { textBox(in: $0) }.first
   }
 }
 
