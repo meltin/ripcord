@@ -371,6 +371,7 @@ private struct SnippetForm: View {
   /// The snippet's caret or selection, kept while another field has focus, so a placeholder
   /// chip goes where the caret last was.
   @State private var selection: TextSelection?
+  @State private var highlighter = PlaceholderHighlighter()
 
   var body: some View {
     HStack(alignment: .top, spacing: 28) {
@@ -454,11 +455,9 @@ private struct SnippetForm: View {
     .onAppear {
       DispatchQueue.main.async {
         focus = .text
-        highlightPlaceholders()
+        highlighter.attach()
       }
     }
-    // After SwiftUI has put the new text in the text box.
-    .onChange(of: model.draft.text) { DispatchQueue.main.async { highlightPlaceholders() } }
     // Back to the name once the icon list closes, however it closed.
     .onChange(of: model.isPickingIcon) { if !model.isPickingIcon { focus = .name } }
   }
@@ -594,32 +593,57 @@ private let placeholderPattern = try? NSRegularExpression(
 /// Colors the placeholders in Create Snippet's text box in the accent color, so a mistyped one
 /// shows. Only the drawing changes: the text belongs to SwiftUI, which would overwrite an edit
 /// made to the NSTextView under it.
-@MainActor private func highlightPlaceholders() {
-  guard let panel = NSApp.windows.first(where: { $0 is LauncherPanel && $0.isVisible }),
-    let content = panel.contentView, let textView = snippetTextView(in: content)
-  else { return }
-  let ranges =
-    placeholderPattern?.matches(
-      in: textView.string, range: NSRange(location: 0, length: (textView.string as NSString).length)
-    ).map(\.range) ?? []
-  if let layout = textView.textLayoutManager, let storage = layout.textContentManager {
-    let document = storage.documentRange
-    layout.removeRenderingAttribute(.foregroundColor, for: document)
-    for range in ranges {
-      guard let start = storage.location(document.location, offsetBy: range.location),
-        let end = storage.location(start, offsetBy: range.length),
-        let textRange = NSTextRange(location: start, end: end)
-      else { continue }
-      layout.addRenderingAttribute(
-        .foregroundColor, value: NSColor.controlAccentColor, for: textRange)
+@MainActor final class PlaceholderHighlighter {
+  private weak var textView: NSTextView?
+  private var observer: NSObjectProtocol?
+
+  /// Finds the text box and recolors on every change to its text, typed or set by SwiftUI, in
+  /// the same pass as the edit, so placeholders never show uncolored first.
+  func attach() {
+    guard textView == nil,
+      let panel = NSApp.windows.first(where: { $0 is LauncherPanel && $0.isVisible }),
+      let content = panel.contentView, let textView = snippetTextView(in: content)
+    else { return }
+    self.textView = textView
+    observer = NotificationCenter.default.addObserver(
+      forName: NSTextStorage.didProcessEditingNotification, object: textView.textStorage,
+      queue: nil
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.highlight() }
     }
-  } else if let layout = textView.layoutManager {
-    // TextKit 1, should SwiftUI hand over that kind of text view.
-    let all = NSRange(location: 0, length: (textView.string as NSString).length)
-    layout.removeTemporaryAttribute(.foregroundColor, forCharacterRange: all)
-    for range in ranges {
-      layout.addTemporaryAttribute(
-        .foregroundColor, value: NSColor.controlAccentColor, forCharacterRange: range)
+    highlight()
+  }
+
+  isolated deinit {
+    if let observer { NotificationCenter.default.removeObserver(observer) }
+  }
+
+  private func highlight() {
+    guard let textView else { return }
+    let ranges =
+      placeholderPattern?.matches(
+        in: textView.string,
+        range: NSRange(location: 0, length: (textView.string as NSString).length)
+      ).map(\.range) ?? []
+    if let layout = textView.textLayoutManager, let storage = layout.textContentManager {
+      let document = storage.documentRange
+      layout.removeRenderingAttribute(.foregroundColor, for: document)
+      for range in ranges {
+        guard let start = storage.location(document.location, offsetBy: range.location),
+          let end = storage.location(start, offsetBy: range.length),
+          let textRange = NSTextRange(location: start, end: end)
+        else { continue }
+        layout.addRenderingAttribute(
+          .foregroundColor, value: NSColor.controlAccentColor, for: textRange)
+      }
+    } else if let layout = textView.layoutManager {
+      // TextKit 1, should SwiftUI hand over that kind of text view.
+      let all = NSRange(location: 0, length: (textView.string as NSString).length)
+      layout.removeTemporaryAttribute(.foregroundColor, forCharacterRange: all)
+      for range in ranges {
+        layout.addTemporaryAttribute(
+          .foregroundColor, value: NSColor.controlAccentColor, forCharacterRange: range)
+      }
     }
   }
 }

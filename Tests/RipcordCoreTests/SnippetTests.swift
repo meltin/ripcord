@@ -13,6 +13,12 @@ import Testing
         == .init(text: "On Nov 26, 2026 (Thursday): copied Nov 26, 2026", charactersAfterCursor: 0))
   }
 
+  @Test func fillsInPlaceholdersWrittenWithoutSpaces() {
+    let filled = Snippet.expand(
+      "{date}{time}{day}", values: ["date": "D", "time": "T", "day": "W"], clipboard: "")
+    #expect(filled.text == "DTW")
+  }
+
   @Test func leavesPlaceholdersInsideTheClipboardAlone() {
     let filled = Snippet.expand(
       "{clipboard}", values: ["date": "today"], clipboard: "{date}{cursor}")
