@@ -554,9 +554,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private func refreshApps() {
     Task {
       apps = await Task.detached(priority: .userInitiated) { AppIndex.scan() }.value
-      // Refresh the rows only: a ↓ or ⌘K pressed while the scan ran must survive it, and the
-      // row stays selected by ID when new apps land above it.
-      refreshRows(selecting: model.selected?.id)
+      // Refresh the rows only: a ↓ or ⌘K pressed while the scan ran must survive it. A script
+      // asking for an argument stays selected by ID when new apps land above it.
+      refreshRows(selecting: model.argumentScript == nil ? nil : model.selected?.id)
     }
   }
 
