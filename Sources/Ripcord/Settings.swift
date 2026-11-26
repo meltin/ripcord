@@ -16,9 +16,6 @@ final class SettingsModel {
   var onRecordingChange: (Bool) -> Void = { _ in }
   /// A command's settings key whose page the window should turn to, from Configure Command.
   var requestedKey: String?
-  /// The app whose row the Applications page shows alone, by settings key: set through
-  /// `requestedKey` by Configure Command and Open Command Settings on an app's row.
-  var requestedApp: String?
   /// Hotkeys macOS refused at the last registration, shown on their rows.
   var failedHotkeys: Set<HotkeyTarget> = []
   /// Scanned when the Applications page first appears, so the window costs nothing until then.
@@ -34,19 +31,10 @@ final class SettingsModel {
   /// The Applications page's rows, worked out once per scan rather than on every redraw.
   private(set) var appEntries: [CatalogEntry] = []
 
-  /// Counts finished app scans, so a request can wait for one that started after it.
-  private(set) var appScans = 0
-  private var isScanningApps = false
-
-  /// Scans the apps in the background, unless a scan is already running.
   func loadApps() {
-    guard !isScanningApps else { return }
-    isScanningApps = true
     Task {
       apps = await Task.detached(priority: .userInitiated) { AppIndex.scan() }.value
       appEntries = Search.catalog(apps: apps, quicklinks: []).first?.entries ?? []
-      isScanningApps = false
-      appScans += 1
     }
   }
 
@@ -275,8 +263,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
   /// accessory app ask to come forward, and the request loses to the app the user was in.
   /// `configuring` turns to the page of the command or app with that settings key.
   func show(configuring key: String? = nil) {
-    // Each opening: apps installed since the last one show up, and Configure Command finds them.
-    model.loadApps()
     if let key { model.requestedKey = key }
     // On the screen the panel was on, the pointer's: `center()` alone uses the screen macOS
     // counts as main, which can be another display, and a closed window keeps its old place.
@@ -536,15 +522,9 @@ struct SettingsView: View {
     .onChange(of: model.config) { model.saveIfChanged() }
     .onChange(of: model.requestedKey, initial: true) {
       guard let key = model.requestedKey else { return }
-      if let commandPage = SettingsPage.allCases.first(where: {
-        $0.commandKeys?.contains(key) == true
-      }) {
-        page = commandPage
-      } else {
-        // A key no page lists as a command is an app's: its page, showing its row alone.
-        model.requestedApp = key
-        page = .applications
-      }
+      // A key no page lists as a command is an app's.
+      page =
+        SettingsPage.allCases.first { $0.commandKeys?.contains(key) == true } ?? .applications
       model.requestedKey = nil
     }
     // A recording left running on a page no longer shown would swallow every key typed.
@@ -908,15 +888,9 @@ private struct ShortcutsHeading: View {
 private struct ApplicationsPage: View {
   @Bindable var model: SettingsModel
   @State private var filter = ""
-  /// The one app shown, by settings key, until the search is edited; the field shows its name.
-  @State private var onlyApp: String?
-  /// An app asked for, and the scans finished when it was, so it waits for a fresh list. Kept
-  /// here, not on the model, so leaving the page drops it.
-  @State private var pendingApp: (key: String, scansBefore: Int)?
 
   private var entries: [CatalogEntry] {
-    if let onlyApp { return model.appEntries.filter { $0.target == .item(onlyApp) } }
-    return filter.isEmpty
+    filter.isEmpty
       ? model.appEntries
       : model.appEntries.filter {
         $0.title.localizedCaseInsensitiveContains(filter)
@@ -953,47 +927,7 @@ private struct ApplicationsPage: View {
     .padding(.top, 44)
     .padding(.bottom, 20)
     .onAppear { if model.apps.isEmpty { model.loadApps() } }
-    // Waits for the scan: an app it didn't list (one run from Downloads, say) leaves the whole
-    // list showing rather than an empty one.
-    .onChange(of: model.requestedApp, initial: true) {
-      guard let key = model.requestedApp else { return }
-      model.requestedApp = nil
-      pendingApp = (key, model.appScans)
-      showRequestedApp()
-    }
-    .onChange(of: model.appScans) { showRequestedApp() }
-    .onChange(of: filter) {
-      // Typed while the list was coming: the user's search wins over the request.
-      if pendingApp != nil { pendingApp = nil }
-      // Typing in the search ends the one-app view.
-      if let onlyApp,
-        model.appEntries.first(where: { $0.target == .item(onlyApp) })?.title != filter
-      {
-        self.onlyApp = nil
-      }
-    }
   }
-
-  /// Shows the app Configure Command asked for alone, once the scan has listed it.
-  private func showRequestedApp() {
-    guard let (key, scansBefore) = pendingApp, model.appScans > scansBefore else { return }
-    pendingApp = nil
-    // One the scan doesn't list, as an app run from Downloads: the whole list rather than an
-    // empty one or the app asked for before; a search the user typed stays.
-    guard let entry = model.appEntries.first(where: { $0.target == .item(key) }) else {
-      if onlyApp != nil {
-        onlyApp = nil
-        filter = ""
-      }
-      return
-    }
-    // An edit on a row about to be hidden would go on unseen, a recording swallowing keys.
-    model.stopRecording()
-    model.editingAlias = nil
-    onlyApp = key
-    filter = entry.title
-  }
-
 }
 
 private struct ShortcutRow: View {
