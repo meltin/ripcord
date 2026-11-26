@@ -28,6 +28,8 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   /// Search Notes, in the launcher, for ⌘P.
   var onBrowse: () -> Void = {}
   private var pendingSave: DispatchWorkItem?
+  /// Reads the note again while the window shows, to pick up edits made in another editor.
+  private var watch: Timer?
   private static let lastNoteKey = "lastNote"
   private static let saveDelay = 0.6
 
@@ -87,6 +89,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
       guard model.note.url == url else { return }
       // Its text is in the Trash now; nothing is left to save. The launcher keeps the keys.
       pendingSave?.cancel()
+      pendingSave = nil
       show(store.list().first ?? store.newNote(), focusing: false)
     }
   }
@@ -142,6 +145,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   private func bringForward() {
     window.orderFrontRegardless()
     window.makeKey()
+    startWatching()
     // Once it's key, so the editor can take the focus.
     DispatchQueue.main.async { [model] in model.focusRequest += 1 }
   }
@@ -149,6 +153,30 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   private func hide() {
     flush()
     window.orderOut(nil)
+    stopWatching()
+  }
+
+  private func startWatching() {
+    guard watch == nil else { return }
+    watch = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+      MainActor.assumeIsolated { self?.pickUpOutsideEdit() }
+    }
+  }
+
+  private func stopWatching() {
+    watch?.invalidate()
+    watch = nil
+  }
+
+  /// Shows what another editor saved to this note, while nothing typed here is waiting to be
+  /// saved; with something typed, saving refuses to write over it and says so instead.
+  private func pickUpOutsideEdit() {
+    guard window.isVisible, pendingSave == nil, model.problem == nil, model.note.isSaved,
+      model.text == model.note.text, let fresh = store.read(model.note.url),
+      fresh.text != model.note.text
+    else { return }
+    model.note = fresh
+    model.text = fresh.text
   }
 
   private func scheduleSave() {
@@ -177,6 +205,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
 
   func windowWillClose(_ notification: Notification) {
     flush()
+    stopWatching()
   }
 }
 
