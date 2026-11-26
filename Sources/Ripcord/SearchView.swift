@@ -148,6 +148,10 @@ struct SearchView: View {
       .onChange(of: model.selection) {
         if let selectedID { proxy.scrollTo(selectedID) }
       }
+      // The rebuilt list may not keep its scroll, and the selection didn't change to say so.
+      .onChange(of: model.settingsVersion) {
+        if let selectedID { proxy.scrollTo(selectedID) }
+      }
     }
   }
 }

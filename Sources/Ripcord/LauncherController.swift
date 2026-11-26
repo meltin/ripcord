@@ -189,7 +189,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
   var snippets: [Snippet] = [] {
     didSet {
       model.snippets = snippets
-      if snippets != oldValue, model.mode == .snippets { refreshRows() }
+      guard snippets != oldValue else { return }
+      // A snippet edited in place keeps its row's ID; see LauncherModel.settingsVersion.
+      model.settingsVersion += 1
+      if model.mode == .snippets { refreshRows() }
     }
   }
   /// Saves a change to the config's snippets; false when the file couldn't be written.
@@ -567,9 +570,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
     // ⌃ too, for Raycast's ⌃X Delete.
     // Shortcuts would act behind a question; only its Return and Esc count.
     guard model.confirmation == nil, !flags.isDisjoint(with: [.command, .control]),
-      // As ⌘ alone types it: Shift left out, so ⇧⌘, reads as "," (charactersIgnoringModifiers
-      // keeps Shift and gives "<"), and ⌘ kept, so Kana and Dvorak-QWERTY ⌘ give Latin letters.
-      let key = event.characters(byApplyingModifiers: .command)?.lowercased()
+      // Without Shift, so ⇧⌘, reads as "," (charactersIgnoringModifiers keeps Shift and gives
+      // "<"). With ⌘ when it's held, so Kana and Dvorak-QWERTY ⌘ give its Latin letters; without
+      // it for ⌃X and the like, which read as the layout types them.
+      let key = event.characters(
+        byApplyingModifiers: flags.contains(.command) ? .command : [])?.lowercased()
     else { return false }
     // An accessory app has no Edit menu, so ⌘X/C/V/A never reach the search field otherwise.
     let editing = [
