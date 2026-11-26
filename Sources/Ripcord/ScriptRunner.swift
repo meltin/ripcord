@@ -14,10 +14,15 @@ enum ScriptRunner {
   /// Each stream keeps at most this much; a toast shows one line of it.
   static let limit = 256 * 1024
 
-  static func run(_ script: ScriptCommand, completion: @escaping @Sendable (Result) -> Void) {
+  /// `arguments` go to the script as $1…, as they are: no shell reads them.
+  static func run(
+    _ script: ScriptCommand, arguments: [String] = [],
+    completion: @escaping @Sendable (Result) -> Void
+  ) {
     DispatchQueue.global(qos: .userInitiated).async {
       let process = Process()
       process.executableURL = script.url
+      process.arguments = arguments
       process.currentDirectoryURL = script.directory
       var environment = ProcessInfo.processInfo.environment
       environment["PATH"] = loginPath
