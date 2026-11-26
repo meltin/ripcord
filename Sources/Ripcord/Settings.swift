@@ -2,6 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 import RipcordCore
 import SwiftUI
+import os
 
 /// The settings window's copy of config.json; every edit is written straight back to the file.
 @MainActor
@@ -241,9 +242,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     window.center()
     welcomeWindow = window
     NSApp.setActivationPolicy(.regular)
-    window.orderFrontRegardless()
-    window.makeKey()
-    DispatchQueue.main.async { NSApp.activate() }
+    bringForward(window)
   }
 
   /// Closes the window on Esc and steps through the pages on ↑ and ↓ while it's open, as
@@ -268,9 +267,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
     isSettingsOpen = true
     NSApp.setActivationPolicy(.regular)
-    // On top of other apps' windows even if macOS turns the activation request down.
-    window.orderFrontRegardless()
-    window.makeKey()
     if escMonitor == nil {
       escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
         guard let self else { return event }
@@ -290,21 +286,49 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         return nil
       }
     }
-    bringForward(attempt: 1)
+    bringForward(window)
   }
 
-  /// Asks to become the active app until macOS agrees, a few times: the policy change lands a
-  /// run loop pass later, and a request made before it, or lost to the app the user was in,
-  /// leaves the window behind that app's with the keys going to it.
-  private func bringForward(attempt: Int) {
-    DispatchQueue.main.asyncAfter(deadline: .now() + (attempt == 1 ? 0 : 0.1)) { [self] in
-      guard window.isVisible, !NSApp.isActive || !window.isKeyWindow else { return }
+  /// Bumped by each `bringForward`, so only the latest one keeps asking.
+  private var activationRequest = 0
+
+  /// Brings `target` in front and asks to become the active app, at once, inside the key press
+  /// or click that opened it, which macOS grants most readily, then again for up to a second:
+  /// the policy change lands a run loop pass later, and a request lost to the app the user was
+  /// in leaves the window grayed out behind that app's, with the keys going to it.
+  private func bringForward(_ target: NSWindow) {
+    activationRequest += 1
+    let request = activationRequest
+    let previous = NSWorkspace.shared.frontmostApplication
+    func attempt(_ number: Int) {
       NSApp.activate()
-      window.orderFrontRegardless()
-      window.makeKey()
-      if attempt < 4 { bringForward(attempt: attempt + 1) }
+      // On top of other apps' windows even if macOS turns the request down.
+      target.orderFrontRegardless()
+      target.makeKey()
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [self] in
+        let front = NSWorkspace.shared.frontmostApplication
+        guard request == activationRequest, target.isVisible,
+          !NSApp.isActive || !target.isKeyWindow,
+          // The user has moved on: to another app, the panel, or a dialog of their own.
+          front == previous || front == .current,
+          NSApp.keyWindow == nil || NSApp.keyWindow === target,
+          NSApp.modalWindow == nil, target.attachedSheet == nil
+        else { return }
+        guard number < 10 else {
+          // Read with: log show --predicate 'subsystem == "io.github.meltin.ripcord"'
+          Self.log.error(
+            "Window stayed in the background: active \(NSApp.isActive, privacy: .public), key \(target.isKeyWindow, privacy: .public), frontmost \(front?.bundleIdentifier ?? "-", privacy: .public)"
+          )
+          return
+        }
+        attempt(number + 1)
+      }
     }
+    attempt(1)
   }
+
+  private static let log = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "io.github.meltin.ripcord", category: "settings")
 
   /// Posted for the sidebar to move to the next or previous page.
   static let nextPage = Notification.Name("RipcordSettingsNextPage")
