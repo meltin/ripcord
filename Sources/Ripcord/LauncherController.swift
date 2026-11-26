@@ -682,6 +682,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
         Bundle.main.bundleIdentifier ?? "", forType: .init("org.nspasteboard.source"))
     case .reveal(let url):
       NSWorkspace.shared.activateFileViewerSelecting([url])
+    case .cleanShot(let command):
+      // After hide(), so a capture doesn't include the panel.
+      if !(command.url.map(NSWorkspace.shared.open) ?? false) { NSSound.beep() }
     case .run(.settings), .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey,
       .deleteAlias:
       break  // Opened before hide(), above.

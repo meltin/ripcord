@@ -127,6 +127,7 @@ final class SettingsModel {
     case .item(let key):
       BuiltinCommand.allCases.first { $0.settingsKey == key }?.title
         ?? SystemAction.allCases.first { $0.settingsKey == key }?.title
+        ?? CleanShotCommand.allCases.first { $0.settingsKey == key }?.title
         ?? WindowLayout.allCases.first { $0.settingsKey == key }?.title
         ?? apps.first { $0.settingsKey == key }?.names[0]
         // Before the Applications page has scanned the apps, ask Launch Services.
@@ -399,6 +400,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case systemActions = "System Actions"
   case windowManagement = "Window Management"
   case coffee = "Coffee"
+  case cleanShot = "CleanShot X"
   case repositories = "Git Repositories"
   case httpStatusCodes = "HTTP Status Codes"
   case ripcord = "Ripcord"
@@ -416,6 +418,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .systemActions: "gearshape.fill"
     case .windowManagement: "rectangle.split.2x1.fill"
     case .coffee: "cup.and.saucer.fill"
+    case .cleanShot: "camera.viewfinder"
     case .repositories: "arrow.triangle.branch"
     case .httpStatusCodes: "network"
     case .ripcord: "command"
@@ -430,6 +433,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .clipboardHistory: .red
     case .windowManagement: .indigo
     case .coffee: .brown
+    case .cleanShot: .purple
     case .repositories: .orange
     case .httpStatusCodes: .teal
     }
@@ -452,6 +456,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       "Lock, sleep, control music and volume, and manage apps, the Trash and disks."
     case .windowManagement:
       "Put the frontmost window in a half, quarter or third, or on another display."
+    case .cleanShot:
+      "Capture, record and annotate with CleanShot X, through its URL scheme. Shown in search when CleanShot X is installed."
     case .coffee:
       "Keep the Mac awake, until Decaffeinate or for a time typed after Caffeinate, as in “caffeinate 1h 30m”."
     case .repositories:
@@ -469,6 +475,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
+    case .cleanShot: Set(CleanShotCommand.allCases.map(\.settingsKey))
     case .general, .permissions, .applications, .quicklinks: nil
     }
   }

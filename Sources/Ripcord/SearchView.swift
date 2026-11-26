@@ -297,6 +297,15 @@ private struct ResultIcon: View {
       tile(layout.symbol, .indigo)
     case .reveal:
       tile("folder", .gray)
+    case .cleanShot:
+      // CleanShot X's own icon, as Raycast shows its extension's commands.
+      if let app = NSWorkspace.shared.urlForApplication(
+        withBundleIdentifier: CleanShotCommand.bundleID)
+      {
+        Image(nsImage: appIcon(app)).resizable().frame(width: 30, height: 30).padding(-3)
+      } else {
+        tile("camera.viewfinder", .purple)
+      }
     case .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey, .deleteAlias:
       tile("gearshape", .gray)
     case .snippet:
