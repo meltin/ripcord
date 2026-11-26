@@ -5,7 +5,8 @@ public struct Hotkey: Equatable, Sendable {
   public let keyCode: UInt32
   public let modifiers: UInt32
 
-  /// Nil unless `spec` is modifiers including ⌘, ⌥ or ⌃, then "space", a letter or a digit.
+  /// Nil unless `spec` is modifiers including ⌘, ⌥ or ⌃, then "space", "return", an arrow
+  /// ("left", "right", "up", "down"), a letter or a digit.
   public init?(_ spec: String) {
     let parts = spec.lowercased().split(separator: "+").map {
       $0.trimmingCharacters(in: .whitespaces)
@@ -21,7 +22,10 @@ public struct Hotkey: Equatable, Sendable {
     let known = Self.ordered.map(\.flag).reduce(0, |)
     // Shift alone would take a capital letter away from every app on the Mac.
     let required = UInt32(cmdKey | optionKey | controlKey)
-    guard Self.keyCodes.values.contains(keyCode), modifiers & required != 0 else { return nil }
+    guard Self.keyCodes.values.contains(keyCode), modifiers & required != 0,
+      // ⌘↵ saves in the panel's forms; taken globally it would never reach them.
+      !(keyCode == UInt32(kVK_Return) && modifiers & known == UInt32(cmdKey))
+    else { return nil }
     self.keyCode = keyCode
     self.modifiers = modifiers & known
   }
@@ -37,7 +41,7 @@ public struct Hotkey: Equatable, Sendable {
   public var keycaps: [String] {
     let key = Self.keyCodes.first { $0.value == keyCode }?.key ?? ""
     return Self.ordered.filter { modifiers & $0.flag != 0 }.map(\.symbol)
-      + [key == "space" ? "Space" : key.uppercased()]
+      + [Self.keycapNames[key] ?? key.uppercased()]
   }
 
   // ⌃⌥⇧⌘ is the order macOS menus print modifiers in.
@@ -53,8 +57,14 @@ public struct Hotkey: Equatable, Sendable {
     "shift": UInt32(shiftKey),
   ]
 
+  private static let keycapNames = [
+    "space": "Space", "return": "↵", "left": "←", "right": "→", "up": "↑", "down": "↓",
+  ]
+
   private static let keyCodes: [String: UInt32] = [
-    "space": kVK_Space,
+    "space": kVK_Space, "return": kVK_Return,
+    // For window layouts, which Rectangle and Raycast put on ⌃⌥ and the arrows.
+    "left": kVK_LeftArrow, "right": kVK_RightArrow, "up": kVK_UpArrow, "down": kVK_DownArrow,
     "a": kVK_ANSI_A, "b": kVK_ANSI_B, "c": kVK_ANSI_C, "d": kVK_ANSI_D, "e": kVK_ANSI_E,
     "f": kVK_ANSI_F, "g": kVK_ANSI_G, "h": kVK_ANSI_H, "i": kVK_ANSI_I, "j": kVK_ANSI_J,
     "k": kVK_ANSI_K, "l": kVK_ANSI_L, "m": kVK_ANSI_M, "n": kVK_ANSI_N, "o": kVK_ANSI_O,

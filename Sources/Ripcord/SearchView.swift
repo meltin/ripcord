@@ -233,6 +233,8 @@ private struct ResultIcon: View {
       tile(command.symbol, command.color)
     case .system(let action, _):
       tile(action.symbol, .gray)
+    case .window(let layout):
+      tile(layout.symbol, .indigo)
     case .reveal:
       tile("folder", .gray)
     case .snippet:
@@ -259,6 +261,30 @@ private struct ResultIcon: View {
       .foregroundStyle(.white)
       .frame(width: 24, height: 24)
       .background(color.gradient, in: RoundedRectangle(cornerRadius: 6))
+  }
+}
+
+extension WindowLayout {
+  /// Its icon, a white SF Symbol on an indigo tile.
+  fileprivate var symbol: String {
+    switch self {
+    case .leftHalf: "rectangle.lefthalf.filled"
+    case .rightHalf: "rectangle.righthalf.filled"
+    case .topHalf: "rectangle.tophalf.filled"
+    case .bottomHalf: "rectangle.bottomhalf.filled"
+    case .topLeftQuarter: "rectangle.inset.topleft.filled"
+    case .topRightQuarter: "rectangle.inset.topright.filled"
+    case .bottomLeftQuarter: "rectangle.inset.bottomleft.filled"
+    case .bottomRightQuarter: "rectangle.inset.bottomright.filled"
+    case .firstThird, .centerThird, .lastThird: "rectangle.split.3x1"
+    case .firstTwoThirds, .lastTwoThirds: "rectangle.split.2x1"
+    case .maximize: "arrow.up.left.and.arrow.down.right"
+    case .almostMaximize: "rectangle.inset.filled"
+    case .center: "rectangle.center.inset.filled"
+    case .nextDisplay: "rectangle.righthalf.inset.filled.arrow.right"
+    case .previousDisplay: "rectangle.lefthalf.inset.filled.arrow.left"
+    case .restore: "arrow.uturn.backward"
+    }
   }
 }
 

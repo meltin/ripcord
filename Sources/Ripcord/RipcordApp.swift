@@ -197,6 +197,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         launcher.perform(.run(command))
       } else if let action = SystemAction.allCases.first(where: { $0.settingsKey == key }) {
         launcher.perform(.system(action))
+      } else if let layout = WindowLayout.allCases.first(where: { $0.settingsKey == key }) {
+        launcher.perform(.window(layout))
       } else if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: key)
         ?? (key.hasPrefix("/") ? URL(fileURLWithPath: key) : nil)
       {

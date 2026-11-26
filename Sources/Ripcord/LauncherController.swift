@@ -217,6 +217,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Search, whose default is 90 seconds.
   private var leftOpen: (mode: LauncherMode, at: Date)?
   private static let popToRootAfter: TimeInterval = 90
+  private let windows = WindowManager()
   /// The panel was opened by a hotkey just to ask a System Action's question.
   private var openedForQuestion = false
 
@@ -523,6 +524,13 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if case .system(let system, let confirmed) = action {
       return perform(system, confirmed: confirmed)
     }
+    if case .window(let layout) = action {
+      // The window in front now: the panel never activates Ripcord, so it's still the user's.
+      let frontmost = NSWorkspace.shared.frontmostApplication
+      if panel.isVisible { hide() }
+      if let message = windows.apply(layout, to: frontmost) { onError(message) }
+      return
+    }
     // Open Settings while the panel still holds the key press, so macOS treats it as the
     // user's request to bring Ripcord forward.
     if action == .run(.settings) { onOpenSettings() }
@@ -545,7 +553,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .run(.importSnippets):
       onImportSnippets()
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
-      .run(.createSnippet), .clip, .snippet, .system:
+      .run(.createSnippet), .clip, .snippet, .system, .window:
       break  // Handled above, without hiding the panel.
     case .run(.quit):
       NSApp.terminate(nil)

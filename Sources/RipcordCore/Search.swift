@@ -68,6 +68,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case snippet(Int, SnippetAction)
     /// `confirmed` once its warning has been answered, or for one with none.
     case system(SystemAction, confirmed: Bool = false)
+    case window(WindowLayout)
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -248,7 +249,13 @@ public enum Search {
       guard settings.isEnabled else { return nil }
       return ([action.title], settings.alias, result(for: action, alias: settings.alias))
     }
-    let ranked = (appCandidates + linkCandidates + commandCandidates + systemCandidates)
+    let windowCandidates: [Candidate] = WindowLayout.allCases.compactMap { layout in
+      let settings = items[layout.settingsKey] ?? ItemSettings()
+      guard settings.isEnabled else { return nil }
+      return ([layout.title], settings.alias, result(for: layout, alias: settings.alias))
+    }
+    let ranked =
+      (appCandidates + linkCandidates + commandCandidates + systemCandidates + windowCandidates)
       .compactMap { candidate -> (score: Int, result: SearchResult)? in
         let names = candidate.names + [candidate.alias].compactMap { $0 }
         guard let score = names.compactMap({ Fuzzy.score(trimmed, in: $0) }).max() else {
@@ -387,6 +394,11 @@ public enum Search {
         entries: SystemAction.allCases.map {
           CatalogEntry(target: .item($0.settingsKey), title: $0.title, kind: .command, appURL: nil)
         }),
+      CatalogSection(
+        title: "Window Management",
+        entries: WindowLayout.allCases.map {
+          CatalogEntry(target: .item($0.settingsKey), title: $0.title, kind: .command, appURL: nil)
+        }),
     ]
   }
 
@@ -402,6 +414,12 @@ public enum Search {
         id: "quicklink:\(link.name)", title: link.name, subtitle: url.host() ?? "",
         keyword: link.keyword, kind: .quicklink, action: .open(url))
     }
+  }
+
+  private static func result(for layout: WindowLayout, alias: String?) -> SearchResult {
+    SearchResult(
+      id: layout.settingsKey, title: layout.title, subtitle: "Window Management", keyword: alias,
+      kind: .command, action: .window(layout))
   }
 
   private static func result(for action: SystemAction, alias: String?) -> SearchResult {
