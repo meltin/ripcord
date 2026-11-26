@@ -13,12 +13,13 @@
 - ⌘K lists the selected row's actions (Open Command ↵, Show in Finder ⇧⌘F, Copy Path or URL ⇧⌘C)
 - Settings (⌘,): Launch at Login, the hotkey, the input source to type in and Quicklinks, kept
   in sync with the config file
-- Shortcuts: give any app, Quicklink or command an alias, a hotkey that runs it from anywhere, or
-  turn it off so it never shows up in search
+- Settings has a page per extension (Applications, Quicklinks, Clipboard History, Snippets, System
+  Actions, Window Management): give any app, Quicklink or command an alias, a hotkey that runs it
+  from anywhere, or turn it off so it never shows up in search
 - Clipboard History: copied text and images, including a copied image file such as a CleanShot X
   capture, with a preview and details of the selected one. Return pastes into the app you were in,
   ⇧⌘P pins an item to the top and ⌃X deletes it. Copies a password manager marks as concealed are
-  never recorded, and switching the command off on the Shortcuts page stops recording
+  never recorded, and switching the command off on its settings page stops recording
 - Snippets: Create Snippet saves text with a name, keyword, icon and tags from the panel, and
   Search Snippets pastes it into the app you were in. `{clipboard}`, `{date}`, `{time}`,
   `{datetime}`, `{day}` and `{uuid}` are filled in, and `{cursor}` is where the caret lands.
@@ -29,7 +30,7 @@
   the desktop, and toggle Dark Mode or Finder's hidden files. Ones that lose work ask first
 - Window Management: put the frontmost window in a half, quarter or third, maximize or center
   it, move it to the next or previous display, or restore where it was; give each a hotkey such
-  as ⌃⌥← on the Shortcuts page
+  as ⌃⌥← on its settings page
 - Drag the panel anywhere; it remembers the spot, and Reset Ripcord Window Position brings it back
 
 ## Quick start
@@ -111,8 +112,9 @@ Clipboard History keeps its last 300 unpinned items (plus every pinned one) in
 `~/Library/Application Support/Ripcord/Clipboard`, as plain text and image files; an image over
 32 MB or a text over 1 MB isn't kept. Delete the folder to clear it.
 
-`items` holds the Shortcuts page's settings for apps (by bundle ID) and Ripcord's commands; a
-Quicklink keeps its own `hotkey` and `disabled`, and its `keyword` is its alias.
+`items` holds the aliases, hotkeys and on/off switches set on the settings pages, for apps (by
+bundle ID) and Ripcord's commands; a Quicklink keeps its own `hotkey` and `disabled`, and its
+`keyword` is its alias.
 
 `inputSource` is the keyboard input source the panel switches to while it's open, so a Japanese
 input method left on doesn't turn the query into kana; the previous one comes back when it closes.

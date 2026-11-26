@@ -15,7 +15,7 @@ final class SettingsModel {
   var onRecordingChange: (Bool) -> Void = { _ in }
   /// Hotkeys macOS refused at the last registration, shown on their rows.
   var failedHotkeys: Set<HotkeyTarget> = []
-  /// Scanned when the Shortcuts page first appears, so the window costs nothing until then.
+  /// Scanned when the Applications page first appears, so the window costs nothing until then.
   var apps: [AppEntry] = []
   /// The one row recording a hotkey; starting another row stops it.
   private(set) var recordingTarget: HotkeyTarget?
@@ -25,8 +25,14 @@ final class SettingsModel {
 
   init(configURL: URL) { self.configURL = configURL }
 
+  /// The Applications page's rows, worked out once per scan rather than on every redraw.
+  private(set) var appEntries: [CatalogEntry] = []
+
   func loadApps() {
-    Task { apps = await Task.detached(priority: .userInitiated) { AppIndex.scan() }.value }
+    Task {
+      apps = await Task.detached(priority: .userInitiated) { AppIndex.scan() }.value
+      appEntries = Search.catalog(apps: apps, quicklinks: []).first?.entries ?? []
+    }
   }
 
   func load() {
@@ -52,8 +58,12 @@ final class SettingsModel {
 
   // MARK: Hotkey recording
 
+  /// The one row whose alias is being typed; starting a recording ends it, and the reverse.
+  var editingAlias: HotkeyTarget?
+
   func startRecording(for target: HotkeyTarget) {
     stopRecording()
+    editingAlias = nil
     recordingTarget = target
     recorderMessage = nil
     onRecordingChange(true)
@@ -110,7 +120,7 @@ final class SettingsModel {
         ?? SystemAction.allCases.first { $0.settingsKey == key }?.title
         ?? WindowLayout.allCases.first { $0.settingsKey == key }?.title
         ?? apps.first { $0.settingsKey == key }?.names[0]
-        // Before the Shortcuts page has scanned the apps, ask Launch Services.
+        // Before the Applications page has scanned the apps, ask Launch Services.
         ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: key).map {
           FileManager.default.displayName(atPath: $0.path)
         } ?? key
@@ -194,11 +204,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
   let model: SettingsModel
   private lazy var window: NSWindow = {
     let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 860, height: 580),
+      contentRect: NSRect(x: 0, y: 0, width: 860, height: 640),
       styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
       backing: .buffered, defer: false)
     window.title = "Ripcord Settings"
     window.titlebarAppearsTransparent = true
+    // The page says where you are; the title bar keeps only the traffic lights.
+    window.titleVisibility = .hidden
     window.isReleasedWhenClosed = false
     window.contentView = NSHostingView(rootView: SettingsView(model: model))
     window.delegate = self
@@ -223,6 +235,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         guard let self, event.keyCode == UInt16(kVK_Escape), event.window === window,
           // Esc stops a recording, and cancels Japanese input that's still being composed.
           model.recordingTarget == nil,
+          // Esc in an alias being typed ends the edit instead.
+          model.editingAlias == nil,
           (window.firstResponder as? NSTextView)?.hasMarkedText() != true
         else { return event }
         window.performClose(nil)
@@ -253,72 +267,235 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
 private enum SettingsPage: String, CaseIterable, Identifiable {
   case general = "General"
-  case shortcuts = "Shortcuts"
+  case applications = "Applications"
   case quicklinks = "Quicklinks"
+  case clipboardHistory = "Clipboard History"
+  case snippets = "Snippets"
+  case systemActions = "System Actions"
+  case windowManagement = "Window Management"
+  case ripcord = "Ripcord"
 
   var id: Self { self }
 
   var symbol: String {
     switch self {
     case .general: "slider.horizontal.3"
-    case .shortcuts: "command"
+    case .applications: "square.grid.2x2.fill"
     case .quicklinks: "link"
+    case .clipboardHistory: "list.clipboard.fill"
+    case .snippets: "doc.plaintext.fill"
+    case .systemActions: "gearshape.fill"
+    case .windowManagement: "rectangle.split.2x1.fill"
+    case .ripcord: "command"
     }
   }
 
   var color: Color {
     switch self {
-    case .general: .gray
-    case .shortcuts: .indigo
-    case .quicklinks: .blue
+    case .general, .systemActions, .ripcord: .gray
+    case .applications, .quicklinks, .snippets: .blue
+    case .clipboardHistory: .red
+    case .windowManagement: .indigo
+    }
+  }
+
+  /// What the page's header says it's for.
+  var summary: String {
+    switch self {
+    case .general: ""
+    case .applications:
+      "An alias to type in the panel, a hotkey to open it from anywhere; unchecked apps never show in search."
+    case .quicklinks:
+      "Type a keyword, a space and a query in the panel. {query} in the URL is replaced by what you type."
+    case .clipboardHistory:
+      "Text and images you copy, searchable and ready to paste. Switching it off also stops recording."
+    case .snippets: "Text you save and paste with Search Snippets."
+    case .systemActions:
+      "Lock, sleep, control music and volume, and manage apps, the Trash and disks."
+    case .windowManagement:
+      "Put the frontmost window in a half, quarter or third, or on another display."
+    case .ripcord: "Ripcord's own commands."
+    }
+  }
+
+  /// The commands a page lists, by settings key; nil for pages built another way.
+  var commandKeys: Set<String>? {
+    switch self {
+    case .clipboardHistory, .snippets, .ripcord:
+      Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
+    case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
+    case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
+    case .general, .applications, .quicklinks: nil
+    }
+  }
+}
+
+extension BuiltinCommand {
+  /// The settings page that lists it; exhaustive, so a new command can't go missing there.
+  fileprivate var settingsPage: SettingsPage {
+    switch self {
+    case .clipboardHistory: .clipboardHistory
+    case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .snippets
+    case .settings, .resetWindowPosition, .quit: .ripcord
     }
   }
 }
 
 struct SettingsView: View {
   @Bindable var model: SettingsModel
-  @State private var page: SettingsPage? = .general
+  @State private var page = SettingsPage.general
 
   var body: some View {
-    // The sidebar never collapses, so the toolbar has no toggle to slide the title around.
-    NavigationSplitView(columnVisibility: .constant(.all)) {
-      List(SettingsPage.allCases, selection: $page) { page in
-        Label {
-          Text(page.rawValue)
-        } icon: {
-          Image(systemName: page.symbol)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: 20, height: 20)
-            .background(page.color.gradient, in: RoundedRectangle(cornerRadius: 5))
-        }
-      }
-      .navigationSplitViewColumnWidth(220)
-      .toolbar(removing: .sidebarToggle)
-    } detail: {
-      ScrollView {
-        VStack(alignment: .leading, spacing: 18) {
-          if let loadError = model.loadError {
-            Label(loadError, systemImage: "exclamationmark.triangle.fill")
-              .font(.system(size: 12))
-              .foregroundStyle(.red)
+    // Laid out by hand rather than with NavigationSplitView, which shrank the sidebar to fit
+    // and cut its labels short.
+    HStack(spacing: 0) {
+      Sidebar(page: $page)
+        .frame(width: 220)
+      Divider()
+      Group {
+        switch page {
+        case .general: PageScroll(model: model) { GeneralPage(model: model) }
+        case .applications: ApplicationsPage(model: model)
+        case .quicklinks:
+          PageScroll(model: model) {
+            PageHeader(page: .quicklinks)
+            QuicklinksPage(model: model)
           }
-          switch page {
-          case .general: GeneralPage(model: model)
-          case .shortcuts: ShortcutsPage(model: model)
-          case .quicklinks: QuicklinksPage(model: model)
-          case nil: EmptyView()
+        default:
+          PageScroll(model: model) {
+            PageHeader(page: page)
+            CommandsList(model: model, page: page)
           }
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, alignment: .leading)
       }
-      .navigationTitle(page?.rawValue ?? "Settings")
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(Color(nsColor: .windowBackgroundColor))
     }
-    .frame(minWidth: 760, minHeight: 480)
+    .ignoresSafeArea()
+    .frame(minWidth: 760, minHeight: 520)
     .onChange(of: model.config) { model.saveIfChanged() }
     // A recording left running on a page no longer shown would swallow every key typed.
-    .onChange(of: page) { model.stopRecording() }
+    .onChange(of: page) {
+      model.stopRecording()
+      model.editingAlias = nil
+    }
+  }
+}
+
+/// The pages, on the translucent sidebar material: General, then a gap, then the extensions.
+private struct Sidebar: View {
+  @Binding var page: SettingsPage
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 2) {
+        row(.general)
+        Spacer().frame(height: 14)
+        ForEach(SettingsPage.allCases.filter { $0 != .general }) { row($0) }
+      }
+      .padding(.horizontal, 10)
+      // Below the window's traffic lights.
+      .padding(.top, 52)
+      .padding(.bottom, 12)
+    }
+    .scrollIndicators(.never)
+    .background(SidebarMaterial())
+  }
+
+  private func row(_ item: SettingsPage) -> some View {
+    Button {
+      page = item
+    } label: {
+      HStack(spacing: 10) {
+        PageIcon(page: item, size: 22)
+        Text(item.rawValue).font(.system(size: 13)).lineLimit(1)
+        Spacer(minLength: 0)
+      }
+      .padding(.horizontal, 8)
+      .frame(height: 32)
+      .background(
+        RoundedRectangle(cornerRadius: 8)
+          .fill(item == page ? Color.primary.opacity(0.09) : .clear)
+      )
+      .contentShape(RoundedRectangle(cornerRadius: 8))
+    }
+    .buttonStyle(.plain)
+    .accessibilityAddTraits(item == page ? .isSelected : [])
+  }
+}
+
+/// macOS's translucent sidebar background.
+private struct SidebarMaterial: NSViewRepresentable {
+  func makeNSView(context: Context) -> NSVisualEffectView {
+    let view = NSVisualEffectView()
+    view.material = .sidebar
+    view.blendingMode = .behindWindow
+    view.state = .followsWindowActiveState
+    return view
+  }
+
+  func updateNSView(_ view: NSVisualEffectView, context: Context) {}
+}
+
+/// A page's symbol on its colored tile, as the sidebar and page headers draw it.
+private struct PageIcon: View {
+  let page: SettingsPage
+  let size: CGFloat
+
+  var body: some View {
+    Image(systemName: page.symbol)
+      .font(.system(size: size * 0.55, weight: .semibold))
+      .foregroundStyle(.white)
+      .frame(width: size, height: size)
+      .background(page.color.gradient, in: RoundedRectangle(cornerRadius: size / 4))
+  }
+}
+
+/// The page's icon, name and what it's for, above its settings.
+private struct PageHeader: View {
+  let page: SettingsPage
+
+  var body: some View {
+    HStack(spacing: 12) {
+      PageIcon(page: page, size: 36)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(page.rawValue).font(.system(size: 15, weight: .semibold))
+        Text(page.summary).font(.system(size: 12)).foregroundStyle(.secondary)
+      }
+    }
+  }
+}
+
+/// A scrolling page with the config's load error on top, for every page but Applications,
+/// whose long list scrolls on its own.
+private struct PageScroll<Content: View>: View {
+  @Bindable var model: SettingsModel
+  @ViewBuilder let content: Content
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 18) {
+        LoadErrorBanner(model: model)
+        content
+      }
+      .padding(.horizontal, 28)
+      // Clear of the title bar, which the content runs under.
+      .padding(.top, 44)
+      .padding(.bottom, 28)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+  }
+}
+
+private struct LoadErrorBanner: View {
+  @Bindable var model: SettingsModel
+
+  var body: some View {
+    if let loadError = model.loadError {
+      Label(loadError, systemImage: "exclamationmark.triangle.fill")
+        .font(.system(size: 12))
+        .foregroundStyle(.red)
+    }
   }
 }
 
@@ -394,12 +571,7 @@ private struct QuicklinksPage: View {
   @Bindable var model: SettingsModel
 
   var body: some View {
-    HStack(alignment: .firstTextBaseline) {
-      Text(
-        "Type a keyword, a space and a query in the panel. {query} in the URL is replaced by what you type."
-      )
-      .font(.system(size: 12))
-      .foregroundStyle(.secondary)
+    HStack {
       Spacer()
       Button("Add Quicklink", systemImage: "plus") {
         model.config.quicklinks.append(Quicklink(name: "", url: ""))
@@ -432,6 +604,14 @@ private struct QuicklinksPage: View {
           }
         }
       }
+    }
+    // Their hotkeys and on/off switches; the Keyword above is their alias, so no Alias column.
+    let shortcuts =
+      Search.catalog(apps: [], quicklinks: model.config.quicklinks)
+      .first { $0.title == "Quicklinks" }?.entries ?? []
+    if !shortcuts.isEmpty {
+      ShortcutsCard(
+        title: "Shortcuts", entries: shortcuts, model: model, page: .quicklinks, showsAlias: false)
     }
   }
 
@@ -482,59 +662,111 @@ private struct QuicklinkRow: View {
   }
 }
 
-/// Lists every app, Quicklink and command with its alias, hotkey and on/off switch.
-private struct ShortcutsPage: View {
+/// A page's commands, each with its alias, hotkey and on/off switch.
+private struct CommandsList: View {
   @Bindable var model: SettingsModel
-  @State private var filter = ""
+  let page: SettingsPage
 
   var body: some View {
-    HStack(alignment: .firstTextBaseline) {
-      Text(
-        "An alias is typed in the panel; a hotkey runs the item from any app; unchecked items never show up in search."
-      )
-      .font(.system(size: 12))
-      .foregroundStyle(.secondary)
-      Spacer()
-      TextField("Filter", text: $filter)
-        .textFieldStyle(.roundedBorder)
-        .frame(width: 180)
+    let keys = page.commandKeys ?? []
+    let entries = Search.catalog(apps: [], quicklinks: []).flatMap(\.entries).filter {
+      if case .item(let key) = $0.target { keys.contains(key) } else { false }
     }
-    .onAppear { if model.apps.isEmpty { model.loadApps() } }
-    ForEach(Search.catalog(apps: model.apps, quicklinks: model.config.quicklinks)) { section in
-      let entries = section.entries.filter(matches)
-      if !entries.isEmpty {
-        Card {
-          HStack(spacing: 10) {
-            Text(section.title).frame(maxWidth: .infinity, alignment: .leading)
-            Text("Alias").frame(width: 110, alignment: .leading)
-            Text("Hotkey").frame(width: 170, alignment: .leading)
-            Text("On").frame(width: 24)
-          }
-          .font(.system(size: 12))
-          .foregroundStyle(.secondary)
-          .padding(.horizontal, 16)
-          .padding(.vertical, 10)
-          // Lazy: the Applications section can hold hundreds of rows.
-          LazyVStack(spacing: 0) {
-            ForEach(entries) { entry in
-              Divider()
-              ShortcutRow(entry: entry, model: model)
-            }
-          }
-        }
+    ShortcutsCard(title: "Commands", entries: entries, model: model, page: page)
+  }
+}
+
+/// Column headings over rows of a page's items.
+private struct ShortcutsCard: View {
+  let title: String
+  let entries: [CatalogEntry]
+  @Bindable var model: SettingsModel
+  let page: SettingsPage
+  var showsAlias = true
+
+  var body: some View {
+    Card {
+      ShortcutsHeading(title: title, showsAlias: showsAlias)
+      ForEach(entries) { entry in
+        Divider()
+        ShortcutRow(entry: entry, model: model, page: page, showsAlias: showsAlias)
       }
     }
   }
+}
 
-  private func matches(_ entry: CatalogEntry) -> Bool {
-    filter.isEmpty || entry.title.localizedCaseInsensitiveContains(filter)
-      || model.alias(of: entry.target).localizedCaseInsensitiveContains(filter)
+private struct ShortcutsHeading: View {
+  let title: String
+  var showsAlias = true
+
+  var body: some View {
+    HStack(spacing: 10) {
+      Text(title).frame(maxWidth: .infinity, alignment: .leading)
+      if showsAlias { Text("Alias").frame(width: 110, alignment: .leading) }
+      Text("Hotkey").frame(width: 170, alignment: .leading)
+      Text("On").frame(width: 24)
+    }
+    .font(.system(size: 12))
+    .foregroundStyle(.secondary)
+    .padding(.horizontal, 14)
+    .padding(.vertical, 8)
+  }
+}
+
+/// Every app, in a List: it reuses its rows, so a few hundred scroll smoothly where a stack of
+/// them all, each with fields and an icon, stuttered.
+private struct ApplicationsPage: View {
+  @Bindable var model: SettingsModel
+  @State private var filter = ""
+
+  private var entries: [CatalogEntry] {
+    filter.isEmpty
+      ? model.appEntries
+      : model.appEntries.filter {
+        $0.title.localizedCaseInsensitiveContains(filter)
+          || model.alias(of: $0.target).localizedCaseInsensitiveContains(filter)
+      }
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      LoadErrorBanner(model: model)
+      HStack(alignment: .center) {
+        PageHeader(page: .applications)
+        Spacer(minLength: 16)
+        TextField("Search apps", text: $filter)
+          .textFieldStyle(.roundedBorder)
+          .frame(width: 180)
+      }
+      VStack(spacing: 0) {
+        ShortcutsHeading(title: "Application")
+        Divider()
+        List(entries) { entry in
+          ShortcutRow(entry: entry, model: model, page: .applications)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+      }
+      .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
+      .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+    .padding(.horizontal, 28)
+    .padding(.top, 44)
+    .padding(.bottom, 20)
+    .onAppear { if model.apps.isEmpty { model.loadApps() } }
   }
 }
 
 private struct ShortcutRow: View {
   let entry: CatalogEntry
   @Bindable var model: SettingsModel
+  let page: SettingsPage
+  var showsAlias = true
+
+  /// App icons, read from disk once each: a row's redraw would otherwise ask Launch Services again.
+  private static let icons = NSCache<NSString, NSImage>()
 
   var body: some View {
     HStack(spacing: 10) {
@@ -542,47 +774,117 @@ private struct ShortcutRow: View {
       Text(entry.title)
         .lineLimit(1)
         .frame(maxWidth: .infinity, alignment: .leading)
-      TextField(
-        "Alias",
-        text: Binding {
-          model.alias(of: entry.target)
-        } set: {
-          model.setAlias($0, for: entry.target)
-        }
-      )
-      .textFieldStyle(.roundedBorder)
-      .frame(width: 110)
+      // Drawn by SwiftUI until clicked: an AppKit text field, button and checkbox in every row
+      // made scrolling a few hundred apps stutter.
+      if showsAlias {
+        AliasField(target: entry.target, model: model)
+          .frame(width: 110)
+      }
       HotkeyRecorder(target: entry.target, model: model)
         .frame(width: 170, alignment: .leading)
-      Toggle(
-        "Enabled",
-        isOn: Binding {
-          model.isEnabled(entry.target)
-        } set: {
-          model.setEnabled($0, for: entry.target)
-        }
-      )
-      .toggleStyle(.checkbox)
-      .labelsHidden()
+      Checkbox(isOn: model.isEnabled(entry.target)) {
+        model.setEnabled(!model.isEnabled(entry.target), for: entry.target)
+      }
       .frame(width: 24)
     }
     .font(.system(size: 13))
-    .padding(.horizontal, 16)
-    .padding(.vertical, 6)
+    .padding(.horizontal, 14)
+    .frame(height: 36)
   }
 
   @ViewBuilder private var icon: some View {
     if let appURL = entry.appURL {
-      Image(nsImage: NSWorkspace.shared.icon(forFile: appURL.path)).resizable()
+      Image(nsImage: Self.icon(for: appURL)).resizable()
     } else {
-      Image(systemName: entry.kind == .quicklink ? "link" : "command")
-        .font(.system(size: 10, weight: .semibold))
-        .foregroundStyle(.white)
-        .frame(width: 20, height: 20)
-        .background(
-          (entry.kind == .quicklink ? Color.blue : Color.gray).gradient,
-          in: RoundedRectangle(cornerRadius: 5))
+      PageIcon(page: page, size: 20)
     }
+  }
+
+  private static func icon(for app: URL) -> NSImage {
+    if let cached = icons.object(forKey: app.path as NSString) { return cached }
+    let icon = NSWorkspace.shared.icon(forFile: app.path)
+    icons.setObject(icon, forKey: app.path as NSString)
+    return icon
+  }
+}
+
+/// An alias shown as text, turning into a field when clicked. Saved as typed: switching pages
+/// or closing the window doesn't take focus, so waiting for focus to leave could drop the edit.
+private struct AliasField: View {
+  let target: HotkeyTarget
+  @Bindable var model: SettingsModel
+
+  private var isEditing: Bool { model.editingAlias == target }
+
+  var body: some View {
+    let alias = model.alias(of: target)
+    Group {
+      if isEditing {
+        // The panel's bare AppKit field: no white well, and it takes focus as it appears.
+        SearchField(
+          text: alias, placeholder: "Alias", fontSize: 13,
+          onChange: { model.setAlias($0, for: target) },
+          onCommand: { command in
+            switch command {
+            case .submit, .cancel: model.editingAlias = nil
+            default: break
+            }
+          },
+          onEnd: { if model.editingAlias == target { model.editingAlias = nil } })
+      } else {
+        // A plain button: drawn by SwiftUI, yet reachable with Tab and Full Keyboard Access.
+        Button {
+          model.stopRecording()
+          model.editingAlias = target
+        } label: {
+          Text(alias.isEmpty ? "Alias" : alias)
+            .foregroundStyle(alias.isEmpty ? .tertiary : .primary)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .accessibilityLabel(alias.isEmpty ? "Add alias" : "Alias \(alias)")
+      }
+    }
+    .settingsCell(isActive: isEditing)
+  }
+}
+
+extension View {
+  /// The alias and hotkey cells' shared shape: bare until active, then an outlined pill, as
+  /// Raycast draws a field being edited.
+  fileprivate func settingsCell(isActive: Bool) -> some View {
+    padding(.horizontal, 9)
+      .frame(height: 28)
+      .background(
+        Color.primary.opacity(isActive ? 0.04 : 0), in: RoundedRectangle(cornerRadius: 8)
+      )
+      .overlay {
+        if isActive {
+          RoundedRectangle(cornerRadius: 8).strokeBorder(
+            Color.primary.opacity(0.28), lineWidth: 1.5)
+        }
+      }
+  }
+}
+
+/// A checkbox SwiftUI draws itself, for the same reason as AliasField.
+private struct Checkbox: View {
+  let isOn: Bool
+  let onToggle: () -> Void
+
+  var body: some View {
+    Button(action: onToggle) {
+      Image(systemName: isOn ? "checkmark.square.fill" : "square")
+        .font(.system(size: 15))
+        .foregroundStyle(isOn ? Color.accentColor : .secondary)
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("Enabled")
+    .accessibilityValue(isOn ? "On" : "Off")
   }
 }
 
@@ -602,25 +904,19 @@ private struct HotkeyRecorder: View {
         } label: {
           HStack(spacing: 4) {
             if isRecording {
-              Text("Press keys…").foregroundStyle(Color.accentColor)
+              Text("Press keys…").foregroundStyle(.secondary)
             } else if let keycaps = spec.flatMap(Hotkey.init)?.keycaps {
               ForEach(keycaps, id: \.self) { Keycap($0) }
             } else {
-              Text(spec ?? "Add Hotkey").foregroundStyle(.secondary)
+              Text(spec ?? "Add Hotkey").foregroundStyle(.tertiary)
             }
           }
-          .frame(minWidth: 80, minHeight: 22)
+          .contentShape(Rectangle())
         }
-        // Tinted and ringed like a focused field, so waiting for keys can't pass for idle.
-        .background(
-          isRecording ? Color.accentColor.opacity(0.15) : .clear,
-          in: RoundedRectangle(cornerRadius: 6)
-        )
-        .overlay {
-          if isRecording {
-            RoundedRectangle(cornerRadius: 6).strokeBorder(Color.accentColor, lineWidth: 2)
-          }
-        }
+        // Plain and SwiftUI-drawn, like the alias beside it; recording shows as its soft fill.
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .settingsCell(isActive: isRecording)
         .accessibilityLabel(
           isRecording ? "Recording hotkey" : "Record hotkey, currently \(spec ?? "none")")
         if clearable, spec != nil, !isRecording {
@@ -630,7 +926,7 @@ private struct HotkeyRecorder: View {
             Image(systemName: "xmark.circle.fill")
           }
           .buttonStyle(.borderless)
-          .foregroundStyle(.secondary)
+          .foregroundStyle(.tertiary)
           .accessibilityLabel("Remove hotkey")
         }
         if model.failedHotkeys.contains(target) {
@@ -652,9 +948,9 @@ private struct Card<Content: View>: View {
   @ViewBuilder let content: Content
 
   var body: some View {
+    // A soft gray fill rather than an outline, as Raycast's settings group their rows.
     VStack(spacing: 0) { content }
-      .background(.background, in: RoundedRectangle(cornerRadius: 12))
-      .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+      .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
   }
 }
 
@@ -668,7 +964,7 @@ private struct SettingRow<Control: View>: View {
   var body: some View {
     HStack(spacing: 16) {
       VStack(alignment: .leading, spacing: 3) {
-        Text(title).font(.system(size: 13, weight: .medium))
+        Text(title).font(.system(size: 13))
         Text(description).font(.system(size: 12)).foregroundStyle(.secondary)
         if let detail {
           Text(detail)
@@ -680,7 +976,7 @@ private struct SettingRow<Control: View>: View {
       Spacer(minLength: 16)
       control
     }
-    .padding(.horizontal, 16)
-    .padding(.vertical, 14)
+    .padding(.horizontal, 18)
+    .padding(.vertical, 13)
   }
 }
