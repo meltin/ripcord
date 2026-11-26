@@ -655,6 +655,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Whether anything is typed in Create Snippet's form.
   private var snippetStarted: Bool {
     !(model.draft.name + model.draft.text + (model.draft.keyword ?? "") + model.tagsText).isEmpty
+      || model.draft.icon != nil
   }
 
   /// Keeps what's typed in a new snippet or bookmark as a draft as its form is left, or drops
@@ -670,8 +671,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
         drafts.snippetTags = started ? tags : nil
       }
     case .bookmarkForm:
-      // An edit keeps the new bookmark waiting behind it, if there is one.
-      let new = model.bookmarkDraft.original == nil ? model.bookmarkDraft : model.addDraft
+      // An edit keeps the new bookmark waiting behind it, if there is one; with none held, the
+      // saved draft stays as it is.
+      let editing = model.bookmarkDraft.original != nil
+      if editing, model.addDraft == nil { return }
+      let new = editing ? model.addDraft : model.bookmarkDraft
       let fields = new.flatMap { draft -> BookmarkDraftFields? in
         guard draft.isStarted else { return nil }
         return BookmarkDraftFields(
@@ -898,7 +902,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
       if let kept = model.addDraft ?? (draft.original == nil && draft.isStarted ? draft : nil) {
         model.bookmarkDraft = rebased(kept)
         model.addDraft = nil
-      } else if let saved = draftStore.drafts.bookmark {
+      } else if let saved = draftStore.drafts.bookmark,
+        !(panel.isVisible && model.mode == .bookmarkForm)
+      {
         // The draft left last time, its group found again by name.
         model.bookmarkDraft = rebased(
           BookmarkDraft(
@@ -1358,6 +1364,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// Opens a command's own list, from its row or its hotkey.
   private func open(_ mode: LauncherMode) {
+    // A form left for another command's list keeps what was typed.
+    if model.mode != mode { stashDraft() }
     // A command's hotkey would change the list under Set Alias…'s card.
     closeEditor(backToMenu: false)
     // Its hotkey closes its own list, as the launcher hotkey closes the panel.
@@ -1411,8 +1419,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
       model.draft = Snippet(name: "", text: "")
       model.tagsText = ""
     }
-    // Create Snippet with nothing typed since launch picks up the draft left last time.
-    if index == nil, !snippetStarted, let saved = draftStore.drafts.snippet {
+    // Create Snippet with nothing typed since launch picks up the draft left last time; not
+    // when it's open already, where its hotkey closes it and an emptied form stays empty.
+    if index == nil, !snippetStarted, !(panel.isVisible && model.mode == .snippetForm),
+      let saved = draftStore.drafts.snippet
+    {
       model.draft = saved
       model.tagsText = draftStore.drafts.snippetTags ?? ""
     }
@@ -1445,7 +1456,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return current.enumerated().map { $0.offset == at ? draft : $0.element }
     }
     guard saved else { return NSSound.beep() }
-    if editing == nil, model.formSource == nil { saveDrafts { $0.snippet = nil } }
+    if editing == nil, model.formSource == nil {
+      saveDrafts { drafts in
+        drafts.snippet = nil
+        drafts.snippetTags = nil
+      }
+    }
     model.draft = Snippet(name: "", text: "")
     model.tagsText = ""
     model.editing = nil
