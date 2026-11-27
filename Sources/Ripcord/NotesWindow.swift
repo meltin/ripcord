@@ -871,6 +871,13 @@ private struct MarkdownEditor: NSViewRepresentable {
         // Not formatted while composing, but redrawn, so a "Heading 1" placeholder doesn't
         // linger under the text being composed.
         textView.needsDisplay = true
+      } else if !textView.isTidying, textView.selectedRange().length == 0,
+        let edit = MarkdownEditing.taskShortcut(
+          at: textView.selectedRange().location, in: textView.string)
+      {
+        // `- [] ` becomes `- [ ] `; that edit comes back through here and is formatted then.
+        return textView.replace(
+          edit.range, with: edit.replacement, selecting: NSRange(location: edit.caret, length: 0))
       } else {
         MarkdownEditor.format(textView)
       }

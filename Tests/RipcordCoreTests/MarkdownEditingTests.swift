@@ -193,6 +193,18 @@ import Testing
     #expect(newline("plain", at: 5) == nil)
   }
 
+  @Test func takesDashEmptyBracketsAsATask() {
+    let edit = MarkdownEditing.taskShortcut(at: 5, in: "- [] ")
+    #expect(
+      edit.map { ("- [] " as NSString).replacingCharacters(in: $0.range, with: $0.replacement) }
+        == "- [ ] ")
+    #expect(edit?.caret == 6)
+    #expect(MarkdownEditing.taskShortcut(at: 7, in: "  * [] ")?.replacement == "[ ]")
+    // Only right after the space: once the task has text, or anywhere else, nothing changes.
+    #expect(MarkdownEditing.taskShortcut(at: 8, in: "  * [] x") == nil)
+    #expect(MarkdownEditing.taskShortcut(at: 5, in: "a [] ") == nil)
+  }
+
   @Test func backspaceAtAnItemsStartTakesItsMark() {
     let text = "- milk"
     #expect(

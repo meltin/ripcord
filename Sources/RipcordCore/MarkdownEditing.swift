@@ -64,6 +64,22 @@ public enum MarkdownEditing {
     return (NSRange(location: caret, length: 0), insert, caret + (insert as NSString).length)
   }
 
+  /// `- [] ` typed at a line's start, as Raycast takes it, written as Markdown's `- [ ] ` so
+  /// the file reads as a task anywhere. Nil when the caret isn't just after one.
+  public static func taskShortcut(at caret: Int, in text: String)
+    -> (range: NSRange, replacement: String, caret: Int)?
+  {
+    let string = text as NSString
+    let line = string.lineRange(for: NSRange(location: caret, length: 0))
+    let typed = string.substring(
+      with: NSRange(location: line.location, length: caret - line.location))
+    guard typed.range(of: #"^\s*[-*+] \[\] $"#, options: .regularExpression) != nil else {
+      return nil
+    }
+    let box = NSRange(location: caret - 3, length: 2)
+    return (box, "[ ]", caret + 1)
+  }
+
   /// A selection made in one go (⌘A, a click and drag) grown over hidden marks at its ends, so
   /// a copy keeps a first line's `# ` or `- `.
   public static func outward(_ range: NSRange, spans: [MarkdownSpan]) -> NSRange {
