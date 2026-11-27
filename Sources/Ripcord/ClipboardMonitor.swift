@@ -193,6 +193,16 @@ final class ClipboardMonitor {
   func pasteIntoFrontmostApp(thenLeft left: Int = 0) -> Bool {
     guard AccessibilityPermission.check().trusted else { return false }
     let source = CGEventSource(stateID: .combinedSessionState)
+    // ⌘ itself pressed and let go around V: a V merely flagged ⌘ leaves the system holding ⌘
+    // down, so the next key posted, or read by an app, comes with ⌘ (a q quitting the app).
+    func command(_ isDown: Bool) {
+      let event = CGEvent(
+        keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Command), keyDown: isDown)
+      event?.type = .flagsChanged
+      event?.flags = isDown ? .maskCommand : []
+      event?.post(tap: .cghidEventTap)
+    }
+    command(true)
     // shortcut: ⌘ plus the key at V's position on a US layout; a Dvorak user needs a layout lookup.
     for isDown in [true, false] {
       let event = CGEvent(
@@ -200,6 +210,7 @@ final class ClipboardMonitor {
       event?.flags = .maskCommand
       event?.post(tap: .cghidEventTap)
     }
+    command(false)
     // Queued after ⌘V, so the app moves the caret back once the text is in.
     // shortcut: counts the snippet's characters, so an app that reformats a paste (re-indents,
     // turns tabs into spaces) ends off by that much, and ← doesn't cross lines in a terminal;
