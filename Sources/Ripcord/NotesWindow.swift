@@ -12,6 +12,8 @@ final class NotesModel {
   var problem: String?
   /// Bumped to put the caret in the editor, as the window comes forward.
   var focusRequest = 0
+  /// The pointer is over the window: its buttons show, as Raycast Notes shows them.
+  var isHovered = false
 
   init(note: Note) {
     self.note = note
@@ -35,30 +37,46 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   private static let lastNoteKey = "lastNote"
   private static let saveDelay = 0.6
 
+  /// Raycast Notes' window, measured: 396pt wide, 144pt tall empty, 39pt in from the right of
+  /// the screen and 100pt down from its top, growing down as the note does.
+  private static let width: CGFloat = 396
+  private static let minHeight: CGFloat = 144
+  private static let inset = (right: CGFloat(39), top: CGFloat(100))
+
   private lazy var window: NotesPanel = {
     let window = NotesPanel(
-      contentRect: NSRect(x: 0, y: 0, width: 460, height: 520),
-      styleMask: [.titled, .closable, .resizable, .fullSizeContentView, .nonactivatingPanel],
+      contentRect: NSRect(x: 0, y: 0, width: Self.width, height: Self.minHeight),
+      styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel],
       backing: .buffered, defer: false)
     window.titlebarAppearsTransparent = true
     window.titleVisibility = .hidden
+    // A unified toolbar's title bar puts the traffic lights where Raycast Notes has them.
+    window.toolbar = NSToolbar()
+    window.toolbarStyle = .unified
     window.isReleasedWhenClosed = false
     window.isFloatingPanel = true
     window.level = .floating
     window.hidesOnDeactivate = false
+    window.isMovableByWindowBackground = true
     window.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
-    window.minSize = NSSize(width: 300, height: 200)
-    window.contentView = NSHostingView(
+    let content = NSHostingView(
       rootView: NotesView(
         model: model, onCreate: { [weak self] in self?.create() },
         onBrowse: { [weak self] in self?.browse() },
         onTextChange: { [weak self] in self?.scheduleSave() },
         onReload: { [weak self] in self?.reload() },
-        onSaveAsNew: { [weak self] in self?.saveAsNew() }))
+        onSaveAsNew: { [weak self] in self?.saveAsNew() },
+        onTextHeight: { [weak self] in self?.fit(textHeight: $0) },
+        onHover: { [weak self] in self?.hover($0) }))
+    // The window's size follows the note, not the view's ideal size.
+    content.sizingOptions = []
+    // The title bar's and the corners' safe areas aren't the view's: it lays out from edge to
+    // edge, as Raycast Notes does.
+    content.safeAreaRegions = []
+    window.contentView = content
     window.delegate = self
     window.onEscape = { [weak self] in self?.hide() }
-    window.setFrameAutosaveName("RipcordNotes")
-    if !window.setFrameUsingName("RipcordNotes") { window.center() }
+    Self.showTrafficLights(false, of: window)
     return window
   }()
 
@@ -145,11 +163,50 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   }
 
   private func bringForward() {
+    if !window.isVisible { place() }
     window.orderFrontRegardless()
     window.makeKey()
     startWatching()
     // Once it's key, so the editor can take the focus.
     DispatchQueue.main.async { [model] in model.focusRequest += 1 }
+  }
+
+  /// At the top right of the screen with the pointer, where Ripcord was asked from, as Raycast
+  /// Notes opens on the screen it's run on.
+  private func place() {
+    let mouse = NSEvent.mouseLocation
+    guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? .main
+    else { return }
+    let size = window.frame.size
+    window.setFrameOrigin(
+      NSPoint(
+        x: screen.visibleFrame.maxX - Self.inset.right - size.width,
+        y: screen.frame.maxY - Self.inset.top - size.height))
+  }
+
+  /// As tall as the note, top edge kept, up to the screen's bottom, as Raycast Notes grows.
+  private func fit(textHeight: CGFloat) {
+    let chrome = NotesView.headerHeight + NotesView.footerHeight
+    let screen = window.screen ?? .main
+    let top = window.frame.maxY
+    let lowest = (screen?.visibleFrame.minY ?? 0) + Self.inset.right
+    let height = min(max(textHeight + chrome, Self.minHeight), max(top - lowest, Self.minHeight))
+    guard abs(height - window.frame.height) > 0.5 else { return }
+    window.setFrame(
+      NSRect(x: window.frame.minX, y: top - height, width: window.frame.width, height: height),
+      display: true)
+  }
+
+  /// The traffic lights show with the other buttons, only while the pointer is over the window.
+  private func hover(_ isHovered: Bool) {
+    model.isHovered = isHovered
+    Self.showTrafficLights(isHovered, of: window)
+  }
+
+  private static func showTrafficLights(_ shown: Bool, of window: NSWindow) {
+    for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+      window.standardWindowButton(button)?.isHidden = !shown
+    }
   }
 
   private func hide() {
@@ -263,21 +320,37 @@ private struct NotesView: View {
   let onTextChange: () -> Void
   let onReload: () -> Void
   let onSaveAsNew: () -> Void
+  let onTextHeight: (CGFloat) -> Void
+  let onHover: (Bool) -> Void
+
+  /// Raycast Notes' title bar and footer, measured.
+  static let headerHeight: CGFloat = 52
+  static let footerHeight: CGFloat = 48
 
   var body: some View {
     VStack(spacing: 0) {
-      HStack(spacing: 4) {
+      ZStack {
         Text(Note.title(of: model.text))
-          .font(.system(size: 13, weight: .semibold))
+          .font(.system(size: 13))
+          .foregroundStyle(model.isHovered ? .secondary : .tertiary)
           .lineLimit(1)
-          .frame(maxWidth: .infinity)
-          // Clear of the traffic lights, and centered between them and the buttons.
-          .padding(.leading, 70)
-        button("list.bullet", help: "Browse Notes (⌘P)", key: "p", action: onBrowse)
-        button("plus", help: "New Note (⌘N)", key: "n", action: onCreate)
+          // Clear of the traffic lights and the buttons.
+          .padding(.horizontal, 100)
+        HStack(spacing: 0) {
+          Spacer()
+          HStack(spacing: 0) {
+            button("command", help: "Actions (⌘K)", key: "k") {}
+            button("rectangle.stack", help: "Browse Notes (⌘P)", key: "p", action: onBrowse)
+            button("plus", help: "New Note (⌘N)", key: "n", action: onCreate)
+          }
+          .padding(.horizontal, 6)
+          .frame(height: 34)
+          .glassEffect(.regular.interactive(), in: Capsule())
+          .opacity(model.isHovered ? 1 : 0)
+        }
+        .padding(.trailing, 8)
       }
-      .padding(.horizontal, 10)
-      .frame(height: 30)
+      .frame(height: Self.headerHeight)
       if let problem = model.problem {
         HStack(spacing: 8) {
           Text(problem).font(.system(size: 12)).frame(maxWidth: .infinity, alignment: .leading)
@@ -290,22 +363,42 @@ private struct NotesView: View {
       }
       MarkdownEditor(
         text: $model.text, noteURL: model.note.url, focusRequest: model.focusRequest,
-        onChange: onTextChange
-      )
-      .padding(.horizontal, 4)
-      .padding(.bottom, 4)
+        onChange: onTextChange, onHeight: onTextHeight)
+      ZStack {
+        Text("\(Self.shownCount(of: model.text)) characters")
+          .font(.system(size: 13))
+          .foregroundStyle(.tertiary)
+        HStack {
+          Spacer()
+          // Raycast Notes' Format button, a serif T.
+          Text("T")
+            .font(.custom("New York", size: 17))
+            .frame(width: 32, height: 32)
+            .glassEffect(.regular.interactive(), in: Circle())
+            .opacity(model.isHovered ? 1 : 0)
+        }
+        .padding(.trailing, 8)
+      }
+      .frame(height: Self.footerHeight)
     }
     .background(.regularMaterial)
+    .onHover(perform: onHover)
+  }
+
+  /// The characters the editor shows: hidden marks aren't counted.
+  static func shownCount(of text: String) -> Int {
+    let hidden = MarkdownEditing.hidden(in: MarkdownSpan.spans(in: text))
+    return text.count - hidden.reduce(0) { $0 + $1.length }
   }
 
   private func button(
     _ symbol: String, help: String, key: KeyEquivalent, action: @escaping () -> Void
   ) -> some View {
     Button(action: action) {
-      Glyph(symbol, pointSize: 14).frame(width: 26, height: 24)
+      Glyph(symbol, pointSize: 17).frame(width: 27, height: 28)
     }
     .buttonStyle(.plain)
-    .foregroundStyle(.secondary)
+    .foregroundStyle(.primary)
     .help(help)
     .keyboardShortcut(key, modifiers: .command)
   }
@@ -339,6 +432,8 @@ private struct MarkdownEditor: NSViewRepresentable {
   /// Bumped to put the caret in the editor.
   let focusRequest: Int
   let onChange: () -> Void
+  /// How tall the text is laid out, for the window to fit it.
+  let onHeight: (CGFloat) -> Void
 
   static let fontSize: CGFloat = 14
 
@@ -349,6 +444,8 @@ private struct MarkdownEditor: NSViewRepresentable {
     // A thin scroller shown while scrolling, as the rest of Ripcord draws them.
     scrollView.scrollerStyle = .overlay
     scrollView.autohidesScrollers = true
+    // The text starts where Raycast Notes' does, not pushed below the title bar again.
+    scrollView.automaticallyAdjustsContentInsets = false
     // macOS puts its own style back when the scroll bar setting changes.
     context.coordinator.scrollerObserver = NotificationCenter.default.addObserver(
       forName: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil, queue: .main
@@ -373,7 +470,8 @@ private struct MarkdownEditor: NSViewRepresentable {
     textView.allowsUndo = true
     textView.isAutomaticQuoteSubstitutionEnabled = false
     textView.isAutomaticDashSubstitutionEnabled = false
-    textView.textContainerInset = NSSize(width: 8, height: 6)
+    // Raycast Notes' margins: 24pt from the sides, text 65pt from the window's top.
+    textView.textContainerInset = NSSize(width: 19, height: 13)
     textView.font = .systemFont(ofSize: Self.fontSize)
     textView.typingAttributes = Self.base
     textView.string = text
@@ -405,6 +503,7 @@ private struct MarkdownEditor: NSViewRepresentable {
       }
     }
     context.coordinator.noteURL = noteURL
+    context.coordinator.reportHeight(of: textView)
     if context.coordinator.focusRequest != focusRequest {
       context.coordinator.focusRequest = focusRequest
       textView.window?.makeFirstResponder(textView)
@@ -436,6 +535,19 @@ private struct MarkdownEditor: NSViewRepresentable {
       parent.text = textView.string
       parent.onChange()
       if !textView.hasMarkedText() { MarkdownEditor.format(textView) }
+      reportHeight(of: textView)
+    }
+
+    /// Laid out first, then passed on after this update, as resizing the window lays it out
+    /// again.
+    @MainActor func reportHeight(of textView: NSTextView) {
+      guard let layoutManager = textView.layoutManager, let container = textView.textContainer
+      else { return }
+      layoutManager.ensureLayout(for: container)
+      let height =
+        layoutManager.usedRect(for: container).height + textView.textContainerInset.height * 2
+      let onHeight = parent.onHeight
+      DispatchQueue.main.async { onHeight(height) }
     }
 
     /// The caret, or the end of a selection that moved, steps over hidden marks as if they

@@ -130,6 +130,7 @@ enum Tabler {
     "questionmark.circle": "outline/help-circle",
     "quote.opening": "outline/quote",
     "rectangle.bottomhalf.filled": "outline/layout-bottombar",
+    "rectangle.stack": "outline/cards",
     "rectangle.center.inset.filled": "outline/layout-align-middle",
     "rectangle.inset.bottomleft.filled": "outline/box-align-bottom-left",
     "rectangle.inset.bottomright.filled": "outline/box-align-bottom-right",
