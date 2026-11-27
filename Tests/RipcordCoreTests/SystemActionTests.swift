@@ -41,4 +41,21 @@ import Testing
     let section = Search.catalog(apps: [], quicklinks: []).first { $0.title == "System Actions" }
     #expect(section?.entries.count == SystemAction.allCases.count)
   }
+
+  /// Raycast's names, so the words typed there find the same commands; the settings keys stay.
+  @Test func takesRaycastsNames() {
+    #expect(SystemAction.volumeUp.title == "Turn Volume Up")
+    #expect(SystemAction.volumeDown.title == "Turn Volume Down")
+    #expect(SystemAction.unhideAllApps.title == "Unhide All Hidden Apps")
+    #expect(SystemAction.volumeUp.rawValue == "volume-up")
+    #expect(SystemAction.unhideAllApps.rawValue == "unhide-all-apps")
+    // The old words still find them first.
+    func top(_ query: String) -> String? {
+      Search.sections(for: query, apps: [], running: [], quicklinks: [], items: [:])
+        .flatMap(\.results).first?.title
+    }
+    #expect(top("volume up") == "Turn Volume Up")
+    #expect(top("volume down") == "Turn Volume Down")
+    #expect(top("unhide") == "Unhide All Hidden Apps")
+  }
 }
