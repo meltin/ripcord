@@ -93,8 +93,8 @@ public enum WindowLayout: String, CaseIterable, Sendable {
     case .maximize: "Maximize"
     case .almostMaximize: "Almost Maximize"
     case .center: "Center"
-    case .nextDisplay: "Next Display"
-    case .previousDisplay: "Previous Display"
+    case .nextDisplay: "Move to Next Display"
+    case .previousDisplay: "Move to Previous Display"
     case .restore: "Restore"
     }
   }
