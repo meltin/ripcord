@@ -589,8 +589,10 @@ extension BuiltinCommand {
     case .exportSnippets: "square.and.arrow.up"
     case .importSnippets: "square.and.arrow.down"
     case .settings: "gearshape.fill"
-    case .caffeinate: "cup.and.saucer.fill"
-    case .decaffeinate: "cup.and.saucer"
+    // Raycast's Coffee draws every command with its cup.
+    case .caffeinate, .toggleCaffeinate, .caffeinateFor, .caffeinateUntil, .caffeinateWhile:
+      "cup.and.saucer.fill"
+    case .decaffeinate, .caffeinateStatus: "cup.and.saucer"
     case .sleepTimer: "moon.zzz.fill"
     case .stopSleepTimer: "moon.zzz"
     case .lidAwake: "sun.max"
@@ -614,7 +616,9 @@ extension BuiltinCommand {
     case .clipboardHistory, .quit: .red
     case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .blue
     case .searchRepositories: .orange
-    case .caffeinate, .decaffeinate: .brown
+    case .caffeinate, .decaffeinate, .toggleCaffeinate, .caffeinateFor, .caffeinateUntil,
+      .caffeinateWhile, .caffeinateStatus:
+      .brown
     case .sleepTimer, .stopSleepTimer: .indigo
     case .lidAwake: .orange
     case .pickColor, .colorHistory: .pink

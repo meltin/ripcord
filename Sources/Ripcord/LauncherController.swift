@@ -214,7 +214,7 @@ final class LauncherModel {
   var argumentScript: String? {
     switch selected?.action {
     case .runScript(let path)?: scriptArguments[path]?.isEmpty == false ? path : nil
-    case .run(.generateDummyText)?: BuiltinCommand.generateDummyText.settingsKey
+    case .run(let command)?: scriptArguments[command.settingsKey] != nil ? command.settingsKey : nil
     default: nil
     }
   }
@@ -385,6 +385,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Coffee: keep the Mac awake for this many seconds, or until Decaffeinate for nil.
   var onCaffeinate: (TimeInterval?) -> Void = { _ in }
   var onDecaffeinate: () -> Void = {}
+  var onToggleCaffeinate: () -> Void = {}
+  /// Caffeinate While: kept awake while the app with this bundle ID runs.
+  var onCaffeinateWhile: (String) -> Void = { _ in }
+  var onCaffeinateStatus: () -> Void = {}
   /// Sleep Timer: sleep the Mac, or turn its display off, after this many seconds.
   var onSleepTimer: (_ seconds: TimeInterval, _ displayOnly: Bool) -> Void = { _, _ in }
   var onStopSleepTimer: () -> Void = {}
@@ -558,6 +562,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     leftOpen = nil
     refreshApps()
+    // Caffeinate While's menu lists the apps running as the panel opens.
+    refreshCoffeeArguments()
     loadBackdrop()
     model.backdrop?.state.lastKeystroke = nil
     model.backdrop?.start()
@@ -958,6 +964,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       scripts.map { ($0.url.path, $0.arguments) }, uniquingKeysWith: { first, _ in first })
     model.scriptArguments[BuiltinCommand.generateDummyText.settingsKey] = DummyText.arguments(
       preferred: dummyTextLanguage)
+    refreshCoffeeArguments()
   }
 
   /// Generate Dummy Text's language when its menu is left alone, first in that menu.
@@ -965,6 +972,79 @@ final class LauncherController: NSObject, NSWindowDelegate {
     didSet {
       model.scriptArguments[BuiltinCommand.generateDummyText.settingsKey] = DummyText.arguments(
         preferred: dummyTextLanguage)
+    }
+  }
+
+  /// Caffeinate For, Until and While, from their fields. With nothing typed the row opens with
+  /// its first field to type in, as a script's missing argument does, from a hotkey too; what
+  /// it can't take stays typed, to fix, with a line over the screen saying why.
+  private func caffeinate(_ command: BuiltinCommand) {
+    let key = command.settingsKey
+    let values = model.argumentValues[key] ?? []
+    let value = { values.indices.contains($0) ? values[$0] : "" }
+    let run: (() -> Void)?
+    switch command {
+    case .caffeinateFor:
+      if values.allSatisfy(\.isEmpty) { return askForArgument(0, of: command) }
+      run = Coffee.duration(hours: value(0), minutes: value(1), seconds: value(2)).map {
+        seconds in { [weak self] in self?.onCaffeinate(seconds) }
+      }
+      if run == nil { HUD.show("Type whole hours, minutes or seconds.", failed: true) }
+    case .caffeinateUntil:
+      if value(0).isEmpty { return askForArgument(0, of: command) }
+      run = Coffee.until(value(0), now: .now).map { seconds in
+        { [weak self] in self?.onCaffeinate(seconds) }
+      }
+      if run == nil { HUD.show("Type a time, as 5pm or 17:30.", failed: true) }
+    default:
+      // Left alone, the app you were in, found as it runs.
+      let app = value(0).isEmpty ? frontmostApp() : value(0)
+      run = app.map { app in { [weak self] in self?.onCaffeinateWhile(app) } }
+      if run == nil { HUD.show("Pick a running app to stay awake for.", failed: true) }
+    }
+    guard let run else { return }
+    // Its menu's choice too: next time starts from the app you're in again.
+    model.argumentValues[key] = nil
+    hide()
+    run()
+  }
+
+  /// The app you were in: the panel never takes the front.
+  private func frontmostApp() -> String? {
+    NSWorkspace.shared.frontmostApplication.flatMap {
+      $0.activationPolicy == .regular ? $0.bundleIdentifier : nil
+    }
+  }
+
+  /// Shows a command's row with its field at `index` focused, as for a script's missing
+  /// argument.
+  private func askForArgument(_ index: Int, of command: BuiltinCommand) {
+    let key = command.settingsKey
+    if !(panel.isVisible && model.argumentScript == key) {
+      if !panel.isVisible { show() } else if model.mode != .root { open(.root) }
+      update(command.title)
+      if let row = model.results.firstIndex(where: { $0.action == .run(command) }) {
+        model.selection = row
+      }
+    }
+    DispatchQueue.main.async { [weak self] in
+      guard let self, model.argumentScript == key else { return }
+      focusArgument(index)
+    }
+  }
+
+  /// Coffee's argument fields: Caffeinate For's hours, minutes and seconds, Caffeinate Until's
+  /// time, and Caffeinate While's menu of the apps running now, the one you were in first.
+  private func refreshCoffeeArguments() {
+    let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+    let apps = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
+      .compactMap { app in
+        app.bundleIdentifier.map { (title: app.localizedName ?? $0, value: $0) }
+      }
+      .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+      .sorted { $0.value == front && $1.value != front }
+    for (command, arguments) in Coffee.arguments(runningApps: apps) {
+      model.scriptArguments[command.settingsKey] = arguments
     }
   }
 
@@ -1514,6 +1594,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.generateDummyText) || action == .copyDummyText {
       return generateDummyText(copyOnly: action == .copyDummyText)
     }
+    // Read before hide(), which clears what's typed in the fields.
+    if case .run(let command) = action,
+      [.caffeinateFor, .caffeinateUntil, .caffeinateWhile].contains(command)
+    {
+      return caffeinate(command)
+    }
     if action == .run(.clipboardHistory) {
       // Entries past their retention go as the list opens, though nothing new was copied.
       clipboard.prune()
@@ -1776,6 +1862,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onCaffeinate(seconds)
     case .run(.decaffeinate):
       onDecaffeinate()
+    case .run(.toggleCaffeinate):
+      onToggleCaffeinate()
+    case .run(.caffeinateStatus):
+      onCaffeinateStatus()
+    case .run(.caffeinateFor), .run(.caffeinateUntil), .run(.caffeinateWhile):
+      break  // Run with their fields before the panel hides, in caffeinate(_:).
     case .sleepTimer(let seconds, let displayOnly):
       onSleepTimer(seconds, displayOnly)
     case .run(.stopSleepTimer):

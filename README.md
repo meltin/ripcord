@@ -49,7 +49,11 @@
   and the like) and opens one in the app you assign to ↵, ⌘↵, ⌥↵, ⌃↵ or ⇧↵, an editor or a
   terminal; ⌘K adds Open on GitHub, Show in Finder and Copy Path
 - Coffee: Caffeinate keeps the Mac and its display awake until Decaffeinate; type a time after
-  it, as in `caffeinate 1h 30m`, to stop on its own. A cup with the time left shows in the menu bar
+  it, as in `caffeinate 1h 30m`, to stop on its own. A cup with the time left shows in the menu bar.
+  As Raycast's Coffee: Toggle Caffeinate; Caffeinate for ... takes hours, minutes and seconds in
+  its fields; Caffeinate Until a time of day, as 5pm or 17:30; Caffeinate While keeps it awake
+  until the app picked, or the one you were in, quits; Caffeinate Status says which, and until
+  when
 - Sleep Timer: type a time after it, as in `sleep timer 30m`, then pick Sleep or Turn Off Display;
   a moon with the time left shows in the menu bar until it fires or Stop Sleep Timer
 - Lid Awake: keeps the Mac from sleeping, with the lid closed and on battery too, until turned off
