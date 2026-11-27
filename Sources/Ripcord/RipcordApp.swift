@@ -20,7 +20,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let configURL = FileManager.default.homeDirectoryForCurrentUser
     .appending(path: ".config/ripcord/config.json")
   private let launcher = LauncherController()
-  private lazy var settings = SettingsWindowController(model: SettingsModel(configURL: configURL))
+  private let updater = Updater()
+  private lazy var settings: SettingsWindowController = {
+    let model = SettingsModel(configURL: configURL)
+    model.updater = updater
+    return SettingsWindowController(model: model)
+  }()
   private lazy var notes = NotesWindowController(store: NoteStore(folder: NoteStore.userFolder))
   private var statusItem: NSStatusItem?
   /// What's registered now, so re-reading an unchanged config skips the work and the alerts.
@@ -80,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       self?.caffeinator.decaffeinate()
     }
     launcher.onOpenSettings = { [weak self] in self?.openSettings() }
+    launcher.onCheckForUpdates = { [weak self] in self?.checkForUpdates() }
     launcher.onNotes = { [weak self] in self?.notes.handle($0) }
     notes.onBrowse = { [weak self] in self?.launcher.perform(.run(.searchNotes)) }
     notes.onSettings = { [weak self] in self?.settings.show(configuring: "command:ripcord-notes") }
@@ -209,6 +215,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   @objc private func openSettings() {
     settings.show()
+  }
+
+  @objc private func checkForUpdates() {
+    updater.checkForUpdates()
   }
 
   /// Re-read on every show so edits to the file apply without a restart.
@@ -401,6 +411,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     menu.addItem(stopCleanKeyboardItem)
     menu.addItem(withTitle: "Open Ripcord", action: #selector(toggleLauncher), keyEquivalent: "")
     menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+    menu.addItem(
+      withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
     menu.addItem(.separator())
     menu.addItem(
       withTitle: "Quit Ripcord", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")

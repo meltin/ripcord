@@ -328,6 +328,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// What the panel switched away from, put back when it closes.
   private var previousInputSource: TISInputSource?
   var onOpenSettings: () -> Void = {}
+  var onCheckForUpdates: () -> Void = {}
   /// Settings at the page for the command with this settings key.
   var onConfigure: (_ settingsKey: String) -> Void = { _ in }
   /// The settings window's model, whose hotkey checks Set Hotkey… records through.
@@ -1430,6 +1431,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       .deleteColor,
       .run(.createSnippet), .clip, .snippet, .system, .window:
       break  // Handled above, without hiding the panel.
+    case .run(.checkForUpdates):
+      onCheckForUpdates()
     case .run(.quit):
       NSApp.terminate(nil)
     }

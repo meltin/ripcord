@@ -11,7 +11,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case searchBookmarks, addBookmark
   case searchEmoji
   case ripcordNotes, createNote, searchNotes
-  case resetWindowPosition, quit
+  case resetWindowPosition, checkForUpdates, quit
 
   public var title: String {
     switch self {
@@ -37,6 +37,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .createNote: "Create Note"
     case .searchNotes: "Search Notes"
     case .resetWindowPosition: "Reset Ripcord Window Position"
+    case .checkForUpdates: "Check for Updates"
     case .quit: "Quit Ripcord"
     }
   }
@@ -80,6 +81,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .createNote: "command:create-note"
     case .searchNotes: "command:search-notes"
     case .resetWindowPosition: "command:reset-window-position"
+    case .checkForUpdates: "command:check-for-updates"
     case .quit: "command:quit"
     }
   }
@@ -88,6 +90,9 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   public static let rootMenu = [
     MenuAction(
       title: "Settings", symbol: "gearshape", shortcut: "⌘,", action: .run(.settings)),
+    MenuAction(
+      title: "Check for Updates…", symbol: "arrow.clockwise", shortcut: "",
+      action: .run(.checkForUpdates)),
     MenuAction(title: "Quit Ripcord", symbol: "power", shortcut: "⌘Q", action: .run(.quit)),
   ]
 }

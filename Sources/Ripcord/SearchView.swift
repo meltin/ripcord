@@ -501,6 +501,7 @@ extension BuiltinCommand {
     case .createNote: "doc.badge.plus"
     case .addBookmark: "bookmark.circle.fill"
     case .resetWindowPosition: "macwindow"
+    case .checkForUpdates: "arrow.clockwise"
     case .quit: "power"
     }
   }
@@ -518,7 +519,7 @@ extension BuiltinCommand {
     case .searchEmoji: .orange
     case .ripcordNotes, .createNote, .searchNotes: .orange
     case .httpStatusCodes: .teal
-    case .settings, .resetWindowPosition: .gray
+    case .settings, .resetWindowPosition, .checkForUpdates: .gray
     }
   }
 }

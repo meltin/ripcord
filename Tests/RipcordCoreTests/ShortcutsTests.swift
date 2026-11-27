@@ -187,6 +187,7 @@ import Testing
     #expect(BuiltinCommand.importSnippets.settingsKey == "command:import-snippets")
     #expect(BuiltinCommand.settings.settingsKey == "command:settings")
     #expect(BuiltinCommand.resetWindowPosition.settingsKey == "command:reset-window-position")
+    #expect(BuiltinCommand.checkForUpdates.settingsKey == "command:check-for-updates")
     #expect(BuiltinCommand.quit.settingsKey == "command:quit")
   }
 
