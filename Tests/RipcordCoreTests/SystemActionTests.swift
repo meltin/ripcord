@@ -41,4 +41,13 @@ import Testing
     let section = Search.catalog(apps: [], quicklinks: []).first { $0.title == "System Actions" }
     #expect(section?.entries.count == SystemAction.allCases.count)
   }
+
+  /// Raycast's names, so the words typed there find the same commands; the settings keys stay.
+  @Test func takesRaycastsNames() {
+    #expect(SystemAction.volumeUp.title == "Turn Volume Up")
+    #expect(SystemAction.volumeDown.title == "Turn Volume Down")
+    #expect(SystemAction.unhideAllApps.title == "Unhide All Hidden Apps")
+    #expect(SystemAction.volumeUp.rawValue == "volume-up")
+    #expect(SystemAction.unhideAllApps.rawValue == "unhide-all-apps")
+  }
 }
