@@ -267,10 +267,33 @@ It talks to the running app, which has to be open:
 It exits with 0 when done, 1 when a pick was left without one, 2 on an error (Ripcord isn't
 running, or the value was refused) and 64 for arguments it doesn't take.
 
+### MCP server
+
+`ripcord mcp` serves the same controls to an agent such as Claude over the Model Context Protocol,
+on stdin and stdout. Register it with your client, for example:
+
+```json
+{
+  "mcpServers": {
+    "ripcord": {
+      "command": "/Applications/Ripcord.app/Contents/MacOS/ripcord-cli",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Its tools are `open_panel`, `pick` (waits for you to pick a line), `get_config` and `set_config`
+(checks the value and applies it, or refuses it and changes nothing). An agent you give it can read
+your whole config, snippets and Quicklinks included, and change any setting. It speaks the
+protocol versions that begin with `initialize` (2024-11-05 to 2025-11-25). A cancelled tool call
+isn't stopped: a pick waits until you pick or close the panel.
+
 The app listens on a socket in your user's temporary folder, readable and writable by your user
 only. Any process running as you can use it, as it could edit the config file itself. It can open
 the panel, ask you to pick, and read and write the config, nothing more: it doesn't run commands,
-paste, or read Clipboard History.
+paste, or read Clipboard History itself. A config it writes can still change what your own actions
+do later, such as the snippets a keyword expands to or the folders Script Commands come from.
 
 ## Known limitations
 

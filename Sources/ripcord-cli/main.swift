@@ -8,6 +8,14 @@ func fail(_ message: String, code: Int32) -> Never {
   exit(code)
 }
 
+// An app that closes the connection early is reported, not left to kill the command.
+signal(SIGPIPE, SIG_IGN)
+
+if CommandLine.arguments.dropFirst().first == "mcp" {
+  guard CommandLine.arguments.count == 2 else { fail(Control.usage, code: 64) }
+  serveMCP()
+}
+
 let request: ControlRequest
 switch Control.request(
   from: Array(CommandLine.arguments.dropFirst()),
@@ -17,44 +25,33 @@ case .success(let parsed): request = parsed
 case .failure: fail(Control.usage, code: 64)
 }
 
-// An app that closes the connection early is reported below, not left to kill the command.
-signal(SIGPIPE, SIG_IGN)
-
-let path = Control.socketPath
-let socketFD = socket(AF_UNIX, SOCK_STREAM, 0)
-guard socketFD >= 0 else { fail("ripcord: couldn't open a socket.", code: 2) }
-var address = sockaddr_un()
-address.sun_family = sa_family_t(AF_UNIX)
-let pathBytes = Array(path.utf8)
-guard pathBytes.count < MemoryLayout.size(ofValue: address.sun_path) else {
-  fail("ripcord: the socket path is too long: \(path)", code: 2)
-}
-withUnsafeMutableBytes(of: &address.sun_path) { buffer in
-  buffer.copyBytes(from: pathBytes)
-  buffer[pathBytes.count] = 0
-}
-let connected = withUnsafePointer(to: &address) {
-  $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-    connect(socketFD, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
-  }
-}
-guard connected == 0 else { fail("ripcord: Ripcord isn't running.", code: 2) }
-
-let handle = FileHandle(fileDescriptor: socketFD, closeOnDealloc: true)
-do {
-  try handle.write(contentsOf: try JSONEncoder().encode(request) + Data("\n".utf8))
-} catch {
-  fail("ripcord: \(error.localizedDescription)", code: 2)
-}
-// One line back, once the app has done it: for a pick, once something is chosen.
-var reply = Data()
-while let chunk = try? handle.read(upToCount: 65_536), !chunk.isEmpty {
-  reply.append(chunk)
-  if chunk.contains(UInt8(ascii: "\n")) { break }
-}
-guard let response = try? JSONDecoder().decode(ControlResponse.self, from: reply) else {
-  fail("ripcord: Ripcord closed the connection without an answer.", code: 2)
-}
+let response = Control.send(request)
 if let output = response.output { print(output) }
 if let error = response.error { FileHandle.standardError.write(Data((error + "\n").utf8)) }
 exit(response.exitCode)
+
+/// `ripcord mcp`: reads a message a line until stdin ends. A tool call runs on its own thread,
+/// so a pick waiting for the user doesn't hold up the next message; each answer is written
+/// whole, one line at a time, straight to stdout.
+func serveMCP() -> Never {
+  let output = NSLock()
+  func write(_ data: Data) {
+    output.lock()
+    defer { output.unlock() }
+    try? FileHandle.standardOutput.write(contentsOf: data + Data("\n".utf8))
+  }
+  while let line = readLine(strippingNewline: true) {
+    guard !line.isEmpty else { continue }
+    let data = Data(line.utf8)
+    // Only a tool call can wait on the app; the rest are answered before the next line is read.
+    guard line.contains(#""tools/call""#) else {
+      if let answer = MCP.respond(to: data, send: Control.send) { write(answer) }
+      continue
+    }
+    Thread.detachNewThread {
+      if let answer = MCP.respond(to: data, send: Control.send) { write(answer) }
+    }
+  }
+  // Leaving drops the sockets of any pick still waiting, which closes its panel.
+  exit(0)
+}

@@ -263,7 +263,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return model.loadError.map { ControlResponse(error: "ripcord: \($0)") } ?? ControlResponse()
     case .pick(let items, let placeholder):
       if !launcher.isVisible { applyConfig() }
-      return await launcher.pick(items: items, placeholder: placeholder)
+      // Capped here too, whatever sent it.
+      return await launcher.pick(items: Control.pickable(items), placeholder: placeholder)
     }
   }
 
