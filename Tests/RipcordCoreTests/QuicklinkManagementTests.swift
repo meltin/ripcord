@@ -60,6 +60,9 @@ struct QuicklinkFileTests {
       merged.links.map(\.url) == [
         "https://duckduckgo.com/?q={query}", "~/Downloads", "https://x.com/search?q={query}",
       ])
+    // A folder opens as one, as in Raycast.
+    #expect(merged.links[1].url(for: "")?.isFileURL == true)
+    #expect(merged.links[1].url(for: "")?.path == NSHomeDirectory() + "/Downloads")
   }
 
   /// A Quicklink already here is skipped; a name taken gets a number, a keyword taken is left off.

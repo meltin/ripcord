@@ -35,7 +35,12 @@ public struct Quicklink: Codable, Equatable, Sendable {
     let unreserved = CharacterSet(
       charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
     let encoded = argument.addingPercentEncoding(withAllowedCharacters: unreserved) ?? ""
-    return URL(string: url.replacingOccurrences(of: "{query}", with: encoded))
+    let filled = url.replacingOccurrences(of: "{query}", with: encoded)
+    // A file or folder, as Raycast's Quicklinks take one: ~/Downloads or /Applications.
+    if filled.hasPrefix("~/") || filled == "~" || filled.hasPrefix("/") {
+      return URL(fileURLWithPath: (filled as NSString).expandingTildeInPath)
+    }
+    return URL(string: filled)
   }
 }
 
