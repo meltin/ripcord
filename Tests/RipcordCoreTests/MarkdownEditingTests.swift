@@ -175,3 +175,41 @@ import Testing
     #expect(MarkdownEditing.hidden(in: spans).count == 2)
   }
 }
+
+@Suite struct MarkdownListEditingTests {
+  func newline(_ text: String, at caret: Int) -> String? {
+    MarkdownEditing.newline(at: caret, in: text, spans: MarkdownSpan.spans(in: text)).map {
+      (text as NSString).replacingCharacters(in: $0.range, with: $0.replacement)
+    }
+  }
+
+  @Test func returnContinuesAListAndEndsItOnAnEmptyItem() {
+    #expect(newline("- milk", at: 6) == "- milk\n- ")
+    #expect(newline("  3. tea", at: 8) == "  3. tea\n  4. ")
+    #expect(newline("- [x] done", at: 10) == "- [x] done\n- [ ] ")
+    #expect(newline("> said", at: 6) == "> said\n> ")
+    // An empty item: its mark goes, ending the list.
+    #expect(newline("- milk\n- ", at: 9) == "- milk\n")
+    #expect(newline("plain", at: 5) == nil)
+  }
+
+  @Test func backspaceAtAnItemsStartTakesItsMark() {
+    let text = "- milk"
+    #expect(
+      MarkdownEditing.deleteBackward(at: 2, in: text, spans: MarkdownSpan.spans(in: text))
+        == .remove(NSRange(location: 0, length: 2)))
+  }
+
+  @Test func growsASelectionOverALinesMark() {
+    let text = "# Plan\n**a** b"
+    let spans = MarkdownSpan.spans(in: text)
+    // Dragged from the heading's text: its # comes along.
+    #expect(
+      MarkdownEditing.outward(NSRange(location: 2, length: 4), spans: spans)
+        == NSRange(location: 0, length: 6))
+    // From just after a bold's closing marks: they don't.
+    #expect(
+      MarkdownEditing.outward(NSRange(location: 12, length: 2), spans: spans)
+        == NSRange(location: 12, length: 2))
+  }
+}

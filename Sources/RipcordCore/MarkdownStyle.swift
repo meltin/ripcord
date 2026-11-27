@@ -2,24 +2,26 @@ import Foundation
 
 /// Where a note's Markdown asks for a look, so the editor can format it as you type: headings,
 /// emphasis, code, quotes, lists, checkboxes and links. Every mark stays in the text, so what's
-/// saved is exactly what's typed; as in Raycast Notes, a heading's or emphasis's marks are hidden
-/// once complete, and a list's or quote's are shown dimmed.
+/// saved is exactly what's typed; as in Raycast Notes, the marks are hidden once complete, and a
+/// list's bullet, number or checkbox and a quote's bar are drawn in their place.
 public struct MarkdownSpan: Equatable, Sendable {
   public enum Style: Equatable, Sendable {
     case heading(Int)
     case bold, italic, strike, underline, code, codeBlock, quote, link
+    /// A list item's line; its mark (`- `, `1. `, with any indent before it) says which.
+    case bullet, ordered
+    case task(checked: Bool)
     /// A checked task's text.
     case done
-    /// A list's, task's or quote's marks, shown dimmed.
-    case mark
-    /// A heading's, emphasis's, code's or link's marks, hidden.
+    /// The marks, hidden.
     case hidden
   }
 
   /// UTF-16 offsets, as NSTextView counts them.
   public let range: NSRange
   public let style: Style
-  /// A heading's or inline style's hidden marks, so a delete can take them with the text.
+  /// A style's hidden marks, so a delete can take them with the text: a line's one at its start,
+  /// an inline style's two around it.
   public let marks: [NSRange]
 
   public init(_ range: NSRange, _ style: Style, marks: [NSRange] = []) {
@@ -59,16 +61,20 @@ public struct MarkdownSpan: Equatable, Sendable {
         MarkdownSpan(whole, .heading(match.range(at: 1).length), marks: [shifted(match.range)]))
       spans.append(MarkdownSpan(shifted(match.range), .hidden))
     } else if let match = first(quote, in: line) {
-      spans.append(MarkdownSpan(whole, .quote))
-      spans.append(MarkdownSpan(shifted(match.range), .mark))
+      spans.append(MarkdownSpan(whole, .quote, marks: [shifted(match.range)]))
+      spans.append(MarkdownSpan(shifted(match.range), .hidden))
     } else if let match = first(task, in: line) {
-      spans.append(MarkdownSpan(shifted(match.range), .mark))
       let checked = (line as NSString).substring(with: match.range(at: 1)).lowercased() == "x"
+      spans.append(MarkdownSpan(whole, .task(checked: checked), marks: [shifted(match.range)]))
+      spans.append(MarkdownSpan(shifted(match.range), .hidden))
       let rest = NSRange(
         location: match.range.upperBound, length: whole.length - match.range.upperBound)
       if checked, rest.length > 0 { spans.append(MarkdownSpan(shifted(rest), .done)) }
     } else if let match = first(listItem, in: line) {
-      spans.append(MarkdownSpan(shifted(match.range), .mark))
+      let ordered = match.range(at: 1).location != NSNotFound
+      spans.append(
+        MarkdownSpan(whole, ordered ? .ordered : .bullet, marks: [shifted(match.range)]))
+      spans.append(MarkdownSpan(shifted(match.range), .hidden))
     }
     // Inline code first: what's inside it isn't emphasis or a link.
     let codes = all(inlineCode, in: line)
@@ -120,7 +126,8 @@ public struct MarkdownSpan: Equatable, Sendable {
   private static let heading = regex(#"^(#{1,6})\s+"#)
   private static let quote = regex(#"^>\s?"#)
   private static let task = regex(#"^\s*[-*+]\s\[([ xX])\]\s"#)
-  private static let listItem = regex(#"^\s*(?:[-*+]|\d+\.)\s"#)
+  /// Group 1 is an ordered item's number.
+  private static let listItem = regex(#"^\s*(?:[-*+]|(\d+)\.)\s"#)
   /// `code`: group 1 the opening tick, 2 the closing one; the text between is the code.
   private static let inlineCode = regex(#"(`)[^`]+(`)"#)
   private static let boldStars = regex(#"(\*\*)(?=\S)(.+?)(?<=\S)\*\*"#)

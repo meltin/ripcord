@@ -37,10 +37,12 @@ import Testing
   }
 
   @Test func readsListsTasksQuotesAndLinks() {
-    #expect(styled("- item") == ["mark:- "])
-    #expect(styled("- [x] done") == ["mark:- [x] ", "done:done"])
-    #expect(styled("- [ ] todo") == ["mark:- [ ] "])
-    #expect(styled("> said") == ["quote:> said", "mark:> "])
+    #expect(styled("- item") == ["bullet:- item", "hidden:- "])
+    #expect(styled("  2. next") == ["ordered:  2. next", "hidden:  2. "])
+    #expect(
+      styled("- [x] done") == ["task(checked: true):- [x] done", "hidden:- [x] ", "done:done"])
+    #expect(styled("- [ ] todo") == ["task(checked: false):- [ ] todo", "hidden:- [ ] "])
+    #expect(styled("> said") == ["quote:> said", "hidden:> "])
     #expect(
       styled("[Swift](https://swift.org)") == [
         "link:Swift", "hidden:[", "hidden:](https://swift.org)",

@@ -286,6 +286,8 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     actionsPanel.setContentSize(content)
     actionsPanel.setFrameTopLeftPoint(
       NSPoint(x: frame.maxX - 38 - content.width, y: frame.maxY - 50))
+    // Hidden from screen sharing along with the note.
+    actionsPanel.sharingType = window.sharingType
     window.addChildWindow(actionsPanel, ordered: .above)
     actionsPanel.makeKeyAndOrderFront(nil)
   }
@@ -657,7 +659,7 @@ private struct NotesView: View {
           // Raycast Notes' Format button, a serif T.
           Button(action: onFormat) {
             Text("T")
-              .font(.custom("New York", size: 17))
+              .font(.system(size: 17, design: .serif))
               .frame(width: 32, height: 32)
               .contentShape(Circle())
           }
@@ -880,6 +882,13 @@ private struct MarkdownEditor: NSViewRepresentable {
           new.location, from: old.location + old.length, in: text, hidden: hidden)
         return NSRange(location: location, length: 0)
       }
+      // A selection made in one go (⌘A, a drag) takes in a line's hidden mark; Shift and an
+      // arrow step over marks as the caret does.
+      let isStep =
+        abs(new.location - old.location) <= 2 && abs(NSMaxRange(new) - NSMaxRange(old)) <= 2
+      guard isStep else {
+        return MarkdownEditing.outward(new, spans: MarkdownSpan.spans(in: text))
+      }
       var start = new.location
       var end = NSMaxRange(new)
       if start != old.location {
@@ -934,9 +943,19 @@ private struct MarkdownEditor: NSViewRepresentable {
         return textView.apply(
           MarkdownEditing.deleteForward(
             at: selection.location, in: text, spans: MarkdownSpan.spans(in: text)))
+      case #selector(NSResponder.insertNewline(_:))
+      where NSApp.currentEvent?.modifierFlags.contains(.shift) != true:
+        // Return continues a list, task or quote, and ends it on an empty item.
+        guard selection.length == 0,
+          let edit = MarkdownEditing.newline(
+            at: selection.location, in: text, spans: MarkdownSpan.spans(in: text))
+        else { return false }
+        textView.replace(
+          edit.range, with: edit.replacement, selecting: NSRange(location: edit.caret, length: 0))
+        return true
       case #selector(NSResponder.insertNewline(_:)):
         // Return ends a heading; Shift-Return starts another of the same level, as in Raycast.
-        guard NSApp.currentEvent?.modifierFlags.contains(.shift) == true,
+        guard
           let prefix = MarkdownSpan.spans(in: text).first(where: {
             if case .heading = $0.style {
               return NSLocationInRange(selection.location, $0.range)
@@ -954,7 +973,35 @@ private struct MarkdownEditor: NSViewRepresentable {
   }
 
   fileprivate static var base: [NSAttributedString.Key: Any] {
-    [.font: NSFont.systemFont(ofSize: fontSize), .foregroundColor: NSColor.labelColor]
+    [
+      .font: NSFont.systemFont(ofSize: fontSize), .foregroundColor: NSColor.labelColor,
+      .paragraphStyle: paragraph(),
+    ]
+  }
+
+  /// Where list items' text starts, per level, past the bullet, number or checkbox drawn
+  /// before it, as Raycast Notes indents them.
+  static let listIndent: CGFloat = 22
+  /// A quote's text, past its bar.
+  static let quoteIndent: CGFloat = 12
+
+  /// Lines a little apart, as Raycast Notes spaces them; `indent` for every line of an item,
+  /// and `minimumHeight` for one whose marks are all there is.
+  fileprivate static func paragraph(
+    indent: CGFloat = 0, minimumHeight: CGFloat = 0, spacing: CGFloat = 6
+  ) -> NSParagraphStyle {
+    let style = NSMutableParagraphStyle()
+    style.firstLineHeadIndent = indent
+    style.headIndent = indent
+    style.minimumLineHeight = minimumHeight
+    style.paragraphSpacing = spacing
+    return style
+  }
+
+  /// How deep a list item's mark is: two spaces or a tab a level.
+  static func level(of mark: String) -> Int {
+    let lead = mark.prefix { $0 == " " || $0 == "\t" }
+    return lead.reduce(0) { $0 + ($1 == "\t" ? 2 : 1) } / 2
   }
 
   fileprivate static func headingFont(_ level: Int) -> NSFont {
@@ -969,8 +1016,7 @@ private struct MarkdownEditor: NSViewRepresentable {
     storage.setAttributes(base, range: whole)
     for span in MarkdownSpan.spans(in: storage.string)
     where NSMaxRange(span.range) <= storage.length {
-      storage.addAttributes(
-        attributes(for: span.style, at: span.range, in: storage), range: span.range)
+      storage.addAttributes(attributes(for: span, in: storage), range: span.range)
     }
     storage.endEditing()
     textView.needsDisplay = true
@@ -984,39 +1030,45 @@ private struct MarkdownEditor: NSViewRepresentable {
       } : base
   }
 
-  private static func attributes(
-    for style: MarkdownSpan.Style, at range: NSRange, in storage: NSTextStorage
-  ) -> [NSAttributedString.Key: Any] {
+  private static func attributes(for span: MarkdownSpan, in storage: NSTextStorage)
+    -> [NSAttributedString.Key: Any]
+  {
     let font =
-      storage.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont
+      storage.attribute(.font, at: span.range.location, effectiveRange: nil) as? NSFont
       ?? .systemFont(ofSize: fontSize)
-    switch style {
+    let lineHeight = NSLayoutManager().defaultLineHeight(for: .systemFont(ofSize: fontSize))
+    switch span.style {
     case .heading(let level):
       // As tall as the heading even when its marks are all there is.
-      let lineHeight = NSParagraphStyle.default.mutableCopy() as? NSMutableParagraphStyle
-      lineHeight?.minimumLineHeight = NSLayoutManager().defaultLineHeight(for: headingFont(level))
-      // Set off from the text below, as Raycast Notes' headings are.
-      lineHeight?.paragraphSpacing = 6
-      return [.font: headingFont(level), .paragraphStyle: lineHeight ?? .default]
+      return [
+        .font: headingFont(level),
+        .paragraphStyle: paragraph(
+          minimumHeight: NSLayoutManager().defaultLineHeight(for: headingFont(level))),
+      ]
+    case .bullet, .ordered, .task:
+      let mark = span.marks.first.map { (storage.string as NSString).substring(with: $0) } ?? ""
+      return [
+        .paragraphStyle: paragraph(
+          indent: listIndent * CGFloat(level(of: mark) + 1), minimumHeight: lineHeight)
+      ]
+    case .quote:
+      return [.paragraphStyle: paragraph(indent: quoteIndent, minimumHeight: lineHeight)]
     case .bold:
       return [.font: NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)]
     case .italic:
       return [.font: NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)]
     case .strike: return [.strikethroughStyle: NSUnderlineStyle.single.rawValue]
     case .underline: return [.underlineStyle: NSUnderlineStyle.single.rawValue]
-    case .code, .codeBlock:
+    // Its rounded background is drawn by the text view.
+    case .code:
+      return [.font: NSFont.monospacedSystemFont(ofSize: font.pointSize - 1, weight: .regular)]
+    case .codeBlock:
       return [
         .font: NSFont.monospacedSystemFont(ofSize: font.pointSize - 1, weight: .regular),
         .backgroundColor: NSColor.quaternaryLabelColor.withAlphaComponent(0.12),
       ]
-    case .quote: return [.foregroundColor: NSColor.secondaryLabelColor]
     case .link: return [.foregroundColor: NSColor.linkColor]
-    case .done:
-      return [
-        .foregroundColor: NSColor.secondaryLabelColor,
-        .strikethroughStyle: NSUnderlineStyle.single.rawValue,
-      ]
-    case .mark: return [.foregroundColor: NSColor.tertiaryLabelColor]
+    case .done: return [.foregroundColor: NSColor.secondaryLabelColor]
     case .hidden:
       return [
         .hiddenMark: font, .font: NSFont.systemFont(ofSize: 0.01),
@@ -1083,31 +1135,150 @@ final class NoteTextView: NSTextView {
     setSelectedRange(selection)
   }
 
-  /// "Start writing..." in an empty note, and "Heading 1" on a heading with nothing in it yet.
+  /// Ripcord's accent, the caret's orange, for bullets, numbers, checkboxes and quote bars.
+  private static let accent = FocusingTextField.caretColor
+
+  /// Where a line's first fragment sits, in the view: the marks drawn for it line up with it.
+  private func lineRect(at location: Int) -> NSRect? {
+    guard let layoutManager else { return nil }
+    let glyph = layoutManager.glyphIndexForCharacter(at: location)
+    // The used rect: the text's own height, without the space after the paragraph.
+    let used = layoutManager.lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil)
+    let origin = textContainerOrigin
+    return NSRect(
+      x: origin.x + (textContainer?.lineFragmentPadding ?? 0), y: origin.y + used.minY,
+      width: used.width, height: used.height)
+  }
+
+  /// A task's checkbox, at the start of its line.
+  private func checkbox(for span: MarkdownSpan) -> NSRect? {
+    guard let mark = span.marks.first, let line = lineRect(at: span.range.location) else {
+      return nil
+    }
+    let indent =
+      MarkdownEditor.listIndent
+      * CGFloat(MarkdownEditor.level(of: (string as NSString).substring(with: mark)))
+    let size: CGFloat = 14
+    return NSRect(x: line.minX + indent, y: line.midY - size / 2, width: size, height: size)
+  }
+
+  /// Inline code's rounded background and a quote's bar, behind the text.
+  override func drawBackground(in rect: NSRect) {
+    super.drawBackground(in: rect)
+    guard let layoutManager, let textContainer else { return }
+    let origin = textContainerOrigin
+    for span in MarkdownSpan.spans(in: string) {
+      switch span.style {
+      case .code:
+        let glyphs = layoutManager.glyphRange(
+          forCharacterRange: span.range, actualCharacterRange: nil)
+        layoutManager.enumerateEnclosingRects(
+          forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
+          in: textContainer
+        ) { box, _ in
+          let pill = box.offsetBy(dx: origin.x, dy: origin.y).insetBy(dx: -3, dy: 0)
+          NSColor.labelColor.withAlphaComponent(0.08).setFill()
+          NSBezierPath(roundedRect: pill, xRadius: 4, yRadius: 4).fill()
+        }
+      case .quote:
+        // From the quote's first line to its last, wrapped lines too.
+        guard let first = lineRect(at: span.range.location),
+          let last = lineRect(at: max(span.range.location, NSMaxRange(span.range) - 1))
+        else { continue }
+        let bar = NSRect(x: first.minX, y: first.minY, width: 3, height: last.maxY - first.minY)
+        Self.accent.setFill()
+        NSBezierPath(roundedRect: bar, xRadius: 1.5, yRadius: 1.5).fill()
+      default: continue
+      }
+    }
+  }
+
+  /// "Start writing..." in an empty note, "Heading 1" on a heading with nothing in it yet, and
+  /// the bullets, numbers and checkboxes drawn where list items' hidden marks are.
   override func draw(_ dirtyRect: NSRect) {
     super.draw(dirtyRect)
     let origin = textContainerOrigin
     let padding = textContainer?.lineFragmentPadding ?? 0
     let color = NSColor.placeholderTextColor
+    let font = NSFont.systemFont(ofSize: MarkdownEditor.fontSize)
     guard !string.isEmpty else {
       ("Start writing..." as NSString).draw(
         at: NSPoint(x: origin.x + padding, y: origin.y),
-        withAttributes: [
-          .font: NSFont.systemFont(ofSize: MarkdownEditor.fontSize), .foregroundColor: color,
-        ])
+        withAttributes: [.font: font, .foregroundColor: color])
       return
     }
     guard let layoutManager else { return }
     for span in MarkdownSpan.spans(in: string) {
-      guard case .heading(let level) = span.style, let prefix = span.marks.first,
-        NSMaxRange(prefix) == NSMaxRange(span.range)
-      else { continue }
-      let line = layoutManager.lineFragmentRect(
-        forGlyphAt: layoutManager.glyphIndexForCharacter(at: span.range.location),
-        effectiveRange: nil)
-      ("Heading \(level)" as NSString).draw(
-        at: NSPoint(x: origin.x + line.minX + padding, y: origin.y + line.minY),
-        withAttributes: [.font: MarkdownEditor.headingFont(level), .foregroundColor: color])
+      guard let mark = span.marks.first else { continue }
+      let indent =
+        MarkdownEditor.listIndent
+        * CGFloat(MarkdownEditor.level(of: (string as NSString).substring(with: mark)))
+      switch span.style {
+      case .heading(let level) where NSMaxRange(mark) == NSMaxRange(span.range):
+        let line = layoutManager.lineFragmentRect(
+          forGlyphAt: layoutManager.glyphIndexForCharacter(at: span.range.location),
+          effectiveRange: nil)
+        ("Heading \(level)" as NSString).draw(
+          at: NSPoint(x: origin.x + line.minX + padding, y: origin.y + line.minY),
+          withAttributes: [.font: MarkdownEditor.headingFont(level), .foregroundColor: color])
+      case .bullet:
+        guard let line = lineRect(at: span.range.location) else { continue }
+        let dot: CGFloat = 6
+        Self.accent.setFill()
+        NSBezierPath(
+          ovalIn: NSRect(x: line.minX + indent + 5, y: line.midY - dot / 2, width: dot, height: dot)
+        ).fill()
+      case .ordered:
+        guard let line = lineRect(at: span.range.location) else { continue }
+        let number = (string as NSString).substring(with: mark).trimmingCharacters(in: .whitespaces)
+        let attributes: [NSAttributedString.Key: Any] = [
+          .font: NSFont.monospacedDigitSystemFont(
+            ofSize: MarkdownEditor.fontSize, weight: .regular),
+          .foregroundColor: Self.accent,
+        ]
+        let size = (number as NSString).size(withAttributes: attributes)
+        (number as NSString).draw(
+          at: NSPoint(x: line.minX + indent, y: line.midY - size.height / 2),
+          withAttributes: attributes)
+      case .task(let checked):
+        guard let box = checkbox(for: span) else { continue }
+        let path = NSBezierPath(
+          roundedRect: box.insetBy(dx: 0.75, dy: 0.75), xRadius: 4, yRadius: 4)
+        Self.accent.set()
+        if checked {
+          path.fill()
+          let tick = NSBezierPath()
+          tick.move(to: NSPoint(x: box.minX + 3.5, y: box.midY))
+          tick.line(to: NSPoint(x: box.minX + 6, y: box.maxY - 4))
+          tick.line(to: NSPoint(x: box.maxX - 3.5, y: box.minY + 4))
+          tick.lineWidth = 1.8
+          tick.lineCapStyle = .round
+          tick.lineJoinStyle = .round
+          NSColor.white.setStroke()
+          tick.stroke()
+        } else {
+          path.lineWidth = 1.5
+          path.stroke()
+        }
+      default: continue
+      }
     }
+  }
+
+  /// A click on a task's checkbox checks or unchecks it.
+  override func mouseDown(with event: NSEvent) {
+    let point = convert(event.locationInWindow, from: nil)
+    for span in MarkdownSpan.spans(in: string) {
+      guard case .task(let checked) = span.style, let mark = span.marks.first,
+        checkbox(for: span)?.insetBy(dx: -3, dy: -3).contains(point) == true
+      else { continue }
+      let box = (string as NSString).range(of: "[", range: mark)
+      guard box.location != NSNotFound else { continue }
+      replace(
+        NSRange(location: box.location + 1, length: 1), with: checked ? " " : "x",
+        selecting: selectedRange())
+      return
+    }
+    super.mouseDown(with: event)
   }
 }

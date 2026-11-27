@@ -4,6 +4,67 @@ import Foundation
 /// weren't in the text, as in Raycast Notes: the caret never rests inside one, and a delete takes
 /// visible text, or a whole heading or style once nothing of it is left.
 public enum MarkdownEditing {
+  /// A heading, list item, task or quote: a style of the whole line, marked at its start.
+  static func isLine(_ span: MarkdownSpan) -> Bool {
+    switch span.style {
+    case .heading, .bullet, .ordered, .task, .quote: true
+    default: false
+    }
+  }
+
+  /// What Return inserts at `caret` in a list item, task or quote: the next one's mark after the
+  /// line break (a number one up, a task unchecked), or, on an empty one, the mark taken away to
+  /// end the list. Nil elsewhere.
+  public static func newline(at caret: Int, in text: String, spans: [MarkdownSpan])
+    -> (range: NSRange, replacement: String, caret: Int)?
+  {
+    guard
+      let span = spans.first(where: {
+        isLine($0)
+          && NSLocationInRange(
+            caret, NSRange(location: $0.range.location, length: $0.range.length + 1))
+      }),
+      let prefix = span.marks.first, caret >= NSMaxRange(prefix)
+    else { return nil }
+    let string = text as NSString
+    let mark = string.substring(with: prefix)
+    if NSMaxRange(span.range) == NSMaxRange(prefix) {
+      return (prefix, "", prefix.location)
+    }
+    let next: String
+    switch span.style {
+    case .ordered:
+      let indent = String(mark.prefix { $0 == " " || $0 == "\t" })
+      let number = Int(mark.drop { $0 == " " || $0 == "\t" }.prefix { $0.isNumber }) ?? 0
+      next = "\(indent)\(number + 1). "
+    case .task:
+      next = mark.replacingOccurrences(of: "[x]", with: "[ ]")
+        .replacingOccurrences(of: "[X]", with: "[ ]")
+    case .bullet, .quote: next = mark
+    default: return nil
+    }
+    let insert = "\n" + next
+    return (NSRange(location: caret, length: 0), insert, caret + (insert as NSString).length)
+  }
+
+  /// A selection made in one go (⌘A, a click and drag) grown over hidden marks at its ends, so
+  /// a copy keeps a first line's `# ` or `- `.
+  public static func outward(_ range: NSRange, spans: [MarkdownSpan]) -> NSRange {
+    let hidden = hidden(in: spans)
+    let lineMarks = spans.filter(isLine).compactMap(\.marks.first)
+    var start = range.location
+    var end = NSMaxRange(range)
+    if let mark = hidden.first(where: { $0.location < start && start < NSMaxRange($0) }) {
+      start = mark.location
+    } else if let mark = lineMarks.first(where: { NSMaxRange($0) == start }) {
+      start = mark.location
+    }
+    if let mark = hidden.first(where: { $0.location < end && end < NSMaxRange($0) }) {
+      end = NSMaxRange(mark)
+    }
+    return NSRange(location: start, length: end - start)
+  }
+
   /// What a delete key does.
   public enum Delete: Equatable, Sendable {
     /// Leave it to the text view.
@@ -52,12 +113,12 @@ public enum MarkdownEditing {
     -> Delete
   {
     let string = text as NSString
-    // At a heading's start: an empty one goes back to a plain line, a written one stays.
-    for span in spans {
-      guard case .heading = span.style, let prefix = span.marks.first,
-        NSMaxRange(prefix) == caret
-      else { continue }
-      return NSMaxRange(span.range) == caret ? .remove(prefix) : .nothing
+    // At a line style's start: a list item, task or quote goes back to a plain line, and so
+    // does an empty heading, while a written one stays, as in Raycast.
+    for span in spans where isLine(span) {
+      guard let prefix = span.marks.first, NSMaxRange(prefix) == caret else { continue }
+      if case .heading = span.style, NSMaxRange(span.range) != caret { return .nothing }
+      return .remove(prefix)
     }
     let hidden = hidden(in: spans)
     var end = caret
@@ -117,9 +178,9 @@ public enum MarkdownEditing {
   ) -> (range: NSRange, replacement: String, caret: Int)? {
     guard range.length > 0 else { return nil }
     let styled = spans.filter { !$0.marks.isEmpty }
-    // A style's own text: a heading's is its line after the `#`s.
+    // A style's own text: a line style's is its line after the mark.
     func content(_ span: MarkdownSpan) -> NSRange {
-      guard case .heading = span.style, let prefix = span.marks.first else { return span.range }
+      guard isLine(span), let prefix = span.marks.first else { return span.range }
       return NSRange(
         location: NSMaxRange(prefix), length: NSMaxRange(span.range) - NSMaxRange(prefix))
     }
