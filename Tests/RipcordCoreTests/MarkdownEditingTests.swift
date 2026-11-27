@@ -504,4 +504,16 @@ import Testing
       apply(text, MarkdownEditing.newline(at: 8, in: text, spans: MarkdownSpan.spans(in: text)))
         == "1. a\n2. ")
   }
+
+  @Test func startsTextTypedAfterAClosingCodeBlockOnTheLineBelow() {
+    let text = "```\nx\n```"
+    let edit = MarkdownEditing.lineAfterFinalBlock(
+      at: 9, in: text, spans: MarkdownSpan.spans(in: text))
+    #expect(apply(text, edit) == "```\nx\n```\n")
+    #expect(edit?.caret == 10)
+    let ended = text + "\n"
+    #expect(
+      MarkdownEditing.lineAfterFinalBlock(
+        at: 10, in: ended, spans: MarkdownSpan.spans(in: ended)) == nil)
+  }
 }

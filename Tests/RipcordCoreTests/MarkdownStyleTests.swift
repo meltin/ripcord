@@ -80,4 +80,12 @@ import Testing
     // search's is, so a busy machine doesn't fail it, while a regression to seconds still does.
     #expect(took < .seconds(2))
   }
+
+  @Test func closesACodeBlockOnlyOnABareFence() {
+    // Text on after the fence keeps it from closing the block, so it isn't hidden with it.
+    let spans = MarkdownSpan.spans(in: "```\nx\n```typed")
+    #expect(!spans.contains { $0.style == .fenced })
+    let closed = MarkdownSpan.spans(in: "```swift\nx\n```")
+    #expect(closed.contains { $0.style == .fenced })
+  }
 }

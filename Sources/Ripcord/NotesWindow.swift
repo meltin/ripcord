@@ -1312,6 +1312,15 @@ private struct MarkdownEditor: NSViewRepresentable {
     let caret = textView.selectedRange().location
     if (textView as? NoteTextView)?.isAtPlainLineStart == true || caret == 0 { return base }
     guard caret <= storage.length else { return base }
+    // A code block's line, as its lines are drawn: the character at the caret may be the
+    // hidden closing fence's, which hasn't the block's look.
+    if (textView as? NoteTextView)?.isAtBlockLineStart == true {
+      return base.merging([
+        .font: NSFont.monospacedSystemFont(ofSize: fontSize - 1, weight: .regular),
+        .paragraphStyle: paragraph(
+          indent: codeInset, tail: -codeInset, minimumHeight: codeLineHeight, spacing: 0),
+      ]) { $1 }
+    }
     return storage.attributes(at: caret - 1, effectiveRange: nil).shown.filter {
       $0.key != .strikethroughStyle
     }
@@ -1433,13 +1442,20 @@ final class NoteTextView: NSTextView {
   private(set) var isTidying = false
 
   /// The caret is at a line's start outside a code block: what's typed there starts plain.
-  var isAtPlainLineStart: Bool {
+  var isAtPlainLineStart: Bool { lineStartInBlock == false }
+
+  /// The caret is at the start of a code block's line: what's typed there takes the line's look,
+  /// not that of the hidden fence above it.
+  var isAtBlockLineStart: Bool { lineStartInBlock == true }
+
+  /// Whether the caret's line start is in a code block; nil when the caret isn't at one.
+  private var lineStartInBlock: Bool? {
     let caret = selectedRange().location
     let text = string as NSString
-    guard caret > 0, caret <= text.length else { return caret == 0 }
+    guard caret > 0, caret <= text.length else { return caret == 0 ? false : nil }
     let previous = text.character(at: caret - 1)
-    guard previous == 0x0A || previous == 0x0D else { return false }
-    return !markdownSpans.contains {
+    guard previous == 0x0A || previous == 0x0D else { return nil }
+    return markdownSpans.contains {
       $0.style == .fenced && $0.range.location <= caret && caret <= NSMaxRange($0.range)
     }
   }
@@ -1460,6 +1476,35 @@ final class NoteTextView: NSTextView {
     guard caret.length == 0, !hasMarkedText(),
       let edit = MarkdownEditing.taskShortcut(at: caret.location, in: string)
         ?? MarkdownEditing.codeFenceShortcut(at: caret.location, in: string)
+    else { return }
+    replace(edit.range, with: edit.replacement, selecting: NSRange(location: edit.caret, length: 0))
+  }
+
+  override func insertText(_ string: Any, replacementRange: NSRange) {
+    startLineAfterFinalBlock(for: string, replacementRange)
+    super.insertText(string, replacementRange: replacementRange)
+  }
+
+  override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+    startLineAfterFinalBlock(for: string, replacementRange)
+    // Composing starts with the typing attributes AppKit took from the hidden fence above; a
+    // code line's are put back so the text being composed sits in the block.
+    if !hasMarkedText(), isAtBlockLineStart {
+      typingAttributes = MarkdownEditor.typingAttributes(for: self)
+    }
+    super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+  }
+
+  /// What's typed or composed after a code block that ends the note goes on the line below.
+  /// Done before the input method's own edit, so its composing isn't broken.
+  /// Nothing (an input method clearing its text) and a line break (Return) need no line.
+  private func startLineAfterFinalBlock(for input: Any, _ replacementRange: NSRange) {
+    let typed = (input as? NSAttributedString)?.string ?? (input as? String) ?? ""
+    let caret = selectedRange()
+    guard let first = typed.first, !first.isNewline,
+      replacementRange.location == NSNotFound, caret.length == 0, !hasMarkedText(),
+      let edit = MarkdownEditing.lineAfterFinalBlock(
+        at: caret.location, in: string, spans: markdownSpans)
     else { return }
     replace(edit.range, with: edit.replacement, selecting: NSRange(location: edit.caret, length: 0))
   }
