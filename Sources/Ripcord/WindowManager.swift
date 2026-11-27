@@ -10,6 +10,9 @@ final class WindowManager {
 
   /// Halves go ½ → ⅔ → ⅓ when used again on the same window.
   var cycleHalves = true
+  /// Raycast's Window Gap and Screen Gap, in points.
+  var windowGap: CGFloat = 0
+  var screenGap: CGFloat = 0
 
   /// Nil when done, or a message to show.
   func apply(_ layout: WindowLayout, to app: NSRunningApplication?) -> String? {
@@ -70,7 +73,9 @@ final class WindowManager {
       )
     default:
       guard
-        let placed = layout.frame(for: frame, in: screens[index].visible, cycling: cycleHalves)
+        let placed = layout.frame(
+          for: frame, in: screens[index].visible, cycling: cycleHalves, windowGap: windowGap,
+          screenGap: screenGap)
       else { return nil }
       target = placed
     }

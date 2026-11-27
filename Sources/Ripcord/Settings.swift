@@ -628,6 +628,10 @@ private enum SettingText {
     title: "Turn Off at Low Battery",
     detail:
       "On battery, Lid Awake turns itself off at this charge, so a closed Mac doesn't run flat.")
+  static let windowGap = SettingsSearch.Item(
+    title: "Window Gap", detail: "Gap between windows")
+  static let screenGap = SettingsSearch.Item(
+    title: "Screen Gap", detail: "Gap from windows to the screen edge")
   static let cycling = SettingsSearch.Item(
     title: "Cycling",
     detail:
@@ -657,7 +661,7 @@ extension SettingsPage {
       case .scripts: [SettingText.scriptFolders]
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
       case .dummyText: [SettingText.dummyTextLanguage]
-      case .windowManagement: [SettingText.cycling]
+      case .windowManagement: [SettingText.windowGap, SettingText.screenGap, SettingText.cycling]
       case .lidAwake: [SettingText.lidAwakePermission, SettingText.lidAwakeLowBattery]
       case .clipboardHistory:
         [SettingText.keepHistoryFor, SettingText.maxEntries, SettingText.clearHistory]
@@ -801,6 +805,10 @@ struct SettingsView: View {
           PageScroll(model: model) {
             PageHeader(page: .windowManagement)
             Card {
+              GapRow(item: SettingText.windowGap, gap: $model.config.windowGap)
+              Divider()
+              GapRow(item: SettingText.screenGap, gap: $model.config.screenGap)
+              Divider()
               SettingRow(title: SettingText.cycling.title, description: SettingText.cycling.detail)
               {
                 Toggle(SettingText.cycling.title, isOn: $model.config.cycleHalves)
@@ -2275,6 +2283,30 @@ private struct LidAwakeSettings: View {
       _ = await Task.detached { allow ? LidAwake.allow() : LidAwake.disallow() }.value
       await refresh()
       working = false
+    }
+  }
+}
+
+/// A Window Management gap, picked from Raycast's sizes.
+private struct GapRow: View {
+  let item: SettingsSearch.Item
+  @Binding var gap: Int
+
+  private static let sizes = [
+    ("None", 0), ("Tiny", 8), ("Small", 16), ("Medium", 32), ("Large", 64), ("Extra Large", 128),
+  ]
+
+  var body: some View {
+    SettingRow(title: item.title, description: item.detail) {
+      Picker(item.title, selection: $gap) {
+        ForEach(Self.sizes, id: \.1) { name, points in
+          Text(points == 0 ? name : "\(name) (\(points)px)").tag(points)
+        }
+        // One set in the file by hand stays listed, so the picker never goes blank.
+        if !Self.sizes.contains(where: { $0.1 == gap }) { Text("\(gap)px").tag(gap) }
+      }
+      .labelsHidden()
+      .fixedSize()
     }
   }
 }

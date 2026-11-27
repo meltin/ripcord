@@ -320,6 +320,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.clipboardSettings = config.clipboardHistory
       launcher.backdrop = config.backdrop
       launcher.cycleHalves = config.cycleHalves
+      launcher.setWindowGaps(window: config.windowGap, screen: config.screenGap)
       lidAwake.lowBattery = config.lidAwakeLowBattery
       applyLaunchAtLogin(config.launchAtLogin)
       // Saving mid-recording must not bring back the hotkeys the recorder turned off.

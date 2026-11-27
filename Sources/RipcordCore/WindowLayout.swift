@@ -101,17 +101,19 @@ public enum WindowLayout: String, CaseIterable, Sendable {
 
   public var settingsKey: String { "window:\(rawValue)" }
 
-  /// Where `window` goes on a screen whose usable area is `visible`; nil for the ones that
+  /// Where `window` goes on a screen whose usable area is `screen`; nil for the ones that
   /// need more than one screen or the window's history (next and previous display, restore).
-  public func frame(for window: CGRect, in visible: CGRect) -> CGRect? {
+  /// As Raycast's Screen Gap and Window Gap: every window keeps `screenGap` from the screen's
+  /// edges, and a tiled one `windowGap` from its neighbors, half on each side.
+  public func frame(
+    for window: CGRect, in screen: CGRect, windowGap: CGFloat = 0, screenGap: CGFloat = 0
+  ) -> CGRect? {
+    let visible = screen.insetBy(dx: max(screenGap, 0), dy: max(screenGap, 0))
+    // A gap set by hand too large for the screen leaves nowhere to put the window.
+    guard !visible.isEmpty, windowGap >= 0 else { return nil }
     let (x, y, w, h) = (visible.minX, visible.minY, visible.width, visible.height)
-    // Edges rounded, sizes taken from them, so neighbors meet and none ends past the screen.
     func part(_ fx: CGFloat, _ fy: CGFloat, _ fw: CGFloat, _ fh: CGFloat) -> CGRect {
-      let left = (x + w * fx).rounded()
-      let top = (y + h * fy).rounded()
-      let right = (x + w * (fx + fw)).rounded()
-      let bottom = (y + h * (fy + fh)).rounded()
-      return CGRect(x: left, y: top, width: right - left, height: bottom - top)
+      Self.tile(fx, fy, fw, fh, in: visible, gap: windowGap)
     }
     // Thirds run along the long side, so they split a portrait screen top to bottom.
     let wide = w >= h
@@ -181,7 +183,8 @@ public enum WindowLayout: String, CaseIterable, Sendable {
         }
       return CGRect(origin: origin, size: size).rounded
     case .maximize: return visible.rounded
-    case .almostMaximize: return part(0.05, 0.05, 0.9, 0.9)
+    // Not a tile: no neighbors to keep a gap from.
+    case .almostMaximize: return Self.tile(0.05, 0.05, 0.9, 0.9, in: visible, gap: 0)
     case .center:
       // Its size kept, but never larger than the screen.
       let size = CGSize(width: min(window.width, w), height: min(window.height, h))
@@ -197,9 +200,14 @@ public enum WindowLayout: String, CaseIterable, Sendable {
 
   /// Where a half puts `window` when halves cycle: ½, or the next of ½ → ⅔ → ⅓ → ½ when the
   /// window is already at one of them on that side, as Raycast's Cycle ½, ⅔, and ⅓ does.
-  public func frame(for window: CGRect, in visible: CGRect, cycling: Bool) -> CGRect? {
-    guard cycling, let steps = cycleSteps(in: visible) else {
-      return frame(for: window, in: visible)
+  public func frame(
+    for window: CGRect, in screen: CGRect, cycling: Bool, windowGap: CGFloat = 0,
+    screenGap: CGFloat = 0
+  ) -> CGRect? {
+    let visible = screen.insetBy(dx: max(screenGap, 0), dy: max(screenGap, 0))
+    guard !visible.isEmpty, windowGap >= 0 else { return nil }
+    guard cycling, let steps = cycleSteps(in: visible, gap: windowGap) else {
+      return frame(for: window, in: screen, windowGap: windowGap, screenGap: screenGap)
     }
     // A point or two of slack: some apps round a window's size their own way.
     func near(_ a: CGRect, _ b: CGRect) -> Bool {
@@ -211,14 +219,10 @@ public enum WindowLayout: String, CaseIterable, Sendable {
   }
 
   /// A half's ½, ⅔ and ⅓ on its side; nil for the other layouts.
-  private func cycleSteps(in visible: CGRect) -> [CGRect]? {
+  private func cycleSteps(in visible: CGRect, gap: CGFloat) -> [CGRect]? {
     let fractions: [CGFloat] = [1.0 / 2, 2.0 / 3, 1.0 / 3]
     func rect(_ fx: CGFloat, _ fy: CGFloat, _ fw: CGFloat, _ fh: CGFloat) -> CGRect {
-      let left = (visible.minX + visible.width * fx).rounded()
-      let top = (visible.minY + visible.height * fy).rounded()
-      let right = (visible.minX + visible.width * (fx + fw)).rounded()
-      let bottom = (visible.minY + visible.height * (fy + fh)).rounded()
-      return CGRect(x: left, y: top, width: right - left, height: bottom - top)
+      Self.tile(fx, fy, fw, fh, in: visible, gap: gap)
     }
     switch self {
     case .leftHalf: return fractions.map { rect(0, 0, $0, 1) }
@@ -227,6 +231,28 @@ public enum WindowLayout: String, CaseIterable, Sendable {
     case .bottomHalf: return fractions.map { rect(0, 1 - $0, 1, $0) }
     default: return nil
     }
+  }
+
+  /// The part of `visible` from these fractions, each edge inside the screen pulled in by half
+  /// of `gap`. As Raycast's on a 2048 × 1121 screen: its size rounded down, and its origin
+  /// rounded, or, on the right or bottom edge, that edge less the size, so it ends there.
+  private static func tile(
+    _ fx: CGFloat, _ fy: CGFloat, _ fw: CGFloat, _ fh: CGFloat, in visible: CGRect, gap: CGFloat
+  ) -> CGRect {
+    let (x, y, w, h) = (visible.minX, visible.minY, visible.width, visible.height)
+    // Inside the screen, with slack for fractions such as ⅓ + ⅔ that sum just short of 1.
+    func inner(_ f: CGFloat) -> CGFloat { f > 0.0001 && f < 0.9999 ? gap / 2 : 0 }
+    let left = x + w * fx + inner(fx)
+    let top = y + h * fy + inner(fy)
+    let right = x + w * (fx + fw) - inner(fx + fw)
+    let bottom = y + h * (fy + fh) - inner(fy + fh)
+    // A hair added first, so a size such as 504 computed as 503.99999 stays 504.
+    let width = (right - left + 0.001).rounded(.down)
+    let height = (bottom - top + 0.001).rounded(.down)
+    return CGRect(
+      x: (inner(fx + fw) == 0 && fx > 0.0001 ? right - width : left).rounded(),
+      y: (inner(fy + fh) == 0 && fy > 0.0001 ? bottom - height : top).rounded(),
+      width: width, height: height)
   }
 
   /// `frame` moved, not resized, until it's inside `visible`, when it fits.
