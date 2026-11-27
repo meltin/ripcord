@@ -44,7 +44,8 @@ public struct DoubleTapDetector: Sendable {
     return nil
   }
 
-  /// A key went down: whatever was pressed is part of a shortcut or of typing, not a tap.
+  /// A key or a mouse button went down: whatever was pressed is part of a shortcut, a ⌘-click
+  /// or typing, not a tap.
   public mutating func keyPressed() {
     press = nil
     tap = nil

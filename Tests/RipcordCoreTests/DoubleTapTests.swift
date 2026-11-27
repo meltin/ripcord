@@ -43,6 +43,16 @@ import Testing
     #expect(detector.modifiersChanged(to: 0, at: 0.3) == nil)
   }
 
+  @Test func clicksWithTheModifierAreNotTaps() {
+    var detector = DoubleTapDetector()
+    // ⌘-click twice quickly.
+    for start in [0.0, 0.3] {
+      _ = detector.modifiersChanged(to: cmd, at: start)
+      detector.keyPressed()
+      #expect(detector.modifiersChanged(to: 0, at: start + 0.1) == nil)
+    }
+  }
+
   @Test func anotherModifierJoiningIsAChord() {
     var detector = DoubleTapDetector()
     _ = tap(&detector, shift, at: 0)

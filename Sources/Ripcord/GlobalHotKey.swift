@@ -66,7 +66,10 @@ enum GlobalHotKey {
   private static func watchTaps() {
     guard tapMonitors.isEmpty else { return }
     detector = DoubleTapDetector()
-    let types: NSEvent.EventTypeMask = [.flagsChanged, .keyDown]
+    // A click with a modifier held, as ⌘-click, is no tap either.
+    let types: NSEvent.EventTypeMask = [
+      .flagsChanged, .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown,
+    ]
     let global = NSEvent.addGlobalMonitorForEvents(matching: types) { event in
       MainActor.assumeIsolated { handleTap(event) }
     }
@@ -84,7 +87,7 @@ enum GlobalHotKey {
       detector = DoubleTapDetector()
       return
     }
-    if event.type == .keyDown { return detector.keyPressed() }
+    if event.type != .flagsChanged { return detector.keyPressed() }
     guard
       let modifier = detector.modifiersChanged(
         to: carbonModifiers(event.modifierFlags), at: event.timestamp),

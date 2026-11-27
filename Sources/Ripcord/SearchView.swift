@@ -2052,7 +2052,7 @@ private struct ConfigureEditorCard: View {
               }
             }
             .opacity(isExample ? 0.6 : 1)
-            Text(editor.problem ?? (isExample ? "Modifiers and a key" : " "))
+            Text(editor.problem ?? (isExample ? "Modifiers and a key, or a modifier twice" : " "))
               .font(.system(size: Metrics.cardCaptionFontSize))
               .foregroundStyle(
                 editor.problem == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.red))
