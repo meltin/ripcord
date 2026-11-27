@@ -104,8 +104,9 @@ struct SearchView: View {
         EmptyState(query: model.query, mode: model.mode)
       } else if model.mode == .emoji {
         EmojiGrid(model: model, onCommand: onCommand)
-      } else if [.repositories, .httpStatusCodes, .colors, .bookmarks, .notes, .pick].contains(
-        model.mode)
+      } else if [.repositories, .httpStatusCodes, .colors, .colorNames, .bookmarks, .notes, .pick]
+        .contains(
+          model.mode)
       {
         resultList
       } else if model.mode != .root {
@@ -282,6 +283,8 @@ private struct EmptyState: View {
       "Colors you pick with Pick Color show up here."
     case .colors:
       "No color matches “\(query)”."
+    case .colorNames:
+      "No color name matches “\(query)”. Type a hex, as #00ff00, for the names nearest it."
     case .bookmarks where query.trimmingCharacters(in: .whitespaces).isEmpty:
       "Bookmarks you keep in ~/.config/ripcord/bookmarks.md show up here, one “- [Title](URL)” per line under “# Group” headings."
     case .bookmarks:
@@ -384,7 +387,7 @@ private struct ResultIcon: View {
       tile("note.text", .orange)
     case _ where result.kind == .color:
       // The color itself, from the row's ID ("color:#RRGGBB").
-      let hex = UInt32(result.id.dropFirst("color:#".count), radix: 16) ?? 0
+      let hex = UInt32(result.id.dropFirst("color:#".count).prefix(6), radix: 16) ?? 0
       RoundedRectangle(cornerRadius: 6)
         .fill(
           Color(
@@ -598,6 +601,7 @@ extension BuiltinCommand {
     case .lidAwake: "sun.max"
     case .pickColor: "eyedropper"
     case .colorHistory: "swatchpalette.fill"
+    case .colorNames: "tag"
     case .cleanKeyboard: "keyboard"
     case .searchBookmarks: "bookmark.fill"
     case .searchEmoji: "face.smiling"
@@ -621,7 +625,7 @@ extension BuiltinCommand {
       .brown
     case .sleepTimer, .stopSleepTimer: .indigo
     case .lidAwake: .orange
-    case .pickColor, .colorHistory: .pink
+    case .pickColor, .colorHistory, .colorNames: .pink
     case .cleanKeyboard: .cyan
     case .searchBookmarks, .addBookmark: .yellow
     case .searchEmoji: .orange
@@ -1970,8 +1974,15 @@ private struct MenuCard: View {
       let rows = menu.shown
       Group {
         if rows.count > Self.visibleRows {
-          ScrollView { items(rows) }.thinScroller().frame(
-            height: CGFloat(Self.visibleRows) * (Metrics.cardRowHeight + Metrics.cardRowSpacing))
+          // Following the selection as the arrows move it past the rows in view.
+          ScrollViewReader { proxy in
+            ScrollView { items(rows) }.thinScroller()
+              .frame(
+                height: CGFloat(Self.visibleRows)
+                  * (Metrics.cardRowHeight + Metrics.cardRowSpacing)
+              )
+              .onChange(of: menu.selection) { _, now in proxy.scrollTo(now, anchor: .center) }
+          }
         } else {
           items(rows)
         }
@@ -2044,6 +2055,7 @@ private struct MenuCard: View {
           .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .id(index)
         // The pointer moves the selection, so Return and the click agree.
         .onHover { if $0 { onCommand(.selectMenuItem(index)) } }
       }
@@ -2365,6 +2377,7 @@ extension LauncherMode {
     case .repositories: "Search Repositories…"
     case .httpStatusCodes: "Search HTTP Status Codes…"
     case .colors: "Search Colors…"
+    case .colorNames: "Search HEX (#00ff00)"
     case .bookmarks: "Search Bookmarks…"
     case .emoji: "Search Emoji & Symbols…"
     case .notes: "Search Notes…"

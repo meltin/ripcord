@@ -333,6 +333,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       snippetExpander.apply(config)
       launcher.repositorySettings = config.repositories
       launcher.colorFormat = config.colorFormat
+      launcher.showColorName = config.showColorName
       launcher.favorites = config.favorites
       launcher.scriptFolders = config.scriptFolders
       launcher.dummyTextLanguage = config.dummyTextLanguage

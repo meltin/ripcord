@@ -8,7 +8,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case caffeinateWhile, caffeinateStatus
   case sleepTimer, stopSleepTimer
   case lidAwake
-  case pickColor, colorHistory
+  case pickColor, colorHistory, colorNames
   case cleanKeyboard
   case searchBookmarks, addBookmark
   case searchEmoji
@@ -39,6 +39,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .lidAwake: "Lid Awake"
     case .pickColor: "Pick Color"
     case .colorHistory: "Color History"
+    case .colorNames: "Color Names"
     case .cleanKeyboard: "Clean Keyboard"
     case .searchBookmarks: "Search Bookmarks"
     case .addBookmark: "Add Bookmark"
@@ -61,7 +62,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
       "Coffee"
     case .sleepTimer, .stopSleepTimer: "Sleep Timer"
     case .lidAwake: "Keep the Mac awake with the lid closed"
-    case .pickColor, .colorHistory: "Color Picker"
+    case .pickColor, .colorHistory, .colorNames: "Color Picker"
     case .cleanKeyboard: "Clean Keyboard"
     case .searchBookmarks, .addBookmark: "Bookmarks"
     case .searchEmoji: "Emoji & Symbols"
@@ -96,6 +97,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .stopSleepTimer: "command:stop-sleep-timer"
     case .pickColor: "command:pick-color"
     case .colorHistory: "command:color-history"
+    case .colorNames: "command:color-names"
     case .cleanKeyboard: "command:clean-keyboard"
     case .searchBookmarks: "command:search-bookmarks"
     case .addBookmark: "command:add-bookmark"

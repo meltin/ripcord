@@ -101,7 +101,8 @@ enum NotesRequest {
 
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
-  case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, bookmarks
+  case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, colorNames
+  case bookmarks
   case bookmarkForm, emoji, scriptOutput, notes
   /// `ripcord pick`: lines handed in, one to choose.
   case pick
@@ -119,6 +120,7 @@ enum LauncherMode {
     case .repositories: .searchRepositories
     case .httpStatusCodes: .httpStatusCodes
     case .colors: .colorHistory
+    case .colorNames: .colorNames
     case .bookmarks: .searchBookmarks
     case .bookmarkForm: .addBookmark
     case .emoji: .searchEmoji
@@ -412,6 +414,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   var onBeforeSleep: () -> Void = {}
   /// Clean Keyboard: block the keyboard for this many seconds.
   var onCleanKeyboard: (TimeInterval) -> Void = { _ in }
+  /// Pick Color's message names the nearest named color too.
+  var showColorName = false
   /// What Clean Keyboard runs for with no time typed; Always Ask asks for one.
   var cleanKeyboardDuration = CleanKeyboardSettings.Duration.ask
   var onImportSnippets: () -> Void = {}
@@ -743,6 +747,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if model.mode == .colors {
       return Search.colorSections(for: query, history: colors, format: colorFormat)
     }
+    if model.mode == .colorNames { return Search.colorNameSections(for: query) }
     if model.mode == .repositories {
       return Search.repositorySections(
         for: query, repositories: repositories, settings: repositorySettings)
@@ -1610,6 +1615,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.searchSnippets) { return open(.snippets) }
     if action == .run(.httpStatusCodes) { return open(.httpStatusCodes) }
     if action == .run(.colorHistory) { return open(.colors) }
+    if action == .run(.colorNames) { return open(.colorNames) }
     if action == .run(.searchBookmarks) {
       if loadBookmarks() { open(.bookmarks) }
       return
@@ -1891,6 +1897,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onCleanKeyboard(seconds)
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
       .run(.searchRepositories), .run(.httpStatusCodes), .run(.sleepTimer), .run(.colorHistory),
+      .run(.colorNames),
       .run(.cleanKeyboard), .run(.searchBookmarks), .run(.addBookmark), .deleteBookmark,
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,
@@ -2208,7 +2215,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
           red: Double(rgb.redComponent), green: Double(rgb.greenComponent),
           blue: Double(rgb.blueComponent))
         do { try self.colors.add(color) } catch { self.onError(error.localizedDescription) }
-        self.perform(.copy(self.colorFormat.string(for: color)))
+        let text = self.colorFormat.string(for: color)
+        self.perform(.copy(text))
+        // As Raycast's says it, the nearest named color after it when asked.
+        let name = self.showColorName ? ColorNames.nearest(to: color, count: 1).first?.name : nil
+        HUD.show("Copied color \(text)\(name.map { " (\($0))" } ?? "") to clipboard")
       }
     }
   }
