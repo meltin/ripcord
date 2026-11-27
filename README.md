@@ -129,8 +129,9 @@
   are listed in the root search, and Search Script Commands lists them alone; `silent` ones show
   their last line over the screen, `compact` ones over the footer and `fullOutput` ones all of it
   in the panel, and a failure shows its exit code and error. A script's arguments are fields
-  beside the search bar, as Raycast's: Tab and Shift-Tab move through them, dropdowns too, and a space right after the script's alias jumps
-  into the first; a dropdown steps with ↑↓, and Space or a letter opens its list to filter.
+  beside the search bar, as Raycast's: Tab and Shift-Tab move through them, dropdowns too, and a
+  space right after the script's alias jumps into the first; a dropdown steps with ↑↓, and Space
+  or a letter opens its list to filter.
   Return runs the script once the required ones are filled, after asking first when it sets
   `needsConfirmation`. A refreshing `inline` isn't run yet
 - HTTP Status Codes: look a code up by number or name, grouped by hundred; Return opens its MDN
