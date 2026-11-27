@@ -36,6 +36,8 @@ final class SettingsModel {
   private(set) var recorderMessage: (target: HotkeyTarget, text: String)?
   private var saved = Config.default
   private var keyMonitor: Any?
+  /// Both recorders' double taps: this page's and the panel's Set Hotkey….
+  var recordTaps = DoubleTapDetector()
 
   init(configURL: URL) { self.configURL = configURL }
 
@@ -81,9 +83,11 @@ final class SettingsModel {
     recordingTarget = target
     recorderMessage = nil
     onRecordingChange(true)
-    keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+    recordTaps = DoubleTapDetector()
+    keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) {
+      [weak self] event in
       self?.record(event)
-      return nil
+      return event.type == .flagsChanged ? event : nil
     }
   }
 
@@ -97,8 +101,16 @@ final class SettingsModel {
 
   private func record(_ event: NSEvent) {
     guard let target = recordingTarget else { return }
-    if event.keyCode == UInt16(kVK_Escape) { return stopRecording() }
-    if let problem = setHotkey(from: event, for: target) {
+    let problem: String?
+    if event.type == .flagsChanged {
+      guard let hotkey = doubleTap(in: event) else { return }
+      problem = setHotkey(hotkey, for: target)
+    } else {
+      recordTaps.keyPressed()
+      if event.keyCode == UInt16(kVK_Escape) { return stopRecording() }
+      problem = setHotkey(from: event, for: target)
+    }
+    if let problem {
       recorderMessage = (target, problem)
       return
     }
@@ -110,10 +122,24 @@ final class SettingsModel {
   func setHotkey(from event: NSEvent, for target: HotkeyTarget) -> String? {
     guard
       let hotkey = Hotkey(
-        keyCode: UInt32(event.keyCode), modifiers: carbonModifiers(event.modifierFlags))
+        keyCode: UInt32(event.keyCode),
+        modifiers: GlobalHotKey.carbonModifiers(event.modifierFlags))
     else {
-      return "Use ⌘, ⌥ or ⌃ (⇧ optional) with a letter, a digit, an arrow, Return or Space."
+      return
+        "Use ⌘, ⌥ or ⌃ (⇧ optional) with a letter, a digit, an arrow, Return or Space, or press one modifier twice."
     }
+    return setHotkey(hotkey, for: target)
+  }
+
+  /// The double tap a recorder's modifier change completes, as ⇧⇧.
+  func doubleTap(in event: NSEvent) -> Hotkey? {
+    recordTaps.modifiersChanged(
+      to: GlobalHotKey.carbonModifiers(event.modifierFlags), at: event.timestamp
+    ).flatMap { Hotkey(doubleTap: $0) }
+  }
+
+  /// Saves `hotkey` as `target`'s; why it can't be otherwise.
+  func setHotkey(_ hotkey: Hotkey, for target: HotkeyTarget) -> String? {
     if let owner = config.owner(of: hotkey, except: target) {
       return "Already used by \(name(of: owner))."
     }
@@ -121,13 +147,6 @@ final class SettingsModel {
     // Saved before re-registering, so the new hotkey is the one that comes back.
     saveIfChanged()
     return nil
-  }
-
-  private func carbonModifiers(_ flags: NSEvent.ModifierFlags) -> UInt32 {
-    let pairs: [(NSEvent.ModifierFlags, Int)] = [
-      (.command, cmdKey), (.option, optionKey), (.control, controlKey), (.shift, shiftKey),
-    ]
-    return pairs.filter { flags.contains($0.0) }.map { UInt32($0.1) }.reduce(0, |)
   }
 
   // MARK: Per-item settings
@@ -1510,10 +1529,14 @@ private struct HotkeyRecorder: View {
           .accessibilityLabel("Remove hotkey")
         }
         if model.failedHotkeys.contains(target) {
+          // A double tap fails only for want of Accessibility.
+          let reason =
+            spec.flatMap(Hotkey.init)?.isDoubleTap == true
+            ? "Needs Accessibility, on the Permissions page" : "macOS refused this hotkey"
           Glyph("exclamationmark.triangle.fill")
             .foregroundStyle(.orange)
-            .help("macOS refused this hotkey.")
-            .accessibilityLabel("macOS refused this hotkey")
+            .help(reason + ".")
+            .accessibilityLabel(reason)
         }
       }
       if let message = model.recorderMessage, message.target == target {
