@@ -412,6 +412,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   var onBeforeSleep: () -> Void = {}
   /// Clean Keyboard: block the keyboard for this many seconds.
   var onCleanKeyboard: (TimeInterval) -> Void = { _ in }
+  /// What Clean Keyboard runs for with no time typed; Always Ask asks for one.
+  var cleanKeyboardDuration = CleanKeyboardSettings.Duration.ask
   var onImportSnippets: () -> Void = {}
   var isVisible: Bool { panel.isVisible }
 
@@ -1756,6 +1758,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
       model.menu = nil
       do { try colors.delete(hex: hex) } catch { onError(error.localizedDescription) }
       return refreshRows(selecting: model.selected?.id)
+    }
+    // Clean Keyboard with a Default Duration runs for it at once.
+    if action == .run(.cleanKeyboard), let seconds = cleanKeyboardDuration.seconds {
+      hide()
+      return onCleanKeyboard(seconds)
     }
     // A command that takes a time: its title in the field and the time to be typed after it, as
     // Raycast asks for an argument.

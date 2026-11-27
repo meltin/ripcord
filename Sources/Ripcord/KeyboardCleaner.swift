@@ -18,6 +18,8 @@ final class KeyboardCleaner {
   private(set) var endsAt: Date?
   /// After it starts and ends, for the menu bar.
   var onChange: () -> Void = {}
+  /// Whether the function row and clicks are off too; read as it starts.
+  var settings = CleanKeyboardSettings()
 
   var isActive: Bool { endsAt != nil }
 
@@ -28,14 +30,17 @@ final class KeyboardCleaner {
     case secureInput
   }
 
-  /// Starts for `seconds`, or while running, starts the time over with them.
+  /// Starts for `seconds` (infinity: until ⌃⌥⌘↩ or the menu bar), or while running, starts the
+  /// time over with them.
   func start(for seconds: TimeInterval) throws(Refusal) {
     if !isActive {
       // Keys would reach that field or app anyway, while the screen says they're off.
       guard !IsSecureEventInputEnabled() else { throw .secureInput }
       let session = UUID()
       self.session = session
-      let thread = KeyTapThread { [weak self] in
+      let thread = KeyTapThread(
+        lockFunctionKeys: settings.lockFunctionKeys, lockMouseClicks: settings.lockMouseClicks
+      ) { [weak self] in
         DispatchQueue.main.async {
           MainActor.assumeIsolated {
             if self?.session == session { self?.stop() }
@@ -44,6 +49,7 @@ final class KeyboardCleaner {
       }
       guard thread.startTap() else { throw .noAccess }
       tapThread = thread
+      countdown.clicksLocked = settings.lockMouseClicks
       showOverlays()
       let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
         MainActor.assumeIsolated { self?.tick() }
@@ -51,9 +57,9 @@ final class KeyboardCleaner {
       RunLoop.main.add(timer, forMode: .common)
       self.timer = timer
     }
-    endsAt = Date.now.addingTimeInterval(seconds)
+    endsAt = seconds.isFinite ? Date.now.addingTimeInterval(seconds) : .distantFuture
     countdown.remaining = seconds
-    Self.log.info("Clean Keyboard started for \(Int(seconds), privacy: .public)s")
+    Self.log.info("Clean Keyboard started for \(seconds, privacy: .public)s")
     onChange()
   }
 
@@ -74,7 +80,7 @@ final class KeyboardCleaner {
     guard let endsAt else { return }
     let remaining = endsAt.timeIntervalSinceNow
     if remaining <= 0 { return stop() }
-    countdown.remaining = remaining
+    countdown.remaining = endsAt == .distantFuture ? .infinity : remaining
     countdown.keysGetThrough = IsSecureEventInputEnabled()
   }
 
@@ -110,8 +116,14 @@ private final class KeyTapThread: Thread, @unchecked Sendable {
   private let ready = DispatchSemaphore(value: 0)
   /// Called on the tap's thread when ⌃⌥⌘↩ is pressed.
   private let onEndKeys: @Sendable () -> Void
+  private let lockFunctionKeys: Bool
+  private let lockMouseClicks: Bool
 
-  init(onEndKeys: @escaping @Sendable () -> Void) {
+  init(
+    lockFunctionKeys: Bool, lockMouseClicks: Bool, onEndKeys: @escaping @Sendable () -> Void
+  ) {
+    self.lockFunctionKeys = lockFunctionKeys
+    self.lockMouseClicks = lockMouseClicks
     self.onEndKeys = onEndKeys
     super.init()
     name = "Ripcord Clean Keyboard"
@@ -139,9 +151,17 @@ private final class KeyTapThread: Thread, @unchecked Sendable {
   }
 
   override func main() {
-    // Key downs and ups, modifier changes, and the media and brightness keys (NX_SYSDEFINED).
-    let types: [CGEventType] = [.keyDown, .keyUp, .flagsChanged]
-    let mask = types.reduce(CGEventMask(1 << 14)) { $0 | CGEventMask(1 << $1.rawValue) }
+    // Key downs and ups and modifier changes; the media and brightness keys (NX_SYSDEFINED)
+    // with the function row, and clicks and drags, not scrolling, with the mouse.
+    let keys: [CGEventType] = [.keyDown, .keyUp, .flagsChanged]
+    let clicks: [CGEventType] = [
+      .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown,
+      .otherMouseUp, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
+    ]
+    let systemDefined = CGEventMask(1 << 14)
+    let mask = (keys + (lockMouseClicks ? clicks : [])).reduce(
+      lockFunctionKeys ? systemDefined : 0
+    ) { $0 | CGEventMask(1 << $1.rawValue) }
     guard
       let tap = CGEvent.tapCreate(
         tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
@@ -161,12 +181,23 @@ private final class KeyTapThread: Thread, @unchecked Sendable {
     CFRunLoopRun()
   }
 
+  private static let functionKeys: Set<Int> = [
+    kVK_F1, kVK_F2, kVK_F3, kVK_F4, kVK_F5, kVK_F6, kVK_F7, kVK_F8, kVK_F9, kVK_F10, kVK_F11,
+    kVK_F12, kVK_F13, kVK_F14, kVK_F15, kVK_F16, kVK_F17, kVK_F18, kVK_F19, kVK_F20,
+  ]
+
   /// Every key event is swallowed; ⌃⌥⌘↩ also ends it.
   fileprivate func handle(_ type: CGEventType, _ event: CGEvent) -> Unmanaged<CGEvent>? {
     // macOS switches a tap off when it's slow or the user acts; back on, or keys would leak.
     if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
       if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
       return nil
+    }
+    // The function row's F-keys go through unless it's locked too.
+    if !lockFunctionKeys, type == .keyDown || type == .keyUp,
+      Self.functionKeys.contains(Int(event.getIntegerValueField(.keyboardEventKeycode)))
+    {
+      return Unmanaged.passUnretained(event)
     }
     let held = event.flags.intersection([.maskControl, .maskAlternate, .maskCommand])
     if type == .keyDown, held == [.maskControl, .maskAlternate, .maskCommand],
@@ -190,8 +221,11 @@ private func keyTapCallback(
 @MainActor
 @Observable
 final class Countdown {
+  /// Infinity while it runs until ended.
   var remaining: TimeInterval = 0
   var keysGetThrough = false
+  /// The menu bar can't be clicked to end it.
+  var clicksLocked = false
 }
 
 /// A dimmed screen with the time left, as Raycast's Clean Keyboard shows it.
@@ -205,18 +239,25 @@ private struct CleanKeyboardOverlay: View {
         Glyph("keyboard", pointSize: 56)
         Text("Cleaning Keyboard").font(
           .system(size: Metrics.cleanKeyboardTitleFontSize, weight: .semibold))
-        Text(Coffee.format(countdown.remaining.rounded(.up)))
-          .font(
-            .system(size: Metrics.cleanKeyboardCountdownFontSize, weight: .medium).monospacedDigit()
-          )
+        Text(
+          countdown.remaining.isFinite
+            ? Coffee.format(countdown.remaining.rounded(.up)) : "Until ⌃⌥⌘↩"
+        )
+        .font(
+          .system(size: Metrics.cleanKeyboardCountdownFontSize, weight: .medium).monospacedDigit()
+        )
         if countdown.keysGetThrough {
           Text("Secure input is on in another app, so keys get through. Stop wiping.")
             .font(.system(size: Metrics.cleanKeyboardWarningFontSize, weight: .semibold))
             .foregroundStyle(.yellow)
         } else {
-          Text("Keys are off until then. ⌃⌥⌘↩ or the menu bar ends it now.")
-            .font(.system(size: Metrics.cleanKeyboardMessageFontSize))
-            .foregroundStyle(.white.opacity(0.75))
+          Text(
+            countdown.clicksLocked
+              ? "Keys and clicks are off until then. ⌃⌥⌘↩ ends it now."
+              : "Keys are off until then. ⌃⌥⌘↩ or the menu bar ends it now."
+          )
+          .font(.system(size: Metrics.cleanKeyboardMessageFontSize))
+          .foregroundStyle(.white.opacity(0.75))
         }
       }
       .foregroundStyle(.white)

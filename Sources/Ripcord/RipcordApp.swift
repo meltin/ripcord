@@ -342,6 +342,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.setWindowGaps(window: config.windowGap, screen: config.screenGap)
       lidAwake.lowBattery = config.lidAwakeLowBattery
       caffeinator.settings = config.coffee
+      keyboardCleaner.settings = config.cleanKeyboard
+      launcher.cleanKeyboardDuration = config.cleanKeyboard.defaultDuration
       // Start Caffeination When Ripcord Starts: only as it starts, not on every save.
       if !hasAppliedConfig, config.coffee.startOnLaunch { caffeinator.caffeinate(for: nil) }
       hasAppliedConfig = true
