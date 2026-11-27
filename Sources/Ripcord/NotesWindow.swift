@@ -165,6 +165,9 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
         symbol: "macwindow", keys: ["/"], modifiers: [.command, .shift], keyCode: kVK_ANSI_Slash,
         startsSection: true, run: { [weak self] in self?.toggleAutoSizing() }),
       NotesAction(
+        title: "Reset Window Position", symbol: "macwindow", keys: [], modifiers: [],
+        run: { [weak self] in self?.resetPlace() }),
+      NotesAction(
         title: Self.isHiddenWhileSharing
           ? "Show While Screen Sharing" : "Hide While Screen Sharing",
         symbol: "eye.slash", keys: ["h"], modifiers: [.command, .shift],
@@ -477,6 +480,14 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
       NSPoint(
         x: screen.visibleFrame.maxX - Self.inset.right - size.width,
         y: screen.frame.maxY - Self.inset.top - size.height))
+  }
+
+  /// Back to the top right of the screen with the pointer, forgetting where it was moved to.
+  private func resetPlace() {
+    UserDefaults.standard.removeObject(forKey: Self.placeKey)
+    place()
+    // Placing moves the window, which would save that spot; it's the default anyway.
+    UserDefaults.standard.removeObject(forKey: Self.placeKey)
   }
 
   func windowDidMove(_ notification: Notification) {
