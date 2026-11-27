@@ -404,6 +404,13 @@ private struct ResultIcon: View {
       Glyph(result.symbol ?? "doc", pointSize: 15)
         .foregroundStyle(.secondary)
         .frame(width: 24, height: 24)
+    case .clip where result.kind == .file:
+      // The file's own icon, as Finder shows it.
+      if let path = result.thumbnail?.path {
+        Image(nsImage: NSWorkspace.shared.icon(forFile: path))
+          .resizable()
+          .frame(width: 24, height: 24)
+      }
     case .clip:
       if let thumbnail = result.thumbnail {
         // Cropped to a rounded square, as Raycast draws them.
@@ -549,6 +556,15 @@ private struct ClipPreview: View {
       case .image(_, let width, let height):
         [("Type", "Image"), ("Dimensions", "\(width)×\(height)")]
           + (item.size.map { [("Size", Int64($0).formatted(.byteCount(style: .file)))] } ?? [])
+      case .files(let paths):
+        [("Type", paths.count == 1 ? "File" : "\(paths.count) Files")]
+          // The kind Finder's Get Info gives, for one file.
+          + (paths.count == 1
+            ? (try? URL(fileURLWithPath: paths[0]).resourceValues(forKeys: [
+              .localizedTypeDescriptionKey
+            ]).localizedTypeDescription).map { [("Kind", $0)] } ?? [] : [])
+          + (item.size.map { [("Size", Int64($0).formatted(.byteCount(style: .file)))] } ?? [])
+          + paths.prefix(20).map { ("Path", ($0 as NSString).abbreviatingWithTildeInPath) }
       }
     details =
       content + [
@@ -589,6 +605,13 @@ private struct ClipPreview: View {
               .padding(16)
               .frame(maxWidth: .infinity, maxHeight: .infinity)
           }
+        case .files(let paths):
+          // The first file's icon, large, as Raycast previews a copied file.
+          Image(nsImage: NSWorkspace.shared.icon(forFile: paths.first ?? "/"))
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 128, height: 128)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       }
       // A fixed share for the clip; the details scroll under the footer, as in Raycast.
@@ -1928,6 +1951,7 @@ extension SearchResult.Kind {
     case .command: "Command"
     case .text: "Text"
     case .image: "Image"
+    case .file: "File"
     case .snippet: "Snippet"
     case .repository: "Repository"
     case .statusCode: "Status Code"

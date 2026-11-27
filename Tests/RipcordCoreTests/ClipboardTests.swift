@@ -47,11 +47,20 @@ private func temporaryDirectory() -> URL {
     }
   }
 
-  @Test func skipsCopiedFilesAndBlankText() {
+  @Test func keepsCopiedFilesByPath() {
+    let safari = URL(fileURLWithPath: "/Applications/Safari.app")
+    let hosts = URL(fileURLWithPath: "/etc/hosts")
     withPasteboard { pasteboard in
-      pasteboard.writeObjects([URL(fileURLWithPath: "/Applications/Safari.app") as NSURL])
-      #expect(ClipCapture.read(pasteboard) == nil)
+      pasteboard.writeObjects([safari as NSURL])
+      #expect(ClipCapture.read(pasteboard) == .files([safari]))
     }
+    withPasteboard { pasteboard in
+      pasteboard.writeObjects([safari as NSURL, hosts as NSURL])
+      #expect(ClipCapture.read(pasteboard) == .files([safari, hosts]))
+    }
+  }
+
+  @Test func skipsBlankText() {
     withPasteboard { pasteboard in
       pasteboard.declareTypes([.string], owner: nil)
       pasteboard.setString(" \n\t", forType: .string)
@@ -117,8 +126,9 @@ private func temporaryDirectory() -> URL {
     let notes = directory.appending(path: "notes.txt")
     try Data("hi".utf8).write(to: notes)
     withPasteboard { pasteboard in
+      // An image among other files is kept with them, as files.
       pasteboard.writeObjects([file as NSURL, notes as NSURL])
-      #expect(ClipCapture.read(pasteboard) == nil)
+      #expect(ClipCapture.read(pasteboard) == .files([file, notes]))
     }
   }
 
@@ -159,6 +169,44 @@ private func temporaryDirectory() -> URL {
     #expect(history.items.map(\.content) == [.text("a"), .text("b")])
     #expect(history.items[0].id == first)
     #expect(history.items[0].date == Date(timeIntervalSince1970: 3))
+  }
+
+  @Test func keepsCopiedFilesWithTheirNameAndSize() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let file = directory.appending(path: "report.txt")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try Data("12345".utf8).write(to: file)
+    var history = ClipboardHistory(directory: directory)
+    try history.add(.files([file]))
+    #expect(history.items[0].content == .files([file.path]))
+    #expect(history.items[0].name == "report.txt")
+    #expect(history.items[0].size == 5)
+    // The same files copied again move up rather than adding another.
+    try history.add(.files([file]))
+    #expect(history.items.count == 1)
+    // Its path copied as text is another item.
+    try history.add(.text(file.path))
+    #expect(history.items.count == 2)
+    // A folder's record isn't the size of what's in it.
+    try history.add(.files([directory]))
+    #expect(history.items[0].size == nil)
+  }
+
+  @Test func listsCopiedFilesByNameOrCount() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var history = ClipboardHistory(directory: directory)
+    try history.add(
+      .files([URL(fileURLWithPath: "/tmp/a.txt"), URL(fileURLWithPath: "/tmp/b.txt")]))
+    try history.add(.files([URL(fileURLWithPath: "/tmp/report.pdf")]))
+    let rows = Search.clipboardSections(for: "", history: history).flatMap(\.results)
+    #expect(rows.map(\.title) == ["report.pdf", "2 Files"])
+    #expect(rows.allSatisfy { $0.kind == .file })
+    #expect(
+      Search.clipboardSections(for: "b.txt", history: history).flatMap(\.results).map(\.title) == [
+        "2 Files"
+      ])
   }
 
   @Test func keepsImagesAsFilesAndDeletesThemWithTheirItem() throws {

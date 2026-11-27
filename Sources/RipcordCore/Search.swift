@@ -240,13 +240,14 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   }
 
   public enum Kind: Equatable, Sendable {
-    case application, calculator, quicklink, command, text, image, snippet, repository, statusCode
+    case application, calculator, quicklink, command, text, image, file, snippet, repository
+    case statusCode
     case color, bookmark, emoji, draft, script, note
 
     public var primaryAction: String {
       switch self {
       case .calculator: "Copy Answer"
-      case .text, .image, .snippet: "Paste to App"
+      case .text, .image, .file, .snippet: "Paste to App"
       case .application, .quicklink, .command: "Open Command"
       case .repository: "Open"
       case .statusCode: "Open in Browser"
@@ -716,6 +717,24 @@ public enum Search {
             id: id, title: title, subtitle: item.name == nil ? "\(width)×\(height)" : "",
             keyword: nil, kind: .image,
             action: action, thumbnail: history.imageURL(of: item), isPinned: item.isPinned)
+        )
+      case .files(let paths):
+        // By name, as Raycast lists a copied file, with the folder it's in beside it.
+        let title = item.name ?? "\(paths.count) Files"
+        guard
+          trimmed.isEmpty || "file".localizedStandardContains(trimmed)
+            || title.localizedStandardContains(trimmed)
+            || paths.contains(where: { $0.localizedStandardContains(trimmed) })
+        else { return nil }
+        let folder = paths.first.map {
+          tildePath((($0 as NSString).deletingLastPathComponent), home: NSHomeDirectory())
+        }
+        return (
+          item,
+          SearchResult(
+            id: id, title: title, subtitle: folder ?? "", keyword: nil, kind: .file,
+            action: action, thumbnail: paths.first.map { URL(fileURLWithPath: $0) },
+            isPinned: item.isPinned)
         )
       }
     }

@@ -2,12 +2,14 @@ import AppKit
 import CryptoKit
 import UniformTypeIdentifiers
 
-/// One copied piece of text or image in the clipboard history.
+/// One copied piece of text, image or files in the clipboard history.
 public struct ClipItem: Codable, Identifiable, Equatable, Sendable {
   public enum Content: Codable, Equatable, Sendable {
     case text(String)
     /// A file in the history's `images` folder.
     case image(file: String, width: Int, height: Int)
+    /// Files copied in Finder or another app, by path; the files themselves aren't kept.
+    case files([String])
   }
 
   public let id: UUID
@@ -23,9 +25,9 @@ public struct ClipItem: Codable, Identifiable, Equatable, Sendable {
   public var source: String?
   public var timesCopied: Int?
   public var firstCopied: Date?
-  /// The file name of a copied image file, shown in place of "Image".
+  /// The file name of a copied image file, shown in place of "Image", or of one copied file.
   public var name: String?
-  /// An image's size in bytes.
+  /// An image's size in bytes, or copied files' together.
   public var size: Int?
 
   public var copies: Int { timesCopied ?? 1 }
@@ -36,11 +38,12 @@ public struct ClipItem: Codable, Identifiable, Equatable, Sendable {
 public enum ClipCapture: Equatable, Sendable {
   case text(String)
   case image(Data, fileExtension: String, width: Int, height: Int, name: String? = nil)
+  case files([URL])
 
   /// Text wins over an image, so a spreadsheet cell (offered as both) is kept as its text.
   /// One copied image file, as CleanShot X puts a capture on the pasteboard, is kept as that
-  /// image. Returns nil for what must not be kept: password managers' concealed or transient
-  /// copies, and other copied files (#4).
+  /// image; other copied files are kept by path. Returns nil for what must not be kept:
+  /// password managers' concealed or transient copies.
   public static func read(_ pasteboard: NSPasteboard) -> ClipCapture? {
     let types = pasteboard.types ?? []
     let skipped: [NSPasteboard.PasteboardType] = [
@@ -52,9 +55,11 @@ public enum ClipCapture: Equatable, Sendable {
       // The file itself, not the pasteboard's image: for a Finder copy that is the file's icon.
       let urls = pasteboard.readObjects(
         forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
-      guard let urls, urls.count == 1, let url = urls.first as? URL,
+      let files = (urls ?? []).compactMap { $0 as? URL }
+      guard !files.isEmpty else { return nil }
+      guard files.count == 1, let url = files.first,
         UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true
-      else { return nil }
+      else { return .files(files) }
       // Size first, so a huge or not-yet-downloaded file is never read on the main thread.
       if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
         size <= maxImageBytes, let data = try? Data(contentsOf: url),
@@ -120,6 +125,8 @@ public enum ClipCapture: Equatable, Sendable {
       switch self {
       case .text(let text): Data(text.utf8)
       case .image(let data, _, _, _, _): data
+      // Marked, so a file and its path copied as text stay two items.
+      case .files(let urls): Data((["files"] + urls.map(\.path)).joined(separator: "\n").utf8)
       }
     return SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
   }
@@ -158,10 +165,22 @@ public struct ClipboardHistory: Sendable {
     let digest = capture.digest
     let name: String?
     let size: Int?
-    if case .image(let data, _, _, _, let fileName) = capture {
-      (name, size) = (fileName, data.count)
-    } else {
-      (name, size) = (nil, nil)
+    switch capture {
+    case .image(let data, _, _, _, let fileName): (name, size) = (fileName, data.count)
+    case .files(let urls):
+      // Read from the file system's records, not the files, so a big one costs nothing. A
+      // folder or an app's record isn't the size of what's in it, so then there's none.
+      let values = urls.map {
+        try? $0.resourceValues(forKeys: [.isDirectoryKey, .totalFileSizeKey, .fileSizeKey])
+      }
+      let sizes = values.compactMap { value in
+        value?.isDirectory == false ? value?.totalFileSize ?? value?.fileSize : nil
+      }
+      (name, size) = (
+        urls.count == 1 ? urls[0].lastPathComponent : nil,
+        sizes.count == urls.count ? sizes.reduce(0, +) : nil
+      )
+    case .text: (name, size) = (nil, nil)
     }
     if let item = items.first(where: { $0.digest == digest }) {
       return try touch(item.id, at: date, name: name)
@@ -176,6 +195,8 @@ public struct ClipboardHistory: Sendable {
       try FileManager.default.createDirectory(at: imagesURL, withIntermediateDirectories: true)
       try data.write(to: imagesURL.appending(path: file), options: .atomic)
       content = .image(file: file, width: width, height: height)
+    case .files(let urls):
+      content = .files(urls.map(\.path))
     }
     let added = [
       ClipItem(
