@@ -115,7 +115,7 @@ enum LauncherMode {
   case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, colorNames
   case convertColor, favoriteColors, colorWheel, removeRepos
   case bookmarks
-  case bookmarkForm, emoji, scriptOutput, notes, quicklinks, quicklinkForm
+  case bookmarkForm, emoji, scriptOutput, notes, quicklinks, quicklinkForm, scriptCommands
   /// `ripcord pick`: lines handed in, one to choose.
   case pick
 
@@ -141,6 +141,7 @@ enum LauncherMode {
     case .bookmarkForm: .addBookmark
     case .quicklinks: .searchQuicklinks
     case .quicklinkForm: .createQuicklink
+    case .scriptCommands: .searchScriptCommands
     case .emoji: .searchEmoji
     case .scriptOutput: nil
     case .notes: .searchNotes
@@ -791,6 +792,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if model.mode == .bookmarks { return Search.bookmarkSections(for: query, file: bookmarks) }
     if model.mode == .quicklinks {
       return Search.quicklinkSections(for: query, quicklinks: quicklinks)
+    }
+    if model.mode == .scriptCommands {
+      return Search.scriptCommandSections(for: query, scripts: scripts, items: items)
     }
     if model.mode == .notes { return Search.noteSections(for: query, notes: notes) }
     if model.mode == .emoji, let emojiCatalog {
@@ -1809,6 +1813,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return
     }
     if action == .run(.searchQuicklinks) { return open(.quicklinks) }
+    if action == .run(.searchScriptCommands) { return open(.scriptCommands) }
     if action == .run(.createQuicklink) {
       // A new one left half typed stays, as Raycast's drafts do; an edit left open doesn't.
       if model.quicklinkDraft.original != nil { model.quicklinkDraft = QuicklinkDraft() }
@@ -2146,6 +2151,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       .run(.cloneRepo), .run(.removeRepo), .removeRepository, .trashRepository,
       .run(.cleanKeyboard), .run(.searchBookmarks), .run(.addBookmark), .deleteBookmark,
       .run(.searchQuicklinks), .run(.createQuicklink), .editQuicklink, .deleteQuicklink,
+      .run(.searchScriptCommands),
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,
       .openDraft, .discardDraft, .runScript, .run(.searchNotes), .deleteNote,
