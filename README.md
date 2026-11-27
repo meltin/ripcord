@@ -38,8 +38,10 @@
 - Clipboard History: copied text and images, including a copied image file such as a CleanShot X
   capture, and other copied files with their Finder icons, with a preview and details of the
   selected one (a file's kind, size and path). Return pastes into the app you were in (files paste
-  as files, into Finder too), ⇧⌘P pins an item to the top, ⌃X deletes it and ⇧⌘X deletes all but the
-  pinned ones; the All Types menu (⌘P) narrows the list to text, images, files, links, emails or
+  as files, into Finder too) and ⌘↵ copies; as Raycast's, ⌥↵ pastes and keeps the panel open, ⌃⌘↵
+  pastes with the formatting Prefer Pasting as Plain Text leaves out (or without it, when that's
+  off), ⌘O opens a copied link, ⌘. pins an item to the top, ⌃X deletes it and ⌃⇧X deletes all but
+  the pinned ones; the All Types menu (⌘P) narrows the list to text, images, files, links, emails or
   colors. Text in copied images is read (Text Recognition, with Vision, on the Mac), so a search
   finds an image by it. Settings › Clipboard History can make Return copy instead, with paste on ⌘↵,
   and list apps whose copies aren't recorded (Passwords and Keychain Access to start with). Copies a

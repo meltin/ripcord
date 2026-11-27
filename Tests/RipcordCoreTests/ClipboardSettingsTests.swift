@@ -161,7 +161,7 @@ struct ClipboardSettingsTests {
     #expect(firstTwo().map(\.2) == [.clip(id, .paste), .clip(id, .copy)])
     history.settings.primaryAction = .copy
     let swapped = firstTwo()
-    #expect(swapped.map(\.0) == ["Copy to Clipboard", "Paste to App"])
+    #expect(swapped.map(\.0) == ["Copy to Clipboard", "Paste as Plain Text to App"])
     #expect(swapped.map(\.1) == ["↵", "⌘↵"])
     #expect(swapped.map(\.2) == [.clip(id, .copy), .clip(id, .paste)])
   }

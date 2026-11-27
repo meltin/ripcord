@@ -2866,17 +2866,31 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   private func perform(_ action: SearchResult.ClipAction, on id: UUID) {
     switch action {
-    case .paste, .copy:
-      // Prefer Pasting as Plain Text leaves the formatting out of a paste, not of a copy.
-      let copied = clipboard.copy(
-        id, plain: action == .paste && clipboard.history.settings.preferPlainText)
-      hide()
+    case .paste, .copy, .pasteOtherFormat, .pasteKeepingOpen:
+      // Prefer Pasting as Plain Text leaves the formatting out of a paste, not of a copy;
+      // Raycast's other paste does as it doesn't.
+      let preferPlain = clipboard.history.settings.preferPlainText
+      let plain =
+        switch action {
+        case .copy: false
+        case .pasteOtherFormat: !preferPlain
+        default: preferPlain
+        }
+      let copied = clipboard.copy(id, plain: plain)
+      let keepOpen = action == .pasteKeepingOpen
+      hide(keepingMode: keepOpen)
       guard copied else { return NSSound.beep() }
-      guard action == .paste else { return }
+      guard action != .copy else { return }
       // After the panel has given the key back to the app being pasted into.
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [clipboard] in
         // Without the permission the item is only copied; say so, as other failures do.
         if !clipboard.pasteIntoFrontmostApp() { NSSound.beep() }
+      }
+      // Back where it was, as Search Emoji's Paste and Keep Window Open comes back.
+      if keepOpen {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+          self?.show(resuming: true)
+        }
       }
     case .togglePin, .delete:
       let selected = model.selected?.id

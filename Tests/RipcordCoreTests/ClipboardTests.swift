@@ -392,17 +392,41 @@ private func temporaryDirectory() -> URL {
     let id = history.items[0].id
     let row = try #require(Search.clipboardSections(for: "", history: history).first?.results.first)
     #expect(row.action == .clip(id, .paste))
+    // Raycast's names, keys and order; with Prefer Pasting as Plain Text on (the default),
+    // ⌃⌘↵ is the paste that keeps the formatting.
     #expect(
       row.actions.map(\.title) == [
-        "Paste to App", "Copy to Clipboard", "Pin", "Delete", "Delete All Entries…",
-        "Configure Command…",
+        "Paste as Plain Text to App", "Copy to Clipboard", "Paste and Keep Window Open",
+        "Paste to App", "Pin Entry", "Delete Entry", "Delete All Entries", "Configure Command…",
       ])
-    #expect(row.actions.map(\.shortcut) == ["↵", "⇧⌘C", "⇧⌘P", "⌃X", "⇧⌘X", "⇧⌘,"])
+    #expect(
+      row.actions.map(\.shortcut) == ["↵", "⌘↵", "⌥↵", "⌃⌘↵", "⌘.", "⌃X", "⌃⇧X", "⇧⌘,"])
+    #expect(row.actions[3].action == .clip(id, .pasteOtherFormat))
     #expect(row.actions.last?.action == .configureMenu(BuiltinCommand.clipboardHistory.settingsKey))
     try history.togglePin(id)
     let pinned = try #require(
       Search.clipboardSections(for: "", history: history).first?.results.first)
-    #expect(pinned.actions[2].title == "Unpin")
+    #expect(pinned.actions[4].title == "Unpin Entry")
+    // Off, the plain paste is the other one.
+    history.settings.preferPlainText = false
+    let formatted = try #require(
+      Search.clipboardSections(for: "", history: history).first?.results.first)
+    #expect(formatted.actions[0].title == "Paste to App")
+    #expect(formatted.actions[3].title == "Paste as Plain Text to App")
+  }
+
+  /// A copied link alone gets Open in Browser (⌘O); text with a link in it doesn't.
+  @Test func offersOpenInBrowserForALink() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var history = ClipboardHistory(directory: directory)
+    try history.add(.text("see https://example.com"))
+    try history.add(.text(" https://example.com/a?b=1\n"))
+    let rows = Search.clipboardSections(for: "", history: history).flatMap(\.results)
+    let open = rows.map { $0.actions.first { $0.title == "Open in Browser" } }
+    #expect(open[0]?.action == .open(URL(string: "https://example.com/a?b=1")!))
+    #expect(open[0]?.shortcut == "⌘O")
+    #expect(open[1] == nil)
   }
 
   @Test func typingFindsTheCommandButTheStartScreenStaysAsItWas() {

@@ -2339,12 +2339,14 @@ private func menuIcon(_ item: MenuAction) -> NSImage? {
   }
 }
 
-/// "Paste to Rex" rather than "Paste to App", naming the app the paste lands in.
+/// "Paste to Rex" rather than "Paste to App", naming the app the paste lands in; "Paste as
+/// Plain Text to Rex" keeps its words.
 func title(
   of action: SearchResult.Action, else fallback: String, _ pasteTarget: String?
 ) -> String {
   guard action.isPaste, let pasteTarget else { return fallback }
-  return "Paste to \(pasteTarget)"
+  guard fallback.hasSuffix(" to App") else { return "Paste to \(pasteTarget)" }
+  return fallback.dropLast("App".count) + pasteTarget
 }
 
 struct Keycap: View {
@@ -2529,7 +2531,9 @@ final class FocusingTextField: NSTextField {
 extension SearchResult.Action {
   var isPaste: Bool {
     switch self {
-    case .clip(_, .paste), .snippet(_, .paste), .emoji(_, _, .paste): true
+    case .clip(_, .paste), .clip(_, .pasteOtherFormat), .snippet(_, .paste),
+      .emoji(_, _, .paste):
+      true
     default: false
     }
   }
