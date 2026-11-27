@@ -62,6 +62,17 @@ final class ClipboardMonitor {
 
   func togglePin(_ id: UUID) { update { try $0.togglePin(id) } }
   func delete(_ id: UUID) { update { try $0.delete(id) } }
+  func deleteAll() { update { try $0.deleteAll() } }
+  /// Drops what the settings no longer keep: older entries, and those past the most kept.
+  func prune() { update { try $0.prune() } }
+
+  func apply(_ settings: ClipboardSettings) {
+    guard settings != history.settings else { return }
+    update {
+      $0.settings = settings
+      try $0.prune()
+    }
+  }
 
   private func update(_ change: (inout ClipboardHistory) throws -> Void) {
     do {

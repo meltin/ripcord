@@ -22,6 +22,8 @@ public struct Config: Codable, Equatable, Sendable {
   public var snippetExpansion: SnippetExpansion
   /// Generate Dummy Text's language when its menu is left alone.
   public var dummyTextLanguage: DummyText.Language
+  /// How long and how many Clipboard History keeps.
+  public var clipboardHistory: ClipboardSettings
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
@@ -29,7 +31,8 @@ public struct Config: Codable, Equatable, Sendable {
     repositories: RepositorySettings = RepositorySettings(), colorFormat: ColorFormat = .hex,
     favorites: [String] = [], scriptFolders: [String] = [],
     snippetExpansion: SnippetExpansion = SnippetExpansion(),
-    dummyTextLanguage: DummyText.Language = .japanese
+    dummyTextLanguage: DummyText.Language = .japanese,
+    clipboardHistory: ClipboardSettings = ClipboardSettings()
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
@@ -43,6 +46,7 @@ public struct Config: Codable, Equatable, Sendable {
     self.scriptFolders = scriptFolders
     self.snippetExpansion = snippetExpansion
     self.dummyTextLanguage = dummyTextLanguage
+    self.clipboardHistory = clipboardHistory
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -68,6 +72,9 @@ public struct Config: Codable, Equatable, Sendable {
     dummyTextLanguage =
       (try? container.decodeIfPresent(DummyText.Language.self, forKey: .dummyTextLanguage))
       ?? .japanese
+    clipboardHistory =
+      try container.decodeIfPresent(ClipboardSettings.self, forKey: .clipboardHistory)
+      ?? ClipboardSettings()
   }
 
   public static let `default` = Config(

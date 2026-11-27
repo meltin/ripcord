@@ -92,6 +92,7 @@ enum Tabler {
     "leaf": "outline/leaf",
     "lightbulb": "outline/bulb",
     "link": "outline/link",
+    "line.3.horizontal.decrease": "outline/filter",
     "list.bullet": "outline/list",
     "list.clipboard.fill": "outline/clipboard-list",
     "lock": "outline/lock",

@@ -233,6 +233,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
 
   public enum ClipAction: Equatable, Sendable {
     case paste, copy, togglePin, delete
+    /// Delete All Entries, asked first, and its confirmation; pinned items stay.
+    case deleteAll, confirmDeleteAll
   }
 
   public enum EmojiAction: Equatable, Sendable {
@@ -293,6 +295,9 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
           title: isPinned ? "Unpin" : "Pin", symbol: isPinned ? "pin.slash" : "pin",
           shortcut: "⇧⌘P", action: .clip(id, .togglePin)),
         MenuAction(title: "Delete", symbol: "trash", shortcut: "⌃X", action: .clip(id, .delete)),
+        MenuAction(
+          title: "Delete All Entries…", symbol: "trash", shortcut: "⇧⌘X",
+          action: .clip(id, .deleteAll), isDestructive: true),
         .configure(BuiltinCommand.clipboardHistory.settingsKey),
       ]
     case .snippet(let index, _):
@@ -685,11 +690,13 @@ public enum Search {
   /// newest first, each kept to items whose text contains the query. Images match "image" or
   /// their file name.
   public static func clipboardSections(
-    for query: String, history: ClipboardHistory, now: Date = .now,
+    for query: String, history: ClipboardHistory, type: ClipType? = nil, now: Date = .now,
     calendar: Calendar = .current
   ) -> [SearchSection] {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
-    let matches = history.items.compactMap { item -> (item: ClipItem, result: SearchResult)? in
+    let items = type.map { type in history.items.filter { type.matches($0.content) } }
+    let matches = (items ?? history.items).compactMap {
+      item -> (item: ClipItem, result: SearchResult)? in
       let id = "clip:\(item.id)"
       let action = SearchResult.Action.clip(item.id, .paste)
       switch item.content {

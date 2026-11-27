@@ -136,9 +136,8 @@ public enum ClipCapture: Equatable, Sendable {
 public struct ClipboardHistory: Sendable {
   public private(set) var items: [ClipItem] = []
   public let directory: URL
-  /// Unpinned items beyond this are dropped, oldest first.
-  // shortcut: a fixed count until #5 adds retention settings.
-  public static let limit = 300
+  /// How long and how many unpinned items are kept; older and further ones are dropped.
+  public var settings = ClipboardSettings()
 
   private var fileURL: URL { directory.appending(path: "history.json") }
   public var imagesURL: URL { directory.appending(path: "images") }
@@ -203,12 +202,38 @@ public struct ClipboardHistory: Sendable {
         id: id, content: content, digest: digest, date: date, isPinned: false, source: source,
         timesCopied: 1, firstCopied: date, name: name, size: size)
     ]
-    let dropped = Set((added + items).filter { !$0.isPinned }.dropFirst(Self.limit).map(\.id))
-    items = (added + items).filter { item in
+    items = added + items
+    dropExpired(at: date)
+    try save()
+  }
+
+  /// Drops unpinned items copied before the retention's cutoff, and those beyond the most kept,
+  /// oldest first, with their image files; saved only when one goes.
+  public mutating func prune(at now: Date = .now) throws {
+    if dropExpired(at: now) { try save() }
+  }
+
+  /// Whether any item went.
+  @discardableResult
+  private mutating func dropExpired(at now: Date) -> Bool {
+    let cutoff = settings.keepFor.cutoff(at: now)
+    let unpinned = items.filter { !$0.isPinned }
+    let dropped = Set(
+      unpinned.dropFirst(settings.maxEntries).map(\.id)
+        + unpinned.filter { item in cutoff.map { item.date < $0 } ?? false }.map(\.id))
+    guard !dropped.isEmpty else { return false }
+    items = items.filter { item in
       guard dropped.contains(item.id) else { return true }
       removeFile(of: item)
       return false
     }
+    return true
+  }
+
+  /// Deletes every item but the pinned ones, as Delete All Entries does.
+  public mutating func deleteAll() throws {
+    items.filter { !$0.isPinned }.forEach(removeFile)
+    items = items.filter(\.isPinned)
     try save()
   }
 

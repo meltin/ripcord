@@ -24,6 +24,8 @@ final class SettingsModel {
   var updater: Updater?
   /// What's typed in the sidebar's "Search settings...".
   var sidebarQuery = ""
+  /// Clear History on the Clipboard History page, once confirmed.
+  var onClearClipboard: () -> Void = {}
   /// Bumped as the window opens, so the search field takes the keys every time, not only the
   /// first, when it's first put in the window.
   var sidebarFocusRequest = 0
@@ -489,7 +491,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .quicklinks:
       "Type a keyword, a space and a query in the panel. {query} in the URL is replaced by what you type."
     case .clipboardHistory:
-      "Text and images you copy, searchable and ready to paste. Switching it off also stops recording."
+      "Text, images and files you copy, searchable and ready to paste. Switching it off also stops recording."
     case .snippets: "Text you save and paste with Search Snippets."
     case .systemActions:
       "Lock, sleep, control music and volume, and manage apps, the Trash and disks."
@@ -571,6 +573,13 @@ private enum SettingText {
     detail: "Off, a keyword expands only as a word of its own, not at the end of a longer one.")
   static let disabledApps = SettingsSearch.Item(
     title: "Disabled Applications", detail: "Apps where keywords are never expanded.")
+  static let keepHistoryFor = SettingsSearch.Item(
+    title: "Keep History For",
+    detail: "How long an entry stays after it was last copied; pinned ones stay always.")
+  static let maxEntries = SettingsSearch.Item(
+    title: "Maximum Entries", detail: "The most entries kept, newest first, besides pinned ones.")
+  static let clearHistory = SettingsSearch.Item(
+    title: "Clear History", detail: "Delete every entry but the pinned ones.")
   static let dummyTextLanguage = SettingsSearch.Item(
     title: "Default Language",
     detail: "What Generate Dummy Text writes in when its menu is left alone.")
@@ -592,6 +601,8 @@ extension SettingsPage {
       case .scripts: [SettingText.scriptFolders]
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
       case .dummyText: [SettingText.dummyTextLanguage]
+      case .clipboardHistory:
+        [SettingText.keepHistoryFor, SettingText.maxEntries, SettingText.clearHistory]
       case .snippets:
         [
           SettingText.snippetExpansion, SettingText.expansionMode, SettingText.expandWithinWords,
@@ -678,6 +689,12 @@ struct SettingsView: View {
             PageHeader(page: .snippets)
             SnippetExpansionSettings(expansion: $model.config.snippetExpansion)
             CommandsList(model: model, page: .snippets)
+          }
+        case .clipboardHistory:
+          PageScroll(model: model) {
+            PageHeader(page: .clipboardHistory)
+            ClipboardHistorySettings(model: model)
+            CommandsList(model: model, page: .clipboardHistory)
           }
         case .dummyText:
           PageScroll(model: model) {
@@ -1514,6 +1531,55 @@ private struct RepositoriesSettings: View {
     }
   }
 
+}
+
+/// How long and how many Clipboard History keeps, and Clear History, as Raycast's settings.
+private struct ClipboardHistorySettings: View {
+  @Bindable var model: SettingsModel
+
+  var body: some View {
+    Card {
+      SettingRow(
+        title: SettingText.keepHistoryFor.title, description: SettingText.keepHistoryFor.detail
+      ) {
+        Picker(
+          SettingText.keepHistoryFor.title, selection: $model.config.clipboardHistory.keepFor
+        ) {
+          ForEach(ClipboardSettings.Retention.allCases, id: \.self) { Text($0.title).tag($0) }
+        }
+        .labelsHidden()
+        .fixedSize()
+      }
+      Divider()
+      SettingRow(title: SettingText.maxEntries.title, description: SettingText.maxEntries.detail) {
+        Picker(SettingText.maxEntries.title, selection: $model.config.clipboardHistory.maxEntries) {
+          // One set in the file by hand stays listed, so the picker never goes blank.
+          let counts = Set(
+            ClipboardSettings.entryCounts + [model.config.clipboardHistory.maxEntries])
+          ForEach(counts.sorted(), id: \.self) { Text($0.formatted()).tag($0) }
+        }
+        .labelsHidden()
+        .fixedSize()
+      }
+      Divider()
+      SettingRow(
+        title: SettingText.clearHistory.title, description: SettingText.clearHistory.detail
+      ) {
+        Button("Clear History…", role: .destructive, action: confirmClear)
+      }
+    }
+  }
+
+  /// Asked first, as Delete All Entries in the panel is: the entries have no undo.
+  private func confirmClear() {
+    let alert = NSAlert()
+    alert.messageText = "Delete All Entries?"
+    alert.informativeText = "Every entry but the pinned ones is deleted. This can't be undone."
+    alert.addButton(withTitle: "Delete All")
+    alert.addButton(withTitle: "Cancel")
+    alert.alertStyle = .warning
+    if alert.runModal() == .alertFirstButtonReturn { model.onClearClipboard() }
+  }
 }
 
 /// Keyword expansion, the main settings Raycast's Snippets have.
