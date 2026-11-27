@@ -79,7 +79,7 @@ struct NotesActionsView: View {
   var body: some View {
     VStack(spacing: 0) {
       SearchField(
-        text: model.filter, placeholder: model.placeholder, fontSize: 14,
+        text: model.filter, placeholder: model.placeholder, fontSize: Metrics.cardFieldFontSize,
         onChange: { model.filter = $0 },
         onCommand: { command in
           switch command {
@@ -101,7 +101,7 @@ struct NotesActionsView: View {
       let rows = model.shown
       Group {
         if rows.isEmpty {
-          Text("No Results").font(.system(size: 13)).foregroundStyle(.secondary)
+          Text("No Results").font(.system(size: Metrics.cardFontSize)).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity).frame(height: 40)
         } else if rows.count > Self.visibleRows {
           ScrollView { items(rows) }.thinScroller()
@@ -110,24 +110,24 @@ struct NotesActionsView: View {
           items(rows)
         }
       }
-      .padding(6)
+      .padding(Metrics.cardPadding)
     }
     .frame(width: Self.width)
     // Frosted over whatever is behind the note, as CONTRIBUTING's popovers are.
-    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
   }
 
   private func items(_ rows: [NotesAction]) -> some View {
-    VStack(alignment: .leading, spacing: 2) {
+    VStack(alignment: .leading, spacing: Metrics.cardRowSpacing) {
       ForEach(Array(rows.enumerated()), id: \.offset) { index, action in
         if action.startsSection || action.section != nil, index > 0, model.filter.isEmpty {
           Divider().opacity(0.5).padding(.vertical, 4)
         }
         if let section = action.section, model.filter.isEmpty {
           Text(section)
-            .font(.system(size: 12, weight: .medium))
+            .font(.system(size: Metrics.cardTitleFontSize, weight: .medium))
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, Metrics.cardRowPadding)
             .padding(.vertical, 4)
         }
         Button {
@@ -143,13 +143,13 @@ struct NotesActionsView: View {
               }
             }
           }
-          .font(.system(size: 13))
+          .font(.system(size: Metrics.cardFontSize))
           .foregroundStyle(action.isDestructive ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
           .opacity(action.isEnabled ? 1 : 0.4)
-          .padding(.horizontal, 10)
-          .frame(height: 34)
+          .padding(.horizontal, Metrics.cardRowPadding)
+          .frame(height: Metrics.cardRowHeight)
           .background(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: Metrics.cardRowRadius)
               .fill(index == model.selection ? Color.primary.opacity(0.1) : .clear)
           )
           .contentShape(Rectangle())
