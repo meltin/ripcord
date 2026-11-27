@@ -682,6 +682,9 @@ private enum SettingText {
     detail:
       "Also block clicks and dragging while scrolling stays available. Only ⌃⌥⌘↩ or the time running out ends it then."
   )
+  static let showColorName = SettingsSearch.Item(
+    title: "Show Color Name After Picking",
+    detail: "Pick Color's message names the nearest named color too.")
   static let windowGap = SettingsSearch.Item(
     title: "Window Gap", detail: "Gap between windows")
   static let screenGap = SettingsSearch.Item(
@@ -711,7 +714,7 @@ extension SettingsPage {
             SettingText.hotkey, SettingText.inputSource, SettingText.backdrop,
             SettingText.configFile,
           ]
-      case .colorPicker: [SettingText.colorFormat]
+      case .colorPicker: [SettingText.colorFormat, SettingText.showColorName]
       case .scripts: [SettingText.scriptFolders]
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
       case .dummyText: [SettingText.dummyTextLanguage]
@@ -762,7 +765,7 @@ extension BuiltinCommand {
       .coffee
     case .sleepTimer, .stopSleepTimer: .sleepTimer
     case .lidAwake: .lidAwake
-    case .pickColor, .colorHistory: .colorPicker
+    case .pickColor, .colorHistory, .colorNames: .colorPicker
     case .cleanKeyboard: .cleanKeyboard
     case .searchBookmarks, .addBookmark: .bookmarks
     case .ripcordNotes, .createNote, .searchNotes: .notes
@@ -811,6 +814,15 @@ struct SettingsView: View {
                 }
                 .labelsHidden()
                 .fixedSize()
+              }
+              Divider()
+              SettingRow(
+                title: SettingText.showColorName.title,
+                description: SettingText.showColorName.detail
+              ) {
+                Toggle(SettingText.showColorName.title, isOn: $model.config.showColorName)
+                  .labelsHidden()
+                  .toggleStyle(.switch)
               }
             }
             CommandsList(model: model, page: .colorPicker)

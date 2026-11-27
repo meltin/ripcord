@@ -37,6 +37,9 @@ public struct Config: Codable, Equatable, Sendable {
   /// What Caffeinate keeps awake, and whether it starts with Ripcord.
   public var coffee: CoffeeSettings
   public var cleanKeyboard: CleanKeyboardSettings
+  /// Pick Color's message names the nearest named color too, as Raycast's "Show color name after
+  /// picking".
+  public var showColorName: Bool
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
@@ -48,7 +51,7 @@ public struct Config: Codable, Equatable, Sendable {
     clipboardHistory: ClipboardSettings = ClipboardSettings(),
     backdrop: String = Backdrop.off, cycleHalves: Bool = true, lidAwakeLowBattery: Int = 10,
     windowGap: Int = 0, screenGap: Int = 0, coffee: CoffeeSettings = CoffeeSettings(),
-    cleanKeyboard: CleanKeyboardSettings = CleanKeyboardSettings()
+    cleanKeyboard: CleanKeyboardSettings = CleanKeyboardSettings(), showColorName: Bool = false
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
@@ -70,6 +73,7 @@ public struct Config: Codable, Equatable, Sendable {
     self.screenGap = screenGap
     self.coffee = coffee
     self.cleanKeyboard = cleanKeyboard
+    self.showColorName = showColorName
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -108,6 +112,7 @@ public struct Config: Codable, Equatable, Sendable {
     cleanKeyboard =
       try container.decodeIfPresent(CleanKeyboardSettings.self, forKey: .cleanKeyboard)
       ?? CleanKeyboardSettings()
+    showColorName = try container.decodeIfPresent(Bool.self, forKey: .showColorName) ?? false
   }
 
   public static let `default` = Config(
