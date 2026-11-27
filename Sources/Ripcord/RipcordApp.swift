@@ -382,6 +382,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.snippets = config.snippets
       launcher.warnsBeforeDeletingSnippets = config.snippetExpansion.showDeleteWarning
       launcher.warnsBeforeDeletingQuicklinks = config.quicklinkSettings.showDeleteWarning
+      launcher.systemActionSettings = config.systemActions
       snippetExpander.apply(config)
       launcher.repositorySettings = config.repositories
       launcher.colorFormat = config.colorFormat

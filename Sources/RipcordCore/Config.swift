@@ -45,6 +45,7 @@ public struct Config: Codable, Equatable, Sendable {
   public var httpStatusPicture: HTTPStatusPicture
   public var notes: NotesSettings
   public var quicklinkSettings: QuicklinkSettings
+  public var systemActions: SystemActionSettings
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
@@ -59,7 +60,8 @@ public struct Config: Codable, Equatable, Sendable {
     cleanKeyboard: CleanKeyboardSettings = CleanKeyboardSettings(), showColorName: Bool = false,
     emoji: EmojiSettings = EmojiSettings(), httpStatusPicture: HTTPStatusPicture = .none,
     notes: NotesSettings = NotesSettings(),
-    quicklinkSettings: QuicklinkSettings = QuicklinkSettings()
+    quicklinkSettings: QuicklinkSettings = QuicklinkSettings(),
+    systemActions: SystemActionSettings = SystemActionSettings()
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
@@ -86,6 +88,7 @@ public struct Config: Codable, Equatable, Sendable {
     self.httpStatusPicture = httpStatusPicture
     self.notes = notes
     self.quicklinkSettings = quicklinkSettings
+    self.systemActions = systemActions
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -132,6 +135,9 @@ public struct Config: Codable, Equatable, Sendable {
     quicklinkSettings =
       try container.decodeIfPresent(QuicklinkSettings.self, forKey: .quicklinkSettings)
       ?? QuicklinkSettings()
+    systemActions =
+      try container.decodeIfPresent(SystemActionSettings.self, forKey: .systemActions)
+      ?? SystemActionSettings()
   }
 
   public static let `default` = Config(

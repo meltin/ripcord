@@ -456,6 +456,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   var cleanKeyboardDuration = CleanKeyboardSettings.Duration.ask
   var onImportSnippets: () -> Void = {}
   var onImportQuicklinks: () -> Void = {}
+  /// Empty Trash's and the Quit Alls' warnings and excluded apps, from the settings.
+  var systemActionSettings = SystemActionSettings()
   /// Show Warning Before Deleting Snippets, and Quicklinks, from the settings.
   var warnsBeforeDeletingSnippets = true
   var warnsBeforeDeletingQuicklinks = true
@@ -2190,7 +2192,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Asks first for one with a warning, over the panel (opened for it when a hotkey ran it);
   /// otherwise hides the panel and runs it in the app the user was in.
   private func perform(_ action: SystemAction, confirmed: Bool) {
-    if let warning = action.warning, !confirmed {
+    if let warning = action.warning, !confirmed, systemActionSettings.asksFirst(action) {
       if !panel.isVisible {
         show()
         openedForQuestion = true
@@ -2207,7 +2209,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if panel.isVisible { hide() }
     if action == .sleep { onBeforeSleep() }
     if let message = SystemActions.run(
-      action, frontmost: frontmost, report: { [weak self] in self?.onError($0) })
+      action, frontmost: frontmost, settings: systemActionSettings,
+      report: { [weak self] in self?.onError($0) })
     {
       onError(message)
     }

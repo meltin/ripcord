@@ -97,4 +97,31 @@ import Testing
     #expect(first("lock screen") == .system(.lockScreen))
     #expect(first("show desktop") == .system(.showDesktop))
   }
+
+  /// Raycast's settings inside Empty Trash and the Quit Alls: each asks first unless turned off,
+  /// and leaves its excluded apps, and Finder, open.
+  @Test func honorsWarningsAndExclusions() throws {
+    let defaults = try JSONDecoder().decode(
+      Config.self, from: Data(#"{"hotkey":"cmd+space"}"#.utf8)
+    ).systemActions
+    #expect(defaults.asksFirst(.emptyTrash))
+    #expect(defaults.asksFirst(.quitAllApps))
+    #expect(defaults.asksFirst(.quitOtherApps))
+    #expect(defaults.asksFirst(.restart))
+    #expect(!defaults.asksFirst(.lockScreen))
+    let off = SystemActionSettings(
+      warnBeforeEmptyingTrash: false, warnBeforeQuittingAll: false,
+      quitAllExcluded: ["com.example.keep"], warnBeforeQuittingOthers: true,
+      quitOthersExcluded: ["com.example.other"])
+    #expect(!off.asksFirst(.emptyTrash))
+    #expect(!off.asksFirst(.quitAllApps))
+    #expect(off.asksFirst(.quitOtherApps))
+    // Restart's warning isn't one of these settings.
+    #expect(off.asksFirst(.restart))
+    #expect(off.keepsOpen("com.example.keep", for: .quitAllApps))
+    #expect(!off.keepsOpen("com.example.keep", for: .quitOtherApps))
+    #expect(off.keepsOpen("com.example.other", for: .quitOtherApps))
+    #expect(off.keepsOpen("com.apple.finder", for: .quitAllApps))
+    #expect(!off.keepsOpen("com.example.any", for: .quitAllApps))
+  }
 }
