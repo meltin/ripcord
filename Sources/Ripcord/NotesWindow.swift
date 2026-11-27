@@ -321,8 +321,9 @@ extension [NSAttributedString.Key: Any] {
   /// As typing attributes: a hidden mark's own look given back, so what's typed shows.
   fileprivate var shown: Self {
     guard let font = self[.hiddenMark] else { return self }
-    var shown = filter { $0.key != .hiddenMark && $0.key != .foregroundColor }
+    var shown = filter { $0.key != .hiddenMark }
     shown[.font] = font
+    shown[.foregroundColor] = NSColor.labelColor
     return shown
   }
 }
@@ -437,17 +438,44 @@ private struct MarkdownEditor: NSViewRepresentable {
       if !textView.hasMarkedText() { MarkdownEditor.format(textView) }
     }
 
-    /// The caret steps over hidden marks as if they weren't there.
+    /// The caret, or the end of a selection that moved, steps over hidden marks as if they
+    /// weren't there.
     func textView(
       _ textView: NSTextView, willChangeSelectionFromCharacterRange old: NSRange,
       toCharacterRange new: NSRange
     ) -> NSRange {
-      guard new.length == 0, !isReplacing, !textView.hasMarkedText() else { return new }
+      guard !isReplacing, !textView.hasMarkedText() else { return new }
       let text = textView.string
       let hidden = MarkdownEditing.hidden(in: MarkdownSpan.spans(in: text))
-      let location = MarkdownEditing.caret(
-        new.location, from: old.location + old.length, in: text, hidden: hidden)
-      return NSRange(location: location, length: 0)
+      guard new.length > 0 else {
+        let location = MarkdownEditing.caret(
+          new.location, from: old.location + old.length, in: text, hidden: hidden)
+        return NSRange(location: location, length: 0)
+      }
+      var start = new.location
+      var end = NSMaxRange(new)
+      if start != old.location {
+        start = MarkdownEditing.caret(start, from: old.location, in: text, hidden: hidden)
+      }
+      if end != NSMaxRange(old) {
+        end = MarkdownEditing.caret(end, from: NSMaxRange(old), in: text, hidden: hidden)
+      }
+      return end > start ? NSRange(location: start, length: end - start) : new
+    }
+
+    /// Cuts, word and line deletes, and typing over a selection leave no stray marks.
+    func textView(
+      _ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?
+    ) -> Bool {
+      guard !isReplacing, let replacementString, let textView = textView as? NoteTextView,
+        !textView.isTidying, !textView.hasMarkedText(),
+        let tidy = MarkdownEditing.tidy(
+          range, replacement: replacementString, in: textView.string,
+          spans: MarkdownSpan.spans(in: textView.string))
+      else { return true }
+      textView.replace(
+        tidy.range, with: tidy.replacement, selecting: NSRange(location: tidy.caret, length: 0))
+      return false
     }
 
     /// What's typed next never takes a hidden mark's look, or it would be drawn as nothing.
@@ -604,8 +632,13 @@ final class NoteTextView: NSTextView {
     }
   }
 
+  /// Set while an edit made here is checked, which is already tidy.
+  private(set) var isTidying = false
+
   /// An edit made as typing is, so it's undone with ⌘Z and saved.
-  private func replace(_ range: NSRange, with replacement: String, selecting selection: NSRange) {
+  func replace(_ range: NSRange, with replacement: String, selecting selection: NSRange) {
+    isTidying = true
+    defer { isTidying = false }
     guard shouldChangeText(in: range, replacementString: replacement) else { return }
     textStorage?.replaceCharacters(in: range, with: replacement)
     didChangeText()

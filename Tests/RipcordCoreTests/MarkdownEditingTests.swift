@@ -79,3 +79,45 @@ import Testing
     #expect(toggleBold(text, NSRange(location: 3, length: 0)) == nil)
   }
 }
+
+@Suite struct MarkdownTidyTests {
+  func edit(_ text: String, _ range: NSRange, _ replacement: String = "") -> String {
+    guard
+      let tidy = MarkdownEditing.tidy(
+        range, replacement: replacement, in: text, spans: MarkdownSpan.spans(in: text))
+    else { return (text as NSString).replacingCharacters(in: range, with: replacement) }
+    return (text as NSString).replacingCharacters(in: tidy.range, with: tidy.replacement)
+  }
+
+  @Test func takesAStylesMarksWhenAllItsTextGoes() {
+    // A word delete or selection of "bold" leaves no bare ****.
+    #expect(edit("a **bold** b", NSRange(location: 4, length: 4)) == "a  b")
+    // A selection reaching into the closing marks too.
+    #expect(edit("a **bold** b", NSRange(location: 4, length: 6)) == "a  b")
+    // An empty heading line's text gone with its line: its #s go as well.
+    #expect(edit("x\n# Hi", NSRange(location: 1, length: 5)) == "x")
+  }
+
+  @Test func keepsAStylesMarksWhenSomeOfItsTextStays() {
+    // Deleting "ld** af": the bold keeps its closing marks after "bo".
+    #expect(edit("**bold** after", NSRange(location: 4, length: 7)) == "**bo**ter")
+    // Deleting " **bo": the opening marks stay before "ld".
+    #expect(edit("a **bold**", NSRange(location: 1, length: 5)) == "a**ld**")
+  }
+
+  @Test func leavesPlainEditsAlone() {
+    #expect(
+      MarkdownEditing.tidy(
+        NSRange(location: 0, length: 2), replacement: "", in: "plain",
+        spans: MarkdownSpan.spans(in: "plain")) == nil)
+  }
+
+  @Test func stylesTheWordsWhenASelectionTakesInMarks() {
+    let text = "a **b** c"
+    // ⇧← from after the bold can take in its closing marks; ⌘B then unbolds b.
+    let toggle = MarkdownEditing.toggle(
+      .bold, mark: "**", selection: NSRange(location: 4, length: 3), in: text,
+      spans: MarkdownSpan.spans(in: text))
+    #expect(toggle?.replacement == "b")
+  }
+}
