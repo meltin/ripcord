@@ -222,6 +222,18 @@ public enum MarkdownEditing {
     return (NSRange(location: string.length, length: 0), "\n", string.length + 1)
   }
 
+  /// Typing right after a code block that ends the note, as when it's just been opened, starts
+  /// the line below rather than running on into the hidden closing fence. Nil elsewhere.
+  public static func lineAfterFinalBlock(at caret: Int, in text: String, spans: [MarkdownSpan])
+    -> (range: NSRange, replacement: String, caret: Int)?
+  {
+    let string = text as NSString
+    guard caret == string.length, caret > 0, string.character(at: caret - 1) != 0x0A,
+      spans.contains(where: { $0.style == .fenced && $0.marks.last.map(NSMaxRange) == caret })
+    else { return nil }
+    return (NSRange(location: caret, length: 0), "\n", caret + 1)
+  }
+
   /// ``` typed alone on a line opens a code block straight away, as in Raycast: the closing
   /// fence goes in with an empty line between for the caret. Nil when this ``` would close an
   /// open block instead, or the line holds more.
@@ -234,14 +246,11 @@ public enum MarkdownEditing {
     guard lineText.trimmingCharacters(in: .whitespaces) == "```",
       caret == line.location + (lineText as NSString).length
     else { return nil }
-    // An odd number of fences above means this one closes a block; an odd number below, that
-    // it pairs with one left open there. Either way it's a fence of its own, not a new block.
-    func fences(_ text: String) -> Int {
-      text.components(separatedBy: .newlines)
-        .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }.count
-    }
-    guard fences(string.substring(to: line.location)) % 2 == 0,
-      fences(string.substring(from: NSMaxRange(line))) % 2 == 0
+    // A fence that closes a block above, or pairs with one below, isn't a new block.
+    guard
+      !MarkdownSpan.spans(in: text).contains(where: {
+        $0.style == .fenced && $0.marks.contains { NSLocationInRange(line.location, $0) }
+      })
     else { return nil }
     return (NSRange(location: caret, length: 0), "\n\n```", caret + 1)
   }

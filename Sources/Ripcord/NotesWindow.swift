@@ -1464,6 +1464,27 @@ final class NoteTextView: NSTextView {
     replace(edit.range, with: edit.replacement, selecting: NSRange(location: edit.caret, length: 0))
   }
 
+  override func insertText(_ string: Any, replacementRange: NSRange) {
+    startLineAfterFinalBlock(replacementRange)
+    super.insertText(string, replacementRange: replacementRange)
+  }
+
+  override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+    startLineAfterFinalBlock(replacementRange)
+    super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+  }
+
+  /// What's typed or composed after a code block that ends the note goes on the line below.
+  /// Done before the input method's own edit, so its composing isn't broken.
+  private func startLineAfterFinalBlock(_ replacementRange: NSRange) {
+    let caret = selectedRange()
+    guard replacementRange.location == NSNotFound, caret.length == 0, !hasMarkedText(),
+      let edit = MarkdownEditing.lineAfterFinalBlock(
+        at: caret.location, in: string, spans: markdownSpans)
+    else { return }
+    replace(edit.range, with: edit.replacement, selecting: NSRange(location: edit.caret, length: 0))
+  }
+
   /// An edit made as typing is, so it's undone with ⌘Z and saved.
   func replace(_ range: NSRange, with replacement: String, selecting selection: NSRange) {
     isTidying = true

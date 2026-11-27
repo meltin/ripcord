@@ -45,8 +45,13 @@ public struct MarkdownSpan: Equatable, Sendable {
     ) { line, range, enclosing, _ in
       if let line { lines.append((line, range, enclosing)) }
     }
-    let fences = lines.indices.filter {
-      lines[$0].text.trimmingCharacters(in: .whitespaces).hasPrefix("```")
+    // A block opens on ``` with anything after it (its language), but only a bare ``` closes
+    // it, as in CommonMark, so text written on after a closing fence is never hidden with it.
+    let fences = lines.indices.reduce(into: [Int]()) { fences, index in
+      let fence = lines[index].text.trimmingCharacters(in: .whitespaces)
+      if fence.hasPrefix("```"), fences.count.isMultiple(of: 2) || fence.allSatisfy({ $0 == "`" }) {
+        fences.append(index)
+      }
     }
     var spans: [MarkdownSpan] = []
     var inFence = false
