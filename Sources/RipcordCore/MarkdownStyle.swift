@@ -116,6 +116,15 @@ public struct MarkdownSpan: Equatable, Sendable {
       spans.append(MarkdownSpan(shifted(open), .hidden))
       spans.append(MarkdownSpan(shifted(close), .hidden))
     }
+    // A link's URL isn't emphasis either: `_` and `*` are common in them.
+    let urls = all(link, in: line).filter { !inCode($0.range) }.map {
+      NSRange(
+        location: $0.range(at: 1).upperBound,
+        length: $0.range.upperBound - $0.range(at: 1).upperBound)
+    }
+    let isProtected = { (range: NSRange) in
+      inCode(range) || urls.contains { NSIntersectionRange($0, range).length > 0 }
+    }
     let emphasis = [
       (boldStars, MarkdownSpan.Style.bold), (boldUnderscores, .bold), (italic, .italic),
       (strike, .strike), (underline, .underline),
@@ -128,7 +137,7 @@ public struct MarkdownSpan: Equatable, Sendable {
           location: match.range.location, length: inner.location - match.range.location)
         let closing = NSRange(
           location: inner.upperBound, length: match.range.upperBound - inner.upperBound)
-        guard !inCode(opening), !inCode(closing) else { continue }
+        guard !isProtected(opening), !isProtected(closing) else { continue }
         spans.append(
           MarkdownSpan(shifted(inner), style, marks: [shifted(opening), shifted(closing)]))
         spans.append(MarkdownSpan(shifted(opening), .hidden))

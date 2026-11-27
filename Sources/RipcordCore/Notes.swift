@@ -24,10 +24,8 @@ public struct Note: Equatable, Sendable {
     let line = text.split(whereSeparator: \.isNewline).lazy
       .map { $0.trimmingCharacters(in: .whitespaces) }
       .first { !$0.isEmpty }
-    let title = line.map { line in
-      let shown = MarkdownEditing.hidden(in: MarkdownSpan.spans(in: line)).reversed()
-        .reduce(line as NSString) { $0.replacingCharacters(in: $1, with: "") as NSString }
-      return String((shown as String).drop { $0 == "#" }).trimmingCharacters(in: .whitespaces)
+    let title = line.map {
+      String(MarkdownEditing.shown($0).drop { $0 == "#" }).trimmingCharacters(in: .whitespaces)
     }
     return title.flatMap { $0.isEmpty ? nil : $0 } ?? "Untitled"
   }

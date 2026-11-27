@@ -247,3 +247,46 @@ import Testing
     #expect(edit?.caret == 6)
   }
 }
+
+/// What the review of this change found, kept from coming back.
+@Suite struct MarkdownReviewRegressionTests {
+  @Test func titlesALinkWithUnderscoresInItsURL() {
+    // Emphasis read inside the URL overlapped the link's marks and crashed the title.
+    #expect(Note.title(of: "[doc](http://x/_b_)") == "doc")
+    #expect(Note.title(of: "[a](http://x/__init__)") == "a")
+  }
+
+  @Test func endsABoldJustTypedOnASecondCmdB() {
+    let text = "**ab**"
+    let edit = MarkdownEditing.toggle(
+      .bold, open: "**", close: "**", selection: NSRange(location: 4, length: 0), in: text,
+      spans: MarkdownSpan.spans(in: text))
+    #expect(edit?.replacement == "")
+    #expect(edit?.selection == NSRange(location: 6, length: 0))
+  }
+
+  @Test func wrapsAPlainLineBetweenTwoCodeBlocks() {
+    let text = "```\na\n```\nplain\n```\nb\n```\n"
+    let edit = MarkdownEditing.toggleCodeBlock(
+      selection: NSRange(location: 12, length: 0), in: text)
+    #expect(
+      (text as NSString).replacingCharacters(in: edit.range, with: edit.replacement)
+        == "```\na\n```\n```\nplain\n```\n```\nb\n```\n")
+  }
+
+  @Test func togglesNestedAndCheckedItems() {
+    func lines(_ format: MarkdownEditing.LineFormat, _ text: String) -> String {
+      let edit = MarkdownEditing.toggleLines(
+        format, selection: NSRange(location: 4, length: 0), in: text)
+      return (text as NSString).replacingCharacters(in: edit.range, with: edit.replacement)
+    }
+    #expect(lines(.bullet, "  - item") == "  item")
+    #expect(lines(.task, "- [x] done") == "done")
+    #expect(lines(.ordered, "  - item") == "  1. item")
+  }
+
+  @Test func countsWhatIsShown() {
+    #expect(MarkdownEditing.shown("**ab** 😀") == "ab 😀")
+    #expect(MarkdownEditing.shown("```\r\ncode\r\n```\r\n").count == 4)
+  }
+}

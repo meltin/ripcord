@@ -87,9 +87,26 @@ public enum MarkdownEditing {
     case remove(NSRange)
   }
 
-  /// The hidden marks, sorted.
+  /// The hidden marks, sorted, with any that overlap or touch merged into one.
   public static func hidden(in spans: [MarkdownSpan]) -> [NSRange] {
-    spans.filter { $0.style == .hidden }.map(\.range).sorted { $0.location < $1.location }
+    let sorted = spans.filter { $0.style == .hidden }.map(\.range)
+      .sorted { $0.location < $1.location }
+    return sorted.reduce(into: []) { merged, range in
+      if let last = merged.last, range.location <= NSMaxRange(last) {
+        merged[merged.count - 1] = NSUnionRange(last, range)
+      } else {
+        merged.append(range)
+      }
+    }
+  }
+
+  /// `text` as the editor shows it, without its hidden marks.
+  public static func shown(_ text: String) -> String {
+    let shown = NSMutableString(string: text)
+    for range in hidden(in: MarkdownSpan.spans(in: text)).reversed() {
+      shown.deleteCharacters(in: range)
+    }
+    return shown as String
   }
 
   /// Whether the caret may rest at `location`: not on a hidden mark's first character or inside.
@@ -263,6 +280,14 @@ public enum MarkdownEditing {
     // A selection that takes in hidden marks at its ends styles the words between them.
     let selection = visible(selection, hidden: hidden(in: spans))
     let openLength = (open as NSString).length
+    // ⌘B again at the end of a bold just typed ends it: the caret steps past its closing marks.
+    if selection.length == 0,
+      let span = spans.first(where: {
+        $0.style == style && $0.marks.count == 2 && NSMaxRange($0.range) == selection.location
+      })
+    {
+      return (selection, "", NSRange(location: NSMaxRange(span.marks[1]), length: 0))
+    }
     if let span = spans.first(where: {
       $0.style == style && $0.marks.count == 2
         && NSIntersectionRange($0.range, selection) == selection
@@ -297,9 +322,22 @@ public enum MarkdownEditing {
     case quote, bullet, ordered, task
   }
 
-  /// A heading's, quote's or list item's mark at a line's start.
+  /// A heading's, quote's or list item's mark at a line's start, after any indent (group 1).
   private static let linePrefix = try? NSRegularExpression(
-    pattern: #"^(?:#{1,6}\s+|>\s?|[-*+]\s\[[ xX]\]\s|[-*+]\s|\d+\.\s)"#)
+    pattern: #"^(\s*)(?:#{1,6}\s+|>\s?|[-*+]\s\[[ xX]\]\s|[-*+]\s|\d+\.\s)"#)
+
+  /// Whether `mark`, without its indent, is `format`'s.
+  private static func isMark(_ mark: String, of format: LineFormat) -> Bool {
+    let pattern =
+      switch format {
+      case .heading(let level): "^#{\(level)} $"
+      case .quote: #"^> ?$"#
+      case .bullet: #"^[-*+] $"#
+      case .ordered: #"^\d+\. $"#
+      case .task: #"^[-*+] \[[ xX]\] $"#
+      }
+    return mark.range(of: pattern, options: .regularExpression) != nil
+  }
 
   /// The lines `selection` touches made `format`, or plain when they all are already; another
   /// heading, quote or list mark is swapped for it, as Raycast's Format as… does.
@@ -322,32 +360,36 @@ public enum MarkdownEditing {
       case .task: "- [ ] "
       }
     }
-    func split(_ line: String) -> (mark: String, rest: String) {
-      let length =
-        linePrefix?.firstMatch(
-          in: line, range: NSRange(location: 0, length: (line as NSString).length))?.range.length
-        ?? 0
+    // A nested item keeps its indent; only the mark after it changes.
+    func split(_ line: String) -> (indent: String, mark: String, rest: String) {
       let ns = line as NSString
-      return (ns.substring(to: length), ns.substring(from: length))
+      guard
+        let match = linePrefix?.firstMatch(
+          in: line, range: NSRange(location: 0, length: ns.length))
+      else {
+        let indent = String(line.prefix { $0 == " " || $0 == "\t" })
+        return (indent, "", String(line.dropFirst(indent.count)))
+      }
+      let indent = match.range(at: 1)
+      return (
+        ns.substring(with: indent),
+        ns.substring(
+          with: NSRange(
+            location: indent.upperBound, length: match.range.upperBound - indent.upperBound)),
+        ns.substring(from: match.range.upperBound)
+      )
     }
     let written = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-    let isAlready =
-      !written.isEmpty
-      && written.enumerated().allSatisfy { index, line in
-        let current = split(line).mark
-        return format == .ordered
-          ? current.range(of: #"^\d+\. $"#, options: .regularExpression) != nil
-          : current == mark(index + 1)
-      }
+    let isAlready = !written.isEmpty && written.allSatisfy { isMark(split($0).mark, of: format) }
     var number = 0
     let changed = lines.map { line -> String in
-      let rest = split(line).rest
+      let (indent, _, rest) = split(line)
       // Blank lines between others stay blank; a lone empty line gets the mark to type after.
       if isAlready || (lines.count > 1 && line.trimmingCharacters(in: .whitespaces).isEmpty) {
-        return rest
+        return indent + rest
       }
       number += 1
-      return mark(number) + rest
+      return indent + mark(number) + rest
     }
     let replacement = changed.joined(separator: "\n") + (endsWithBreak ? "\n" : "")
     // One line: the caret keeps its place in the text after the mark. More: they stay selected.
@@ -361,35 +403,32 @@ public enum MarkdownEditing {
     }
     let shift = (changed[0] as NSString).length - (lines[0] as NSString).length
     let markEnd =
-      range.location + (changed[0] as NSString).length - (split(changed[0]).rest as NSString).length
+      range.location + (changed[0] as NSString).length
+      - (split(changed[0]).rest as NSString).length
     let caret = max(markEnd, selection.location + shift)
     return (range, replacement, NSRange(location: caret, length: selection.length))
   }
 
-  /// The lines `selection` touches put in a ``` code block, or taken out of the one they're
-  /// the whole of.
+  /// The lines `selection` touches put in a ``` code block, or the block it's in taken apart.
   public static func toggleCodeBlock(selection: NSRange, in text: String)
     -> (range: NSRange, replacement: String, selection: NSRange)
   {
     let string = text as NSString
+    if let block = MarkdownSpan.spans(in: text).first(where: {
+      $0.style == .fenced
+        && NSLocationInRange(
+          selection.location, NSRange(location: $0.range.location, length: $0.range.length + 1))
+    }) {
+      // The lines keep the break after the closing fence, if it had one.
+      let whole = block.marks.reduce(block.range) { NSUnionRange($0, $1) }
+      let keepsBreak = string.substring(with: whole).hasSuffix("\n")
+      let body = string.substring(with: block.range)
+      return (
+        whole, body + (keepsBreak ? "\n" : ""),
+        NSRange(location: whole.location, length: (body as NSString).length)
+      )
+    }
     let lines = string.lineRange(for: selection)
-    let fence = { (range: NSRange) in
-      string.substring(with: range).trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("```")
-    }
-    if lines.location > 0, NSMaxRange(lines) < string.length {
-      let above = string.lineRange(for: NSRange(location: lines.location - 1, length: 0))
-      let below = string.lineRange(for: NSRange(location: NSMaxRange(lines), length: 0))
-      if fence(above), fence(below) {
-        // The lines keep the break after them only if the closing fence had one.
-        let inner = string.substring(with: lines)
-        let keepsBreak = string.substring(with: below).hasSuffix("\n")
-        let body = keepsBreak ? inner : String(inner.dropLast())
-        return (
-          NSUnionRange(above, below), body,
-          NSRange(location: above.location, length: (inner as NSString).length - 1)
-        )
-      }
-    }
     let inner = string.substring(with: lines)
     let endsWithBreak = inner.hasSuffix("\n")
     let body = endsWithBreak ? String(inner.dropLast()) : inner

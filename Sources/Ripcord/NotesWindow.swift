@@ -71,6 +71,8 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     window.level = .floating
     window.hidesOnDeactivate = false
     window.isMovableByWindowBackground = true
+    // Sized by hand once auto-sizing is off, it can't shrink past its buttons.
+    window.minSize = NSSize(width: 300, height: Self.minHeight)
     window.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
     let content = NSHostingView(
       rootView: NotesView(
@@ -457,7 +459,8 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     let size = window.frame.size
     // Where it was moved to, when that's on this screen; else this screen's top right.
     if let saved = UserDefaults.standard.string(forKey: Self.placeKey).map(NSPointFromString),
-      screen.visibleFrame.contains(saved)
+      // Moved against the menu bar, its top is the visible frame's edge, which `contains` leaves out.
+      screen.visibleFrame.insetBy(dx: -1, dy: -1).contains(saved)
     {
       return window.setFrameTopLeftPoint(saved)
     }
@@ -692,8 +695,7 @@ private struct NotesView: View {
 
   /// The characters the editor shows: hidden marks aren't counted.
   static func shownCount(of text: String) -> Int {
-    let hidden = MarkdownEditing.hidden(in: MarkdownSpan.spans(in: text))
-    return text.count - hidden.reduce(0) { $0 + $1.length }
+    MarkdownEditing.shown(text).count
   }
 
   /// The window's keys run these, through its actions.
@@ -784,7 +786,8 @@ private struct MarkdownEditor: NSViewRepresentable {
         if let textView { coordinator.reportHeight(of: textView) }
       }
     }
-    scrollView.allowsMagnification = true
+    // Zoom In and Zoom Out set the scale; a pinch would be undone on the next update.
+    scrollView.allowsMagnification = false
     scrollView.magnification = zoom
     // Raycast Notes' margins: 24pt from the sides, text 65pt from the window's top.
     textView.textContainerInset = NSSize(width: 19, height: 13)
@@ -797,7 +800,7 @@ private struct MarkdownEditor: NSViewRepresentable {
 
   func updateNSView(_ scrollView: NSScrollView, context: Context) {
     context.coordinator.parent = self
-    guard let textView = scrollView.documentView as? NSTextView else { return }
+    guard let textView = scrollView.documentView as? NoteTextView else { return }
     // Another note shown, or reloaded: what was being composed for the old one is dropped, and
     // so is its undo history, which would replay its edits on this text.
     if textView.string != text {
@@ -852,7 +855,7 @@ private struct MarkdownEditor: NSViewRepresentable {
     }
 
     func textDidChange(_ notification: Notification) {
-      guard !isReplacing, let textView = notification.object as? NSTextView else { return }
+      guard !isReplacing, let textView = notification.object as? NoteTextView else { return }
       parent.text = textView.string
       parent.onChange()
       if !textView.hasMarkedText() { MarkdownEditor.format(textView) }
@@ -883,13 +886,19 @@ private struct MarkdownEditor: NSViewRepresentable {
     ) -> NSRange {
       guard !isReplacing, !textView.hasMarkedText() else { return new }
       let text = textView.string
-      let spans = MarkdownSpan.spans(in: text)
+      let spans = (textView as? NoteTextView)?.markdownSpans ?? MarkdownSpan.spans(in: text)
       let hidden = MarkdownEditing.hidden(in: spans)
       let stops = MarkdownEditing.stops(in: spans)
       guard new.length > 0 else {
+        // While typing, the caret may stay before a style's closing marks, and anywhere in a
+        // link's `](url)` as its URL is typed.
         if isTyping,
-          MarkdownSpan.spans(in: text).contains(where: {
-            $0.marks.count == 2 && $0.marks[1].location == new.location
+          spans.contains(where: {
+            guard $0.marks.count == 2 else { return false }
+            let closing = $0.marks[1]
+            return closing.location == new.location
+              || ($0.style == .link && NSLocationInRange(new.location, closing)
+                && new.location < NSMaxRange(closing))
           })
         {
           return new
@@ -912,7 +921,7 @@ private struct MarkdownEditor: NSViewRepresentable {
       let isStep =
         abs(new.location - old.location) <= 2 && abs(NSMaxRange(new) - NSMaxRange(old)) <= 2
       guard isStep else {
-        return MarkdownEditing.outward(new, spans: MarkdownSpan.spans(in: text))
+        return MarkdownEditing.outward(new, spans: spans)
       }
       var start = new.location
       var end = NSMaxRange(new)
@@ -940,7 +949,7 @@ private struct MarkdownEditor: NSViewRepresentable {
         !textView.isTidying, !textView.hasMarkedText(),
         let tidy = MarkdownEditing.tidy(
           range, replacement: replacementString, in: textView.string,
-          spans: MarkdownSpan.spans(in: textView.string))
+          spans: textView.markdownSpans)
       else { return true }
       textView.replace(
         tidy.range, with: tidy.replacement, selecting: NSRange(location: tidy.caret, length: 0))
@@ -961,21 +970,22 @@ private struct MarkdownEditor: NSViewRepresentable {
       }
       let selection = textView.selectedRange()
       let text = textView.string
+      let spans = textView.markdownSpans
       switch selector {
       case #selector(NSResponder.deleteBackward(_:)) where selection.length == 0:
         return textView.apply(
           MarkdownEditing.deleteBackward(
-            at: selection.location, in: text, spans: MarkdownSpan.spans(in: text)))
+            at: selection.location, in: text, spans: spans))
       case #selector(NSResponder.deleteForward(_:)) where selection.length == 0:
         return textView.apply(
           MarkdownEditing.deleteForward(
-            at: selection.location, in: text, spans: MarkdownSpan.spans(in: text)))
+            at: selection.location, in: text, spans: spans))
       case #selector(NSResponder.insertNewline(_:))
       where NSApp.currentEvent?.modifierFlags.contains(.shift) != true:
         // Return continues a list, task or quote, and ends it on an empty item.
         guard selection.length == 0,
           let edit = MarkdownEditing.newline(
-            at: selection.location, in: text, spans: MarkdownSpan.spans(in: text))
+            at: selection.location, in: text, spans: spans)
         else { return false }
         textView.replace(
           edit.range, with: edit.replacement, selecting: NSRange(location: edit.caret, length: 0))
@@ -983,7 +993,7 @@ private struct MarkdownEditor: NSViewRepresentable {
       case #selector(NSResponder.insertNewline(_:)):
         // Return ends a heading; Shift-Return starts another of the same level, as in Raycast.
         guard
-          let prefix = MarkdownSpan.spans(in: text).first(where: {
+          let prefix = spans.first(where: {
             if case .heading = $0.style {
               return NSLocationInRange(selection.location, $0.range)
                 || NSMaxRange($0.range) == selection.location
@@ -1034,23 +1044,30 @@ private struct MarkdownEditor: NSViewRepresentable {
     return lead.reduce(0) { $0 + ($1 == "\t" ? 2 : 1) } / 2
   }
 
+  /// Line heights, worked out once rather than for every line on every keystroke.
+  private static let bodyLineHeight = NSLayoutManager().defaultLineHeight(
+    for: .systemFont(ofSize: fontSize))
+  private static let headingLineHeights = (1...3).map {
+    NSLayoutManager().defaultLineHeight(for: headingFont($0))
+  }
+
   fileprivate static func headingFont(_ level: Int) -> NSFont {
     .systemFont(ofSize: [24, 20, 17][min(level, 3) - 1], weight: .bold)
   }
 
   /// Sets every character's look from the Markdown; the text itself is left as it is.
-  static func format(_ textView: NSTextView) {
+  static func format(_ textView: NoteTextView) {
     guard let storage = textView.textStorage else { return }
     let whole = NSRange(location: 0, length: storage.length)
     storage.beginEditing()
     storage.setAttributes(base, range: whole)
-    for span in MarkdownSpan.spans(in: storage.string)
-    where NSMaxRange(span.range) <= storage.length {
+    let spans = textView.markdownSpans
+    for span in spans where NSMaxRange(span.range) <= storage.length {
       storage.addAttributes(attributes(for: span, in: storage), range: span.range)
     }
     // A closed block's hidden fence lines leave room above and below its background.
     let string = storage.string as NSString
-    for span in MarkdownSpan.spans(in: storage.string) where span.style == .fenced {
+    for span in spans where span.style == .fenced {
       for mark in span.marks {
         let fence = string.range(of: "```", range: mark)
         guard fence.location != NSNotFound else { continue }
@@ -1077,14 +1094,14 @@ private struct MarkdownEditor: NSViewRepresentable {
     let font =
       storage.attribute(.font, at: span.range.location, effectiveRange: nil) as? NSFont
       ?? .systemFont(ofSize: fontSize)
-    let lineHeight = NSLayoutManager().defaultLineHeight(for: .systemFont(ofSize: fontSize))
+    let lineHeight = bodyLineHeight
     switch span.style {
     case .heading(let level):
       // As tall as the heading even when its marks are all there is.
       return [
         .font: headingFont(level),
         .paragraphStyle: paragraph(
-          minimumHeight: NSLayoutManager().defaultLineHeight(for: headingFont(level))),
+          minimumHeight: headingLineHeights[min(level, 3) - 1]),
       ]
     case .bullet, .ordered, .task:
       let mark = span.marks.first.map { (storage.string as NSString).substring(with: $0) } ?? ""
@@ -1124,15 +1141,27 @@ private struct MarkdownEditor: NSViewRepresentable {
 /// The note's text view: Raycast Notes' placeholders, its Format as… edits, and deletes that
 /// treat hidden marks as one with their text.
 final class NoteTextView: NSTextView {
+  /// The note's Markdown, read once per change of its text and shared by formatting, the
+  /// editing rules and drawing.
+  var markdownSpans: [MarkdownSpan] {
+    let text = string
+    if let spanCache, spanCache.text == text { return spanCache.spans }
+    let spans = MarkdownSpan.spans(in: text)
+    spanCache = (text, spans)
+    return spans
+  }
+  private var spanCache: (text: String, spans: [MarkdownSpan])?
+
   /// Bold, Italic and the other inline formats on the selected words, or, with nothing
   /// selected, on what's typed next. A link's caret lands between its `()` for the URL.
   func toggleInline(_ style: MarkdownSpan.Style, open: String, close: String) {
     guard !hasMarkedText(),
       let edit = MarkdownEditing.toggle(
         style, open: open, close: close, selection: selectedRange(), in: string,
-        spans: MarkdownSpan.spans(in: string))
+        spans: markdownSpans)
     else { return NSSound.beep() }
-    let addsLink = style == .link && edit.replacement.hasSuffix("]()")
+    // Selected words become the link's text, and the caret waits in () for its URL.
+    let addsLink = style == .link && edit.range.length > 0 && edit.replacement.hasSuffix("]()")
     replace(
       edit.range, with: edit.replacement,
       selecting: addsLink
@@ -1210,7 +1239,7 @@ final class NoteTextView: NSTextView {
     super.drawBackground(in: rect)
     guard let layoutManager, let textContainer else { return }
     let origin = textContainerOrigin
-    for span in MarkdownSpan.spans(in: string) {
+    for span in markdownSpans {
       switch span.style {
       case .code:
         let glyphs = layoutManager.glyphRange(
@@ -1262,7 +1291,7 @@ final class NoteTextView: NSTextView {
       return
     }
     guard let layoutManager else { return }
-    for span in MarkdownSpan.spans(in: string) {
+    for span in markdownSpans {
       guard let mark = span.marks.first else { continue }
       let indent =
         MarkdownEditor.listIndent
@@ -1322,7 +1351,7 @@ final class NoteTextView: NSTextView {
   /// A click on a task's checkbox checks or unchecks it.
   override func mouseDown(with event: NSEvent) {
     let point = convert(event.locationInWindow, from: nil)
-    for span in MarkdownSpan.spans(in: string) {
+    for span in markdownSpans {
       guard case .task(let checked) = span.style, let mark = span.marks.first,
         checkbox(for: span)?.insetBy(dx: -3, dy: -3).contains(point) == true
       else { continue }
