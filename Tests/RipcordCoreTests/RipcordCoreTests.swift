@@ -154,9 +154,28 @@ import Testing
     #expect(Search.results(for: "settings", apps: apps, quicklinks: []).first?.title == "システム設定")
   }
 
-  @Test func calculatorComesFirst() {
+  @Test func calculatorComesFirst() throws {
     let results = Search.results(for: "2+2", apps: apps, quicklinks: links)
     #expect(results.first?.action == .copy("4"))
+    // Raycast's ⌘K, without its calculation history.
+    let answer = try #require(results.first)
+    #expect(
+      answer.actions.map(\.title) == [
+        "Copy Answer", "Paste Answer", "Copy Question and Answer", "Put Answer in Search Bar",
+      ])
+    #expect(answer.actions.map(\.shortcut) == ["↵", "⌘↵", "⌥⇧⌘C", "⇧⌘↵"])
+    #expect(
+      answer.actions.map(\.action) == [
+        .copy("4"), .pasteText("4"), .copy("2+2 = 4"), .setQuery("4"),
+      ])
+  }
+
+  /// Put Answer in Search Bar: the answer as written reads back, so the sum can go on.
+  @Test func answersReadBack() throws {
+    for value in [1234.5, -7, 0.1, 1e20, 2.0 / 3] {
+      let next = try #require(Calculator.evaluate(Calculator.format(value) + "+1"))
+      #expect(abs(next - (value + 1)) <= abs(value) * 1e-9 + 1e-9)
+    }
   }
 
   @Test func keywordExpandsQuicklink() {

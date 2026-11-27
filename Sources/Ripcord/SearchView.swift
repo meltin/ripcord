@@ -483,6 +483,8 @@ private struct ResultIcon: View {
       tile("folder", .gray)
     case .showInfo:
       tile("info.circle", .gray)
+    case .pasteText, .setQuery:
+      tile("plus.forwardslash.minus", .orange)
     case .cleanShot:
       // CleanShot X's own icon, as Raycast shows its extension's commands.
       if let icon = Self.cleanShotIcon {
@@ -2202,7 +2204,7 @@ private struct MenuCard: View {
             }
             Text(title(of: item.action, else: item.title, pasteTarget))
               .lineLimit(1)
-            Spacer(minLength: 16)
+            Spacer(minLength: 12)
             HStack(spacing: 3) {
               ForEach(Array(item.shortcut.map(String.init).enumerated()), id: \.offset) {
                 Keycap($0.element)

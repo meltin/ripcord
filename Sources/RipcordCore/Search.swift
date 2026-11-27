@@ -243,6 +243,10 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case reveal(URL)
     /// Finder's Get Info window for the file, as its Show Info service opens it.
     case showInfo(URL)
+    /// Pastes this text into the app in front, as Calculator's Paste Answer does.
+    case pasteText(String)
+    /// Puts this text in the search field in place of the query.
+    case setQuery(String)
     case run(BuiltinCommand)
     case clip(UUID, ClipAction)
     /// The snippet at this index in the config.
@@ -369,6 +373,19 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     let primary = MenuAction(
       title: kind.primaryAction, symbol: "return", shortcut: "↵", action: action)
     switch action {
+    case .copy where kind == .calculator:
+      // Raycast's, without its history: Show History and Pin Calculation.
+      return [
+        primary,
+        MenuAction(
+          title: "Paste Answer", symbol: "return", shortcut: "⌘↵", action: .pasteText(title)),
+        MenuAction(
+          title: "Copy Question and Answer", symbol: "doc.on.doc", shortcut: "⌥⇧⌘C",
+          action: .copy("\(subtitle) = \(title)")),
+        MenuAction(
+          title: "Put Answer in Search Bar", symbol: "text.cursor", shortcut: "⇧⌘↵",
+          action: .setQuery(title), startsSection: true),
+      ]
     case .open(let url) where kind == .application:
       // Raycast's, in its order and with its keys; Add to Favorites goes before Copy Path.
       let bundleID = Bundle(url: url)?.bundleIdentifier
