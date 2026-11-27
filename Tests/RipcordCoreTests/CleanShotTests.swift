@@ -50,7 +50,7 @@ import Testing
     #expect(row.action == .cleanShot(.captureText))
     #expect(row.subtitle == "CleanShot X")
     #expect(row.itemKey == key)
-    #expect(row.actions.last?.action == .configureMenu(key))
+    #expect(row.actions.dropLast().last?.action == .configureMenu(key))
     // Switched off, it's gone.
     let off = [key: ItemSettings(disabled: true)]
     #expect(

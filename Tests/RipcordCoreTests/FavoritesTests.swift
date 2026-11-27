@@ -28,13 +28,13 @@ import Testing
     let rex = try #require(root([]).first?.results.first)
     let add = try #require(rex.actions.first { $0.title == "Add to Favorites" })
     #expect(add.shortcut == "⇧⌘F")
-    #expect(rex.actions.last?.title == "Configure Command…")
+    #expect(rex.actions.suffix(2).map(\.title) == ["Configure Command…", "Disable Command"])
     #expect(rex.actions.first { $0.title == "Show in Finder" }?.shortcut == "⌘↵")
     let snippets = BuiltinCommand.searchSnippets.settingsKey
     let favorites = try #require(root([snippets, app.settingsKey]).first?.results)
     #expect(
-      favorites[0].actions.map(\.title).suffix(3) == [
-        "Remove from Favorites", "Move Favorite Down", "Configure Command…",
+      favorites[0].actions.map(\.title).suffix(4) == [
+        "Remove from Favorites", "Move Favorite Down", "Configure Command…", "Disable Command",
       ])
     // An app's go before its Copy Path, as Raycast's.
     #expect(

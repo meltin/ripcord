@@ -520,7 +520,8 @@ private struct ResultIcon: View {
       tile(BuiltinCommand.cleanKeyboard.symbol, BuiltinCommand.cleanKeyboard.color)
     case .openNote, .deleteNote:
       tile("note.text", .orange)
-    case .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey, .deleteAlias:
+    case .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey, .deleteAlias,
+      .disableCommand:
       tile("gearshape", .gray)
     case .snippet:
       // Plain, as Raycast draws a snippet's icon.

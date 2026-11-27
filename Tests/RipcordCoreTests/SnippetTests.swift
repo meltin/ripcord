@@ -156,8 +156,17 @@ import Testing
   @Test func commandRowsOfferConfigureCommand() throws {
     let row = try #require(
       Search.results(for: "search snippets", apps: [], quicklinks: []).first)
-    #expect(row.actions.map(\.title) == ["Open Command", "Add to Favorites", "Configure Command…"])
-    #expect(row.actions.last?.action == .configureMenu(BuiltinCommand.searchSnippets.settingsKey))
+    let key = BuiltinCommand.searchSnippets.settingsKey
+    #expect(
+      row.actions.map(\.title) == [
+        "Open Command", "Add to Favorites", "Configure Command…", "Disable Command",
+      ])
+    #expect(row.actions.dropLast().last?.action == .configureMenu(key))
+    // Last, red and on ⌃⇧⌘D, as Raycast's.
+    let disable = try #require(row.actions.last)
+    #expect(disable.action == .disableCommand(key))
+    #expect(disable.shortcut == "⌃⇧⌘D")
+    #expect(disable.isDestructive)
   }
 
   @Test func configureCommandOffersSetAndDeleteAsTheCommandHasThem() {

@@ -23,7 +23,8 @@
   your order (⌥⌘↑ and ⌥⌘↓ move it), as Raycast's Favorites do
 - ⌘K lists the selected row's actions, with Raycast's names and keys. An app's: Open Application
   ↵, Show in Finder ⌘↵, Show Info in Finder ⌘I, Show Package Contents ⌥⌘I, Add to Favorites ⇧⌘F,
-  Copy Path ⌥⌘C, Copy Name ⌃⌘C and Copy Bundle Identifier ⇧⌘C
+  Copy Path ⌥⌘C, Copy Name ⌃⌘C and Copy Bundle Identifier ⇧⌘C. Disable Command ⌃⇧⌘D, last on an
+  app's, command's, Quicklink's or script's, turns it off as its On box in Settings does
 - Backdrop: an optional Metal shader animated behind the panel's text, built in (Glow, Matrix) or
   your own; off by default
 - Settings (⌘,): Launch at Login, the hotkey, the input source to type in and Quicklinks, kept

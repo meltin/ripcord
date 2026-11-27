@@ -194,6 +194,13 @@ public struct MenuAction: Equatable, Sendable {
     self.startsSection = startsSection
   }
 
+  /// Raycast's Disable Command, last and red, which turns the item with this key off.
+  public static func disable(_ settingsKey: String) -> MenuAction {
+    MenuAction(
+      title: "Disable Command", symbol: "eye.slash", shortcut: "⌃⇧⌘D",
+      action: .disableCommand(settingsKey), isDestructive: true, startsSection: true)
+  }
+
   /// Raycast's Configure Command…, which opens `configureMenu` for the command with this key.
   public static func configure(_ settingsKey: String) -> MenuAction {
     MenuAction(
@@ -256,6 +263,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case setAlias(String)
     case deleteHotkey(String)
     case deleteAlias(String)
+    /// Turns the app, command or Quicklink with this key off, as the On box in Settings does.
+    case disableCommand(String)
     /// Keeps the Mac awake for this many seconds; nil until Decaffeinate.
     case caffeinate(TimeInterval?)
     /// Sleeps the Mac, or only turns its display off, after this many seconds.
@@ -634,8 +643,10 @@ public enum Search {
     let cut =
       actions.indices.dropFirst().first { actions[$0].startsSection }
       ?? actions.count - (configure == nil ? 0 : 1)
+    // Last and red, as Raycast's.
+    let disable = MenuAction.disable(key)
     var decorated = result
-    decorated.menu = Array(actions[..<cut]) + favorite + Array(actions[cut...])
+    decorated.menu = Array(actions[..<cut]) + favorite + Array(actions[cut...]) + [disable]
     return decorated
   }
 

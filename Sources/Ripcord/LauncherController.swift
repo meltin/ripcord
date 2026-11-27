@@ -2123,8 +2123,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .cleanShot:
       break  // Run with its field, above.
     case .run(.settings), .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey,
-      .deleteAlias:
-      break  // Opened before hide(), above.
+      .deleteAlias, .disableCommand:
+      break  // Opened or saved before hide(), above.
     case .openWith(let url, let app):
       NSWorkspace.shared.open([url], withApplicationAt: app, configuration: .init()) { _, error in
         if error != nil { DispatchQueue.main.async { NSSound.beep() } }
@@ -2576,6 +2576,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
     switch action {
     case .deleteHotkey(let key): { $0.setHotkey(nil, for: .item(key)) }
     case .deleteAlias(let key): { $0.setAlias("", for: .item(key)) }
+    case .disableCommand(let key):
+      { settings in
+        // A Quicklink keeps its switch on itself, found by its row's key.
+        let index = settings.config.quicklinks.firstIndex { $0.rowID == key }
+        settings.setEnabled(false, for: index.map(HotkeyTarget.quicklink) ?? .item(key))
+      }
     default: nil
     }
   }
