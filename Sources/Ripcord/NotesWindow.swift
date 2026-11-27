@@ -92,7 +92,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     content.safeAreaRegions = []
     window.contentView = content
     window.delegate = self
-    window.onEscape = { [weak self] in self?.hide() }
+    window.onEscape = { [weak self] in self?.escape() }
     window.onKeyEquivalent = { [weak self] in self?.runShortcut($0) ?? false }
     window.sharingType = Self.isHiddenWhileSharing ? .none : .readOnly
     if !Self.isAutoSizing { window.styleMask.insert(.resizable) }
@@ -242,6 +242,15 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     }
     actionsModel.placeholder = "Heading…"
     actionsModel.filter = ""
+  }
+
+  /// Esc closes ⌘F's find bar first, as a text view's does, and the window after.
+  private func escape() {
+    guard let editor, editor.enclosingScrollView?.isFindBarVisible == true else { return hide() }
+    let item = NSMenuItem()
+    item.tag = NSTextFinder.Action.hideFindInterface.rawValue
+    editor.performTextFinderAction(item)
+    window.makeFirstResponder(editor)
   }
 
   /// The note's text view, to format.

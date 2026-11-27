@@ -113,8 +113,8 @@ struct NotesActionsView: View {
       .padding(6)
     }
     .frame(width: Self.width)
-    // Frosted, as Raycast's panel is over whatever is behind the note.
-    .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 16))
+    // Frosted over whatever is behind the note, as CONTRIBUTING's popovers are.
+    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
   }
 
   private func items(_ rows: [NotesAction]) -> some View {
