@@ -43,10 +43,14 @@ struct SearchView: View {
           )
           // A new one takes the focus back from Set Alias…'s field.
           .id(model.searchFieldID)
+          // As Raycast's: just as wide as what's typed, with the command's fields after it.
+          .frame(width: argumentFieldsShown ? queryWidth : nil)
           if let path = model.argumentScript, let arguments = model.scriptArguments[path] {
+            if let selected = model.selected { ResultIcon(result: selected) }
             ArgumentFields(model: model, path: path, arguments: arguments, onCommand: onCommand)
               // Another script's fields are new ones: a focused field gone hands the focus back.
               .id(path)
+            Spacer(minLength: 0)
           }
           if model.mode == .clipboard {
             ClipTypeFilter(selection: model.clipType) { onCommand(.filterClipType($0)) }
@@ -172,6 +176,19 @@ struct SearchView: View {
           confirmation: confirmation, onCommand: onCommand)
       }
     }
+  }
+
+  private var argumentFieldsShown: Bool {
+    model.argumentScript.flatMap { model.scriptArguments[$0] }?.isEmpty == false
+  }
+
+  /// What's typed, or the placeholder while nothing is, measured in the search field's font with
+  /// room for the caret; at most 320 points, so a long query leaves the fields room.
+  private var queryWidth: CGFloat {
+    let font = NSFont.systemFont(ofSize: 18)
+    let shown = model.query.isEmpty ? model.mode.placeholder : model.query
+    let width = (shown as NSString).size(withAttributes: [.font: font]).width
+    return min(ceil(width) + 12, 320)
   }
 
   private var resultList: some View {
@@ -1235,9 +1252,10 @@ private struct ArgumentFields: View {
     .textFieldStyle(.plain)
     .font(.system(size: 13))
     .padding(.horizontal, 8)
-    .frame(width: 130, height: 26)
+    .frame(width: 180, height: 26)
     .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
     .overlay(ArgumentOutline(isFocused: focus == index))
+    .overlay(alignment: .topTrailing) { OptionalBadge(argument: arguments[index]) }
     .focused($focus, equals: index)
     .onSubmit { onCommand(.submit) }
     // While an input method composes, its keys pick candidates instead.
@@ -1284,6 +1302,23 @@ private struct ArgumentAnchors: PreferenceKey {
   }
 }
 
+/// Raycast's "?" on an argument that can be left empty.
+private struct OptionalBadge: View {
+  let argument: ScriptCommand.Argument
+
+  var body: some View {
+    if argument.optional == true {
+      Text("?")
+        .font(.system(size: 8, weight: .bold))
+        .foregroundStyle(Color(nsColor: .windowBackgroundColor))
+        .frame(width: 12, height: 12)
+        .background(Circle().fill(Color.primary.opacity(0.75)))
+        .offset(x: 4, y: -4)
+        .accessibilityLabel("Optional")
+    }
+  }
+}
+
 /// The ring around the argument field that has the keys, as Raycast draws it.
 private struct ArgumentOutline: View {
   let isFocused: Bool
@@ -1316,12 +1351,15 @@ private struct ArgumentDropdown: View {
       }
       .font(.system(size: 13))
       .padding(.horizontal, 8)
-      .frame(width: 130, height: 26)
+      .frame(height: 26)
+      // As wide as its title, as Raycast's: "English" narrower than "Select Language".
+      .fixedSize()
       .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
       .overlay(ArgumentOutline(isFocused: isFocused))
       .contentShape(RoundedRectangle(cornerRadius: 6))
     }
     .buttonStyle(.plain)
+    .overlay(alignment: .topTrailing) { OptionalBadge(argument: argument) }
   }
 }
 
