@@ -2052,6 +2052,18 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if case .snippet(let index, let snippetAction) = action {
       return perform(snippetAction, on: index)
     }
+    // Set Volume asks for a level, as Raycast's does: its title in the field, the level after.
+    if case .system(.setVolume, _) = action {
+      closeEditor(backToMenu: false)
+      if !panel.isVisible { show() }
+      model.mode = .root
+      return update(SystemAction.setVolume.title + " ")
+    }
+    if case .setVolume(let percent) = action {
+      hide()
+      if let message = SystemActions.setVolume(percent: percent) { HUD.show(message, failed: true) }
+      return
+    }
     if case .system(let system, let confirmed) = action {
       return perform(system, confirmed: confirmed)
     }
@@ -2156,7 +2168,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       .run(.cloneRepo), .run(.removeRepo), .removeRepository, .trashRepository,
       .run(.cleanKeyboard), .run(.searchBookmarks), .run(.addBookmark), .deleteBookmark,
       .run(.searchQuicklinks), .run(.createQuicklink), .editQuicklink, .deleteQuicklink,
-      .run(.searchScriptCommands),
+      .run(.searchScriptCommands), .setVolume,
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,
       .openDraft, .discardDraft, .runScript, .run(.searchNotes), .deleteNote,

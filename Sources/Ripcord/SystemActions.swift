@@ -1,4 +1,5 @@
 import AppKit
+import AudioToolbox
 import Carbon
 import IOKit.hidsystem
 import RipcordCore
@@ -7,6 +8,37 @@ import RipcordCore
 /// ones that wait on another app or a disk run off the main thread and `report` a problem later.
 @MainActor
 enum SystemActions {
+  /// The default output's volume set to `percent`, and unmuted above 0; a message when the device
+  /// has no volume to set, as some do.
+  static func setVolume(percent: Int) -> String? {
+    var device = AudioObjectID(kAudioObjectUnknown)
+    var size = UInt32(MemoryLayout<AudioObjectID>.size)
+    var defaultOutput = AudioObjectPropertyAddress(
+      mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+      mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+    guard
+      AudioObjectGetPropertyData(
+        AudioObjectID(kAudioObjectSystemObject), &defaultOutput, 0, nil, &size, &device) == noErr,
+      device != kAudioObjectUnknown
+    else { return "There's no sound output to set." }
+    var volume = AudioObjectPropertyAddress(
+      mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
+      mScope: kAudioDevicePropertyScopeOutput, mElement: kAudioObjectPropertyElementMain)
+    var level = Float32(min(max(percent, 0), 100)) / 100
+    guard
+      AudioObjectSetPropertyData(
+        device, &volume, 0, nil, UInt32(MemoryLayout<Float32>.size), &level) == noErr
+    else { return "This sound output's volume can't be set." }
+    var mute = AudioObjectPropertyAddress(
+      mSelector: kAudioDevicePropertyMute, mScope: kAudioDevicePropertyScopeOutput,
+      mElement: kAudioObjectPropertyElementMain)
+    if percent > 0, AudioObjectHasProperty(device, &mute) {
+      var off: UInt32 = 0
+      AudioObjectSetPropertyData(device, &mute, 0, nil, UInt32(MemoryLayout<UInt32>.size), &off)
+    }
+    return nil
+  }
+
   /// `frontmost` is the app the user was in when they asked.
   static func run(
     _ action: SystemAction, frontmost: NSRunningApplication?,
@@ -37,6 +69,10 @@ enum SystemActions {
       return pressMediaKey(NX_KEYTYPE_SOUND_UP)
     case .volumeDown:
       return pressMediaKey(NX_KEYTYPE_SOUND_DOWN)
+    case .setVolume:
+      return nil  // Asks for a level first, in the launcher.
+    case .setVolume0, .setVolume25, .setVolume50, .setVolume75, .setVolume100:
+      return setVolume(percent: action.volumePercent ?? 0)
     case .hideOtherApps:
       guard let frontmost = userApp(frontmost) else { return noFrontmostApp }
       for app in regularApps() where app != frontmost { app.hide() }

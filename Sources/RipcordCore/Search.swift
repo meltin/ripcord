@@ -271,6 +271,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case trashRepository(URL)
     /// Adds the color with this hex to Favorite Colors, or takes it out.
     case toggleFavoriteColor(String)
+    /// Sets the output volume to this percent.
+    case setVolume(Int)
     /// Blocks the keyboard for this many seconds, to wipe it.
     case cleanKeyboard(TimeInterval)
     /// Opens Create Quicklink's form on the Quicklink at `index`, if it's still named `name`.
@@ -712,8 +714,21 @@ public enum Search {
         title: "Clean Keyboard for \(Coffee.format(seconds))", subtitle: "Clean Keyboard",
         keyword: nil, kind: .command, action: .cleanKeyboard(seconds))
     }
+    // "set volume 40", as Raycast's Set Volume takes a level.
+    let volume = typedArguments(
+      after: SystemAction.setVolume.title, key: SystemAction.setVolume.settingsKey, in: trimmed,
+      items: items
+    ).lazy.compactMap(SystemAction.volumePercent(from:)).first
+      // A preset's level is its own row already.
+      .flatMap { percent in
+        SystemAction.allCases.contains { $0.volumePercent == percent } ? nil : percent
+      }.map {
+        SearchResult(
+          id: "set-volume-typed", title: "Set Volume to \($0)%", subtitle: "System Actions",
+          keyword: nil, kind: .command, action: .setVolume($0))
+      }
     let timed: [SearchResult] =
-      [caffeinateFor, lidAwakeFor].compactMap { $0 } + sleepIn + cleanFor
+      [caffeinateFor, lidAwakeFor, volume].compactMap { $0 } + sleepIn + cleanFor
     return [calculation].compactMap { $0 } + expanded + timed
       + ranked
   }
@@ -813,9 +828,16 @@ public enum Search {
   private static func typedArguments(
     after command: BuiltinCommand, in query: String, items: [String: ItemSettings]
   ) -> [String] {
-    let settings = items[command.settingsKey] ?? ItemSettings()
+    typedArguments(after: command.title, key: command.settingsKey, in: query, items: items)
+  }
+
+  /// What's typed after `title`, or the alias kept under `key`, and a space.
+  private static func typedArguments(
+    after title: String, key: String, in query: String, items: [String: ItemSettings]
+  ) -> [String] {
+    let settings = items[key] ?? ItemSettings()
     guard settings.isEnabled else { return [] }
-    return [command.title, settings.alias]
+    return [title, settings.alias]
       .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
       .filter { !$0.isEmpty && query.lowercased().hasPrefix($0.lowercased() + " ") }
       .map { String(query.dropFirst($0.count + 1)).trimmingCharacters(in: .whitespaces) }
