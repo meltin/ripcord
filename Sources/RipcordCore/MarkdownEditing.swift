@@ -157,6 +157,68 @@ public enum MarkdownEditing {
     return (NSRange(location: box.location + 1, length: 1), checked ? " " : "x")
   }
 
+  /// Move Checked Tasks to Bottom, as Raycast Notes has it: the task on the line at `location`,
+  /// just checked, moved below the unchecked tasks of its list, its nested lines with it. Nil
+  /// when no unchecked task follows it, or it isn't a task. `item` is where the task was and
+  /// `to` where it starts after the move.
+  public static func sinkCheckedTask(at location: Int, in text: String)
+    -> (range: NSRange, replacement: String, item: NSRange, to: Int)?
+  {
+    let string = text as NSString
+    var lines: [NSRange] = []
+    string.enumerateSubstrings(
+      in: NSRange(location: 0, length: string.length), options: [.byLines, .substringNotRequired]
+    ) { _, _, enclosing, _ in lines.append(enclosing) }
+    func indent(_ line: NSRange) -> Int {
+      string.substring(with: line).prefix { $0 == " " || $0 == "\t" }.count
+    }
+    func task(_ line: NSRange) -> (indent: Int, checked: Bool)? {
+      let text = string.substring(with: line)
+      guard let box = text.range(of: #"^\s*[-*+] \[[ xX]\] "#, options: .regularExpression)
+      else { return nil }
+      return (indent(line), text[box].contains { $0 == "x" || $0 == "X" })
+    }
+    // The end of the text belongs to the last line; any other line's end is the next one's start.
+    guard
+      let here = lines.firstIndex(where: { NSLocationInRange(location, $0) })
+        ?? (location == string.length && !lines.isEmpty ? lines.count - 1 : nil),
+      let level = task(lines[here])?.indent
+    else { return nil }
+    // The list: tasks at this level, with the lines nested deeper under them.
+    func inList(_ line: NSRange) -> Bool {
+      task(line)?.indent == level
+        || (indent(line) > level
+          && !string.substring(with: line).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+    var first = here
+    while first > 0, inList(lines[first - 1]) { first -= 1 }
+    while task(lines[first])?.indent != level { first += 1 }
+    var last = here
+    while last + 1 < lines.count, inList(lines[last + 1]) { last += 1 }
+    // Its items, each a task at this level and the lines under it.
+    var items: [NSRange] = []
+    for index in first...last {
+      let line = lines[index]
+      if task(line)?.indent == level || items.isEmpty {
+        items.append(line)
+      } else if let previous = items.popLast() {
+        items.append(NSUnionRange(previous, line))
+      }
+    }
+    guard let moving = items.firstIndex(where: { NSLocationInRange(lines[here].location, $0) }),
+      let lastOpen = items.lastIndex(where: { task($0)?.checked == false }), lastOpen > moving
+    else { return nil }
+    let range = NSUnionRange(items[moving], items[lastOpen])
+    var passed = string.substring(with: NSUnionRange(items[moving + 1], items[lastOpen]))
+    var item = string.substring(with: items[moving])
+    // The last item of the text may end without a line break; the one moved there takes over.
+    if !passed.hasSuffix("\n") {
+      passed += "\n"
+      item = String(item.dropLast(item.hasSuffix("\r\n") ? 2 : 1))
+    }
+    return (range, passed + item, items[moving], range.location + (passed as NSString).length)
+  }
+
   /// `- [] ` typed at a line's start, as Raycast takes it, written as Markdown's `- [ ] ` so
   /// the file reads as a task anywhere. Nil when the caret isn't just after one.
   public static func taskShortcut(at caret: Int, in text: String)
