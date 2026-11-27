@@ -712,17 +712,15 @@ public enum Search {
         let exactAlias =
           candidate.alias?.trimmingCharacters(in: .whitespaces)
           .caseInsensitiveCompare(trimmed) == .orderedSame
-        return (
-          exactAlias ? score + 10_000 : score,
-          withFavoriteActions(candidate.result, favorites: shown)
-        )
+        return (exactAlias ? score + 10_000 : score, candidate.result)
       }
       .sorted {
         ($0.score, -$0.result.title.count, $1.result.title)
           > ($1.score, -$1.result.title.count, $0.result.title)
       }
       .prefix(30)
-      .map(\.result)
+      // Only the rows shown: an app's actions read its bundle.
+      .map { withFavoriteActions($0.result, favorites: shown) }
 
     // "clean keyboard 30s", or the usual times while none is typed yet.
     // The usual times only once the command put its title and a space in the field: the title or
