@@ -49,29 +49,42 @@ struct SearchView: View {
           // As Raycast's: just as wide as what's typed, with the command's fields after it.
           .frame(width: argumentFieldsShown ? queryWidth : nil)
           if let path = model.argumentScript, let arguments = model.scriptArguments[path] {
-            if let selected = model.selected { ResultIcon(result: selected) }
-            ArgumentFields(model: model, path: path, arguments: arguments, onCommand: onCommand)
-              // Another script's fields are new ones: a focused field gone hands the focus back.
-              .id(path)
+            // Closer to the fields than to the query and a little smaller than a row's, as
+            // Raycast's.
+            HStack(spacing: Metrics.barSpacing) {
+              if let selected = model.selected {
+                ResultIcon(result: selected).scaleEffect(Metrics.barIconSize / 24)
+                  .frame(width: Metrics.barIconSize, height: Metrics.barIconSize)
+              }
+              ArgumentFields(model: model, path: path, arguments: arguments, onCommand: onCommand)
+                // Another script's fields are new ones: a focused field gone hands the focus back.
+                .id(path)
+            }
             Spacer(minLength: 0)
           }
           if model.mode == .clipboard {
-            ClipTypeFilter(selection: model.clipType) { onCommand(.filterClipType($0)) }
+            FilterMenu(
+              icon: "line.3.horizontal.decrease", allTitle: "All Types", items: ClipType.allCases,
+              selection: model.clipType, title: \.title
+            ) { onCommand(.filterClipType($0)) }
           }
           if model.mode == .snippets {
             // Only tags of listed snippets: one on a snippet without text would list nothing.
-            TagFilter(
-              tags: Set(model.snippets.filter { !$0.text.isEmpty }.flatMap { $0.tags ?? [] })
+            FilterMenu(
+              icon: "tag", allTitle: "All Tags",
+              items: Set(model.snippets.filter { !$0.text.isEmpty }.flatMap { $0.tags ?? [] })
                 .sorted {
                   $0.localizedStandardCompare($1) == .orderedAscending
                 },
-              selection: model.snippetTag
+              selection: model.snippetTag, title: { $0 }
             ) { onCommand(.filterTag($0)) }
           }
           if model.mode == .emoji {
-            CategoryFilter(groups: model.emojiGroups, selection: model.emojiCategory) {
-              onCommand(.filterCategory($0))
-            }
+            FilterMenu(
+              icon: "square.grid.2x2.fill", allTitle: "All Categories",
+              items: Array(model.emojiGroups.indices), selection: model.emojiCategory,
+              title: { model.emojiGroups[$0] }
+            ) { onCommand(.filterCategory($0)) }
           }
         }
       }
@@ -186,12 +199,13 @@ struct SearchView: View {
   }
 
   /// What's typed, or the placeholder while nothing is, measured in the search field's font with
-  /// room for the caret; at most 320 points, so a long query leaves the fields room.
+  /// room for the caret and no more, so the command's icon sits close as Raycast's does; at most
+  /// 320 points, so a long query leaves the fields room.
   private var queryWidth: CGFloat {
-    let font = NSFont.systemFont(ofSize: 18)
+    let font = NSFont.systemFont(ofSize: Metrics.queryFontSize)
     let shown = model.query.isEmpty ? model.mode.placeholder : model.query
     let width = (shown as NSString).size(withAttributes: [.font: font]).width
-    return min(ceil(width) + 12, 320)
+    return min(ceil(width) + 4, 320)
   }
 
   private var resultList: some View {
@@ -720,7 +734,7 @@ private struct SnippetForm: View {
             .focused($focus, equals: .name)
             .tabs(from: .name, focus: $focus)
             .textFieldStyle(.plain)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, Metrics.formFieldPadding)
           Divider().frame(height: 20)
           Button {
             model.isPickingIcon.toggle()
@@ -729,14 +743,14 @@ private struct SnippetForm: View {
               Glyph(model.draft.icon ?? "doc", pointSize: 14)
               Glyph(model.isPickingIcon ? "chevron.up" : "chevron.down", pointSize: 10)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, Metrics.formFieldPadding)
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
           }
           .buttonStyle(.plain)
           .accessibilityLabel("Choose an icon")
         }
-        .frame(height: 36)
+        .frame(height: Metrics.formFieldHeight)
         .field(isFocused: focus == .name)
         // Raycast's picker drops down from the field, over what's below it.
         .overlay(alignment: .topTrailing) {
@@ -894,8 +908,8 @@ private struct BookmarkForm: View {
         Glyph("chevron.down", pointSize: 11)
           .foregroundStyle(.secondary)
       }
-      .padding(.horizontal, 12)
-      .frame(width: fieldWidth, height: 36)
+      .padding(.horizontal, Metrics.formFieldPadding)
+      .frame(width: fieldWidth, height: Metrics.formFieldHeight)
       .contentShape(Rectangle())
     }
     .menuStyle(.button)
@@ -1013,14 +1027,14 @@ extension View {
   /// A form field's outline, as Raycast draws them: no fill, darker while it has focus.
   fileprivate func field(isFocused: Bool) -> some View {
     overlay(
-      RoundedRectangle(cornerRadius: 12)
+      RoundedRectangle(cornerRadius: Metrics.formFieldRadius)
         .strokeBorder(Color.primary.opacity(isFocused ? 0.3 : 0.15), lineWidth: isFocused ? 2 : 1))
   }
 
   fileprivate func inputField(isFocused: Bool) -> some View {
     textFieldStyle(.plain)
-      .padding(.horizontal, 12)
-      .frame(height: 36)
+      .padding(.horizontal, Metrics.formFieldPadding)
+      .frame(height: Metrics.formFieldHeight)
       .field(isFocused: isFocused)
   }
 }
@@ -1194,6 +1208,9 @@ private struct ArgumentFields: View {
   let arguments: [ScriptCommand.Argument]
   let onCommand: (SearchCommand) -> Void
   @FocusState private var focus: Int?
+  /// Whether the focused field holds text an input method is composing, which hides its
+  /// placeholder.
+  @State private var composing = false
   /// ⇧Tab, which arrives as a key of its own.
   static let backTab = KeyEquivalent("\u{19}")
   /// Whether the focused field holds text an input method is still composing.
@@ -1202,7 +1219,7 @@ private struct ArgumentFields: View {
   }
 
   var body: some View {
-    HStack(spacing: 6) {
+    HStack(spacing: Metrics.barSpacing) {
       ForEach(arguments.indices, id: \.self) { index in
         Group {
           if arguments[index].type == .dropdown {
@@ -1231,7 +1248,13 @@ private struct ArgumentFields: View {
     .onChange(of: model.argumentDropdown) { _, dropdown in
       if dropdown != nil { focus = nil }
     }
+    // Composing text changes the field without reaching the binding until it's committed. Read
+    // once the change is through: cancelling with Esc still has the marked text when it notifies.
+    .onReceive(NotificationCenter.default.publisher(for: NSText.didChangeNotification)) { _ in
+      DispatchQueue.main.async { composing = Self.isComposing }
+    }
     .onChange(of: focus) { _, now in
+      composing = false
       guard now != nil else { return }
       model.isEditingArgument = true
       // A text field clicked while a dropdown had the keys takes them.
@@ -1251,18 +1274,30 @@ private struct ArgumentFields: View {
   private func textField(_ index: Int) -> some View {
     Group {
       if arguments[index].type == .password {
-        SecureField(arguments[index].placeholder, text: binding(index))
+        SecureField("", text: binding(index))
       } else {
-        TextField(arguments[index].placeholder, text: binding(index))
+        TextField("", text: binding(index))
+      }
+    }
+    // Drawn here so it stays gray while the field has the keys, as Raycast's; the field's own
+    // placeholder turns black then.
+    .overlay(alignment: .leading) {
+      if chosen(at: index).isEmpty, !(composing && focus == index) {
+        Text(arguments[index].placeholder).foregroundStyle(.tertiary).lineLimit(1)
+          .allowsHitTesting(false).accessibilityHidden(true)
       }
     }
     .textFieldStyle(.plain)
-    .font(.system(size: 13))
-    .padding(.horizontal, 8)
-    // Narrower when a command has many, so they stay inside the panel.
-    .frame(minWidth: 90, maxWidth: 180, minHeight: 26, maxHeight: 26)
-    .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
-    .overlay(ArgumentOutline(isFocused: focus == index))
+    .accessibilityLabel(arguments[index].placeholder)
+    .font(.system(size: Metrics.barFontSize))
+    .padding(.horizontal, Metrics.barControlPadding)
+    // As wide as its placeholder, typed into or not, as Raycast's; narrower when a command has
+    // many, so they stay inside the panel.
+    .frame(
+      minWidth: 90, idealWidth: width(index), maxWidth: width(index),
+      minHeight: Metrics.barControlHeight, maxHeight: Metrics.barControlHeight
+    )
+    .barControl(isFocused: focus == index)
     .overlay(alignment: .topTrailing) { OptionalBadge(argument: arguments[index]) }
     .focused($focus, equals: index)
     .onSubmit { onCommand(.submit) }
@@ -1284,6 +1319,13 @@ private struct ArgumentFields: View {
       onCommand(.down)
       return .handled
     }
+  }
+
+  /// The placeholder's width with the field's padding and the caret, at most 200 points.
+  private func width(_ index: Int) -> CGFloat {
+    let font = NSFont.systemFont(ofSize: Metrics.barFontSize)
+    let text = (arguments[index].placeholder as NSString).size(withAttributes: [.font: font])
+    return min(max(ceil(text.width) + 2 * Metrics.barControlPadding + 4, 90), 200)
   }
 
   private func binding(_ index: Int) -> Binding<String> {
@@ -1327,16 +1369,6 @@ private struct OptionalBadge: View {
   }
 }
 
-/// The ring around the argument field that has the keys, as Raycast draws it.
-private struct ArgumentOutline: View {
-  let isFocused: Bool
-
-  var body: some View {
-    RoundedRectangle(cornerRadius: 6)
-      .strokeBorder(Color.primary.opacity(isFocused ? 0.35 : 0), lineWidth: 1)
-  }
-}
-
 /// An argument's dropdown, as Raycast's: its placeholder until a choice is made, ↑↓ step
 /// through the choices, and Space, a letter or a click opens the list.
 private struct ArgumentDropdown: View {
@@ -1355,18 +1387,15 @@ private struct ArgumentDropdown: View {
           .lineLimit(1)
           // A long choice is cut short rather than pushing the fields out of the panel.
           .frame(maxWidth: 160, alignment: .leading)
-        Spacer(minLength: 2)
         Glyph(isOpen ? "chevron.up" : "chevron.down", pointSize: 10)
           .foregroundStyle(.secondary)
       }
-      .font(.system(size: 13))
-      .padding(.horizontal, 8)
-      .frame(height: 26)
+      .font(.system(size: Metrics.barFontSize))
+      .padding(.horizontal, Metrics.barControlPadding)
+      .frame(height: Metrics.barControlHeight)
       // As wide as its title, as Raycast's: "English" narrower than "Select Language".
       .fixedSize()
-      .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
-      .overlay(ArgumentOutline(isFocused: isFocused))
-      .contentShape(RoundedRectangle(cornerRadius: 6))
+      .barControl(isFocused: isFocused)
     }
     .buttonStyle(.plain)
     .overlay(alignment: .topTrailing) { OptionalBadge(argument: argument) }
@@ -1534,83 +1563,34 @@ private struct EmojiGrid: View {
   }
 }
 
-/// Search Emoji & Symbols' "All Categories" dropdown, where Raycast puts it.
-private struct CategoryFilter: View {
-  let groups: [String]
-  let selection: Int?
-  let onSelect: (Int?) -> Void
+/// A list's filter dropdown at the search bar's end, as Raycast's: Clipboard History's All Types,
+/// Search Snippets' All Tags and Search Emoji's All Categories. Hidden with nothing to choose.
+private struct FilterMenu<Item: Hashable>: View {
+  let icon: String
+  let allTitle: String
+  let items: [Item]
+  let selection: Item?
+  let title: (Item) -> String
+  let onSelect: (Item?) -> Void
 
   var body: some View {
-    Menu {
-      Button("All Categories") { onSelect(nil) }
-      Divider()
-      ForEach(groups.indices, id: \.self) { index in
-        Button(groups[index]) { onSelect(index) }
-      }
-    } label: {
-      Label {
-        Text(selection.map { groups[$0] } ?? "All Categories")
-      } icon: {
-        Glyph("square.grid.2x2.fill")
-      }
-    }
-    .menuStyle(.borderlessButton)
-    .fixedSize()
-    .font(.system(size: 13))
-    .foregroundStyle(.secondary)
-  }
-}
-
-/// Clipboard History's "All Types" dropdown, as Raycast's type filter.
-private struct ClipTypeFilter: View {
-  let selection: ClipType?
-  let onSelect: (ClipType?) -> Void
-
-  var body: some View {
-    Menu {
-      Button("All Types") { onSelect(nil) }
-      Divider()
-      ForEach(ClipType.allCases, id: \.self) { type in
-        Button(type.title) { onSelect(type) }
-      }
-    } label: {
-      Label {
-        Text(selection?.title ?? "All Types")
-      } icon: {
-        Glyph("line.3.horizontal.decrease")
-      }
-    }
-    .menuStyle(.borderlessButton)
-    .fixedSize()
-    .font(.system(size: 13))
-    .foregroundStyle(.secondary)
-  }
-}
-
-/// Search Snippets' "All Tags" dropdown, in the header's corner as Raycast puts it.
-private struct TagFilter: View {
-  let tags: [String]
-  let selection: String?
-  let onSelect: (String?) -> Void
-
-  var body: some View {
-    if !tags.isEmpty {
+    if !items.isEmpty {
       Menu {
-        Button("All Tags") { onSelect(nil) }
+        Button(allTitle) { onSelect(nil) }
         Divider()
-        ForEach(tags, id: \.self) { tag in
-          Button(tag) { onSelect(tag) }
+        ForEach(items, id: \.self) { item in
+          Button(title(item)) { onSelect(item) }
         }
       } label: {
         Label {
-          Text(selection ?? "All Tags")
+          Text(selection.map(title) ?? allTitle)
         } icon: {
-          Glyph("tag")
+          Glyph(icon)
         }
       }
       .menuStyle(.borderlessButton)
       .fixedSize()
-      .font(.system(size: 13))
+      .font(.system(size: Metrics.filterFontSize))
       .foregroundStyle(.secondary)
     }
   }
@@ -2202,7 +2182,7 @@ extension SearchResult.Kind {
 struct SearchField: NSViewRepresentable {
   let text: String
   let placeholder: String
-  var fontSize: CGFloat = 18
+  var fontSize: CGFloat = Metrics.queryFontSize
   /// ← and → move a grid's selection instead of the caret.
   var sidewaysArrows = false
   /// Tab and ⇧Tab go to `onCommand` as .nextField and .previousField, not to other controls.

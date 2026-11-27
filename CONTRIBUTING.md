@@ -11,6 +11,9 @@ rebuilds instead of being granted again after each one (see the README's
 
 These settled after side-by-side comparisons with Raycast; new UI should follow them.
 
+- **Sizes**: take text sizes and control sizes from `Metrics` (`Sources/Ripcord/Metrics.swift`),
+  and draw a search-bar control with `.barControl(isFocused:)`, rather than writing numbers of a
+  view's own. Measure a new kind against Raycast first and add it there.
 - **Popovers and dropdowns**: give them `.presentationBackground(.regularMaterial)`. macOS 26's
   default Liquid Glass lets what's behind wash out the text, and `.thickMaterial` reads as opaque.
 - **Scroll bars**: put `.thinScroller()` on every `ScrollView` and `List`. It draws a thin thumb
