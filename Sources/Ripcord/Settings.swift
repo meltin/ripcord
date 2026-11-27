@@ -22,6 +22,11 @@ final class SettingsModel {
   var apps: [AppEntry] = []
   /// Its daily check is a General setting; nil leaves the row out.
   var updater: Updater?
+  /// What's typed in the sidebar's "Search settings...".
+  var sidebarQuery = ""
+  /// Bumped as the window opens, so the search field takes the keys every time, not only the
+  /// first, when it's first put in the window.
+  var sidebarFocusRequest = 0
   /// The one row recording a hotkey; starting another row stops it.
   private(set) var recordingTarget: HotkeyTarget?
   private(set) var recorderMessage: (target: HotkeyTarget, text: String)?
@@ -279,6 +284,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
           x: (area.midX - size.width / 2).rounded(), y: (area.midY - size.height / 2).rounded()))
     }
     isSettingsOpen = true
+    model.sidebarFocusRequest += 1
     NSApp.setActivationPolicy(.regular)
     if escMonitor == nil {
       escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -295,6 +301,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
           model.editingAlias == nil,
           (window.firstResponder as? NSTextView)?.hasMarkedText() != true
         else { return event }
+        // A search typed in the sidebar is cleared first, as in Raycast.
+        if !model.sidebarQuery.isEmpty {
+          model.sidebarQuery = ""
+          return nil
+        }
         window.performClose(nil)
         return nil
       }
@@ -369,6 +380,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
       welcomeWindow = nil
     } else {
       isSettingsOpen = false
+      // Opened again, it lists the pages rather than an old search.
+      model.sidebarQuery = ""
       if let escMonitor { NSEvent.removeMonitor(escMonitor) }
       escMonitor = nil
     }
@@ -519,6 +532,60 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   }
 }
 
+/// Each setting's row text, which the sidebar's search looks through too.
+private enum SettingText {
+  static let colorFormat = SettingsSearch.Item(
+    title: "Format", detail: "What Pick Color copies, and Color History copies with Return.")
+  static let scriptFolders = SettingsSearch.Item(
+    title: "Folders",
+    detail: "Scripts with @raycast metadata in these folders, not their subfolders.")
+  static let launchAtLogin = SettingsSearch.Item(
+    title: "Launch at Login", detail: "Start Ripcord when you log in, so the hotkey always works.")
+  static let checkForUpdates = SettingsSearch.Item(
+    title: "Check for Updates Automatically",
+    detail: "Looks for a new version once a day, and offers to install it.")
+  static let hotkey = SettingsSearch.Item(
+    title: "Ripcord Hotkey",
+    detail: "Shows the panel from any app. Click, then press the new keys; Esc cancels.")
+  static let inputSource = SettingsSearch.Item(
+    title: "Auto-switch Input Source",
+    detail: "Switches to this input source while the panel is open, and back when it closes.")
+  static let configFile = SettingsSearch.Item(
+    title: "Config File",
+    detail: "Every change here is saved to this file, and edits to the file show up here.")
+  static let repositoryFolders = SettingsSearch.Item(
+    title: "Folders", detail: "Where to look for repositories, and how many folders down.")
+  static let openWith = SettingsSearch.Item(
+    title: "Open With",
+    detail: "The app each Return opens a repository in; ↵ without one shows it in Finder.")
+}
+
+extension SettingsPage {
+  /// What the sidebar's search finds the page by. Check for Updates Automatically is left out
+  /// where its row is, in a copy Nix updates.
+  func searchPage(updates: Bool) -> SettingsSearch.Page {
+    let settings: [SettingsSearch.Item] =
+      switch self {
+      case .general:
+        [SettingText.launchAtLogin] + (updates ? [SettingText.checkForUpdates] : [])
+          + [SettingText.hotkey, SettingText.inputSource, SettingText.configFile]
+      case .colorPicker: [SettingText.colorFormat]
+      case .scripts: [SettingText.scriptFolders]
+      case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
+      // Its rows are the permissions, read from where they're drawn.
+      case .permissions: Permission.allCases.map { .init(title: $0.title, detail: $0.purpose) }
+      default: []
+      }
+    let keys = commandKeys ?? []
+    // The commands its Commands card lists.
+    let commands = Search.catalog(apps: [], quicklinks: []).flatMap(\.entries).filter {
+      if case .item(let key) = $0.target { keys.contains(key) } else { false }
+    }
+    return SettingsSearch.Page(
+      name: rawValue, settings: settings, commands: commands.map { .init(title: $0.title) })
+  }
+}
+
 extension BuiltinCommand {
   /// The settings page that lists it; exhaustive, so a new command can't go missing there.
   fileprivate var settingsPage: SettingsPage {
@@ -547,7 +614,7 @@ struct SettingsView: View {
     // Laid out by hand rather than with NavigationSplitView, which shrank the sidebar to fit
     // and cut its labels short.
     HStack(spacing: 0) {
-      Sidebar(page: $page)
+      Sidebar(page: $page, model: model)
         .frame(width: 220)
       Divider()
       Group {
@@ -569,8 +636,7 @@ struct SettingsView: View {
             PageHeader(page: .colorPicker)
             Card {
               SettingRow(
-                title: "Format",
-                description: "What Pick Color copies, and Color History copies with Return."
+                title: SettingText.colorFormat.title, description: SettingText.colorFormat.detail
               ) {
                 Picker("Format", selection: $model.config.colorFormat) {
                   ForEach(ColorFormat.allCases, id: \.self) { Text($0.title).tag($0) }
@@ -592,9 +658,8 @@ struct SettingsView: View {
             PageHeader(page: .scripts)
             Card {
               SettingRow(
-                title: "Folders",
-                description:
-                  "Scripts with @raycast metadata in these folders, not their subfolders."
+                title: SettingText.scriptFolders.title,
+                description: SettingText.scriptFolders.detail
               ) { EmptyView() }
               FolderList(folders: $model.config.scriptFolders)
             }
@@ -614,6 +679,8 @@ struct SettingsView: View {
     .onChange(of: model.config) { model.saveIfChanged() }
     .onChange(of: model.requestedKey, initial: true) {
       guard let key = model.requestedKey else { return }
+      // The page turned to shows in the sidebar's list, not under a search left in it.
+      model.sidebarQuery = ""
       // A key no page lists as a command is an app's.
       page =
         SettingsPage.allCases.first { $0.commandKeys?.contains(key) == true } ?? .applications
@@ -628,28 +695,66 @@ struct SettingsView: View {
 }
 
 /// The pages, on the translucent sidebar material: General, then a gap, then the extensions.
-/// ↑ and ↓ step through the pages, as in Raycast's settings.
+/// ↑ and ↓ step through the pages, as in Raycast's settings. "Search settings..." stays at the
+/// top; typing lists the pages found, with their settings and commands that match, and ↑ ↓
+/// and Return pick one, as Raycast's does.
 private struct Sidebar: View {
   @Binding var page: SettingsPage
+  @Bindable var model: SettingsModel
+  /// The highlighted result, by its place among `rows`.
+  @State private var selection = 0
+
+  /// A result row: its page, and the setting or command it names, if it isn't the page's own.
+  private struct Row: Hashable {
+    let page: SettingsPage
+    let title: String?
+  }
+
+  private var results: [(page: SettingsPage, found: SettingsSearch.Page)]? {
+    let updates = model.updater?.isAvailable == true
+    return SettingsSearch.results(
+      model.sidebarQuery, in: SettingsPage.allCases.map { $0.searchPage(updates: updates) }
+    )?
+    .compactMap { found in SettingsPage(rawValue: found.name).map { ($0, found) } }
+  }
+
+  private var rows: [Row] {
+    (results ?? []).flatMap { result in
+      [Row(page: result.page, title: nil)]
+        + (result.found.settings + result.found.commands).map {
+          Row(page: result.page, title: $0.title)
+        }
+    }
+  }
 
   var body: some View {
-    ScrollViewReader { proxy in
-      ScrollView {
-        VStack(alignment: .leading, spacing: 2) {
-          row(.general)
-          row(.permissions)
-          Spacer().frame(height: 14)
-          ForEach(SettingsPage.allCases.filter { $0 != .general && $0 != .permissions }) {
-            row($0)
-          }
-        }
-        .padding(.horizontal, 10)
+    VStack(spacing: 0) {
+      searchField
         // Below the window's traffic lights.
-        .padding(.top, 52)
-        .padding(.bottom, 12)
+        .padding(.top, 40)
+        .padding(.horizontal, 10)
+        .padding(.bottom, 8)
+      ScrollViewReader { proxy in
+        ScrollView {
+          VStack(alignment: .leading, spacing: 2) {
+            if let results {
+              found(results)
+            } else {
+              row(.general)
+              row(.permissions)
+              Spacer().frame(height: 14)
+              ForEach(SettingsPage.allCases.filter { $0 != .general && $0 != .permissions }) {
+                row($0)
+              }
+            }
+          }
+          .padding(.horizontal, 10)
+          .padding(.bottom, 12)
+        }
+        // A short window cuts the list off; ↑ and ↓ keep the page they reach in view.
+        .onChange(of: page) { proxy.scrollTo(page) }
+        .onChange(of: selection) { proxy.scrollTo(selection) }
       }
-      // A short window cuts the list off; ↑ and ↓ keep the page they reach in view.
-      .onChange(of: page) { proxy.scrollTo(page) }
     }
     .scrollIndicators(.never)
     .background(SidebarMaterial())
@@ -661,7 +766,119 @@ private struct Sidebar: View {
     }
   }
 
+  private var searchField: some View {
+    HStack(spacing: 6) {
+      Glyph("magnifyingglass", pointSize: 13).foregroundStyle(.secondary)
+      SearchField(
+        text: model.sidebarQuery, placeholder: "Search settings...", fontSize: 13,
+        focusRequest: model.sidebarFocusRequest,
+        onChange: {
+          model.sidebarQuery = $0
+          selection = 0
+        },
+        onCommand: { command in
+          switch command {
+          case .up: step(-1)
+          case .down: step(1)
+          case .submit: open(selection)
+          default: break
+          }
+        })
+      if !model.sidebarQuery.isEmpty {
+        Button {
+          model.sidebarQuery = ""
+        } label: {
+          Glyph("xmark.circle.fill", pointSize: 13).foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+      }
+    }
+    .padding(.horizontal, 12)
+    .frame(height: 32)
+    // A bordered capsule, as Raycast's settings draw theirs.
+    .background(Capsule().fill(Color.primary.opacity(0.05)))
+    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.1)))
+  }
+
+  /// The pages found, each with "Settings" and "Commands" under it for what matched.
+  @ViewBuilder
+  private func found(_ results: [(page: SettingsPage, found: SettingsSearch.Page)]) -> some View {
+    if results.isEmpty {
+      Text("No Results").font(.system(size: 13)).foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity).padding(.top, 12)
+    }
+    let rows = rows
+    ForEach(results, id: \.page) { result in
+      resultRow(rows, Row(page: result.page, title: nil))
+      section("Settings", result.found.settings, of: result.page, rows: rows)
+      section("Commands", result.found.commands, of: result.page, rows: rows)
+    }
+    .padding(.bottom, 4)
+  }
+
+  @ViewBuilder
+  private func section(
+    _ heading: String, _ items: [SettingsSearch.Item], of page: SettingsPage, rows: [Row]
+  ) -> some View {
+    if !items.isEmpty {
+      Text(heading)
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 18)
+        .padding(.top, 2)
+      ForEach(items, id: \.title) { resultRow(rows, Row(page: page, title: $0.title)) }
+    }
+  }
+
+  private func resultRow(_ rows: [Row], _ row: Row) -> some View {
+    let index = rows.firstIndex(of: row) ?? 0
+    return Button {
+      open(index)
+    } label: {
+      HStack(spacing: 10) {
+        PageIcon(page: row.page, size: row.title == nil ? 22 : 18)
+        Text(highlighted(row.title ?? row.page.rawValue))
+          .font(.system(size: 13)).lineLimit(1)
+        Spacer(minLength: 0)
+      }
+      .padding(.leading, row.title == nil ? 8 : 18)
+      .padding(.trailing, 8)
+      .frame(height: row.title == nil ? 32 : 28)
+      .background(
+        RoundedRectangle(cornerRadius: 8)
+          .fill(index == selection ? Color.primary.opacity(0.09) : .clear)
+      )
+      .contentShape(RoundedRectangle(cornerRadius: 8))
+    }
+    .buttonStyle(.plain)
+    .id(index)
+  }
+
+  /// The query's first run in the title marked, as Raycast marks it.
+  private func highlighted(_ title: String) -> AttributedString {
+    var text = AttributedString(title)
+    let query = model.sidebarQuery.trimmingCharacters(in: .whitespaces)
+    if !query.isEmpty,
+      let range = text.range(of: query, options: [.caseInsensitive, .diacriticInsensitive])
+    {
+      text[range].backgroundColor = Color.accentColor.opacity(0.3)
+    }
+    return text
+  }
+
+  private func open(_ index: Int) {
+    let rows = rows
+    guard rows.indices.contains(index) else { return }
+    selection = index
+    page = rows[index].page
+  }
+
+  /// Through the results while searching, through the pages otherwise.
   private func step(_ offset: Int) {
+    if results != nil {
+      selection = min(max(selection + offset, 0), max(rows.count - 1, 0))
+      return
+    }
     let pages = SettingsPage.allCases
     guard let index = pages.firstIndex(of: page) else { return }
     page = pages[min(max(index + offset, 0), pages.count - 1)]
@@ -786,8 +1003,7 @@ private struct GeneralPage: View {
   var body: some View {
     Card {
       SettingRow(
-        title: "Launch at Login",
-        description: "Start Ripcord when you log in, so the hotkey always works."
+        title: SettingText.launchAtLogin.title, description: SettingText.launchAtLogin.detail
       ) {
         Toggle("Launch at Login", isOn: $model.config.launchAtLogin)
           .toggleStyle(.switch)
@@ -797,8 +1013,7 @@ private struct GeneralPage: View {
       if let updater = model.updater, updater.isAvailable {
         Divider()
         SettingRow(
-          title: "Check for Updates Automatically",
-          description: "Looks for a new version once a day, and offers to install it."
+          title: SettingText.checkForUpdates.title, description: SettingText.checkForUpdates.detail
         ) {
           Toggle("Check for Updates Automatically", isOn: Bindable(updater).checksAutomatically)
             .toggleStyle(.switch)
@@ -807,16 +1022,13 @@ private struct GeneralPage: View {
       }
       Divider()
       SettingRow(
-        title: "Ripcord Hotkey",
-        description: "Shows the panel from any app. Click, then press the new keys; Esc cancels."
+        title: SettingText.hotkey.title, description: SettingText.hotkey.detail
       ) {
         HotkeyRecorder(target: .launcher, model: model, clearable: false)
       }
       Divider()
       SettingRow(
-        title: "Auto-switch Input Source",
-        description:
-          "Switches to this input source while the panel is open, and back when it closes."
+        title: SettingText.inputSource.title, description: SettingText.inputSource.detail
       ) {
         Picker("Auto-switch Input Source", selection: $model.config.inputSource) {
           Text("Off").tag(String?.none)
@@ -830,8 +1042,7 @@ private struct GeneralPage: View {
     }
     Card {
       SettingRow(
-        title: "Config File",
-        description: "Every change here is saved to this file, and edits to the file show up here.",
+        title: SettingText.configFile.title, description: SettingText.configFile.detail,
         detail: (model.configURL.path as NSString).abbreviatingWithTildeInPath
       ) {
         HStack(spacing: 8) {
@@ -1233,7 +1444,8 @@ private struct RepositoriesSettings: View {
   var body: some View {
     Card {
       SettingRow(
-        title: "Folders", description: "Where to look for repositories, and how many folders down."
+        title: SettingText.repositoryFolders.title,
+        description: SettingText.repositoryFolders.detail
       ) {
         Stepper(
           "Depth \(settings.depth)", value: $model.config.repositories.depth, in: 1...6)
@@ -1242,8 +1454,7 @@ private struct RepositoriesSettings: View {
     }
     Card {
       SettingRow(
-        title: "Open With",
-        description: "The app each Return opens a repository in; ↵ without one shows it in Finder."
+        title: SettingText.openWith.title, description: SettingText.openWith.detail
       ) { EmptyView() }
       ForEach(RepositorySettings.OpenKey.allCases, id: \.self) { key in
         Divider()

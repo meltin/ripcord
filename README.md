@@ -17,7 +17,8 @@
 - ⌘K lists the selected row's actions (Open Command ↵, Show in Finder ⌘↵, Copy Path or URL ⇧⌘C,
   Add to Favorites ⇧⌘F)
 - Settings (⌘,): Launch at Login, the hotkey, the input source to type in and Quicklinks, kept
-  in sync with the config file
+  in sync with the config file. "Search settings..." at the top of the sidebar finds a page by
+  its name or by a setting or command on it, as in Raycast
 - Settings has a page per extension (Applications, Quicklinks, Clipboard History, Snippets, System
   Actions, Window Management): give any app, Quicklink or command an alias, a hotkey that runs it
   from anywhere, or turn it off so it never shows up in search
