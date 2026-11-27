@@ -11,6 +11,9 @@ public struct MarkdownSpan: Equatable, Sendable {
     /// A list item's line; its mark (`- `, `1. `, with any indent before it) says which.
     case bullet, ordered
     case task(checked: Bool)
+    /// A list item's next line, written under its text (Shift-Return): its leading spaces are
+    /// its mark, and `level` is its item's.
+    case continuation(level: Int)
     /// A closed ``` block, as a whole: its text between the fences, the fences its marks. Each
     /// of its lines is also a `codeBlock`.
     case fenced
@@ -47,14 +50,31 @@ public struct MarkdownSpan: Equatable, Sendable {
     }
     var spans: [MarkdownSpan] = []
     var inFence = false
+    // The list item the lines below may continue: where its text starts, and its level.
+    var item: (column: Int, level: Int)?
     for (index, line) in lines.enumerated() {
       let isFence = fences.contains(index)
       if isFence || inFence {
         spans.append(MarkdownSpan(line.range, .codeBlock))
         if isFence { inFence.toggle() }
+        item = nil
         continue
       }
-      spans += lineSpans(line.text, at: line.range.location)
+      let found = lineSpans(line.text, at: line.range.location)
+      if let mark = found.first(where: { isItem($0.style) })?.marks.first {
+        let lead = line.text.prefix { $0 == " " || $0 == "\t" }
+        item = (mark.length, lead.reduce(0) { $0 + ($1 == "\t" ? 2 : 1) } / 2)
+      } else if let current = item,
+        line.text.prefix(current.column).allSatisfy({ $0 == " " }),
+        (line.text as NSString).length >= current.column
+      {
+        let mark = NSRange(location: line.range.location, length: current.column)
+        spans.append(MarkdownSpan(line.range, .continuation(level: current.level), marks: [mark]))
+        spans.append(MarkdownSpan(mark, .hidden))
+      } else {
+        item = nil
+      }
+      spans += found
     }
     // A closed block's fences are hidden, each with its line break, so no empty line is left;
     // one still open shows its fence, so a lone ``` doesn't turn what follows into hidden code.
@@ -73,6 +93,13 @@ public struct MarkdownSpan: Equatable, Sendable {
       spans.append(MarkdownSpan(closing, .hidden))
     }
     return spans
+  }
+
+  static func isItem(_ style: Style) -> Bool {
+    switch style {
+    case .bullet, .ordered, .task: true
+    default: false
+    }
   }
 
   private static func lineSpans(_ line: String, at start: Int) -> [MarkdownSpan] {

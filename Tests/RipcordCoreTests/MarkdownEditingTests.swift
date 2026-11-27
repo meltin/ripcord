@@ -410,3 +410,48 @@ import Testing
     #expect(MarkdownEditing.shown("```\r\ncode\r\n```\r\n").count == 4)
   }
 }
+
+@Suite struct MarkdownSoftBreakTests {
+  func apply(_ text: String, _ edit: (range: NSRange, replacement: String, caret: Int)?) -> String?
+  {
+    edit.map { (text as NSString).replacingCharacters(in: $0.range, with: $0.replacement) }
+  }
+
+  @Test func readsAnItemsNextLineAsPartOfIt() {
+    let spans = MarkdownSpan.spans(in: "- milk\n  oat\nplain")
+    #expect(
+      spans.contains {
+        $0.style == .continuation(level: 0) && $0.marks == [NSRange(location: 7, length: 2)]
+      })
+    // A line not indented to the item's text is a paragraph of its own.
+    #expect(!MarkdownSpan.spans(in: "- milk\n oat").contains { MarkdownEditing.isContinuation($0) })
+  }
+
+  @Test func breaksALineInsideAnItemWithShiftReturn() {
+    let text = "- [ ] call"
+    #expect(
+      apply(text, MarkdownEditing.softBreak(at: 10, in: text, spans: MarkdownSpan.spans(in: text)))
+        == "- [ ] call\n      ")
+    let nested = "  1. a"
+    #expect(
+      apply(
+        nested, MarkdownEditing.softBreak(at: 6, in: nested, spans: MarkdownSpan.spans(in: nested)))
+        == "  1. a\n     ")
+    #expect(
+      MarkdownEditing.softBreak(at: 5, in: "plain", spans: MarkdownSpan.spans(in: "plain")) == nil)
+  }
+
+  @Test func startsTheNextItemOnReturnFromANextLine() {
+    let text = "1. a\n   more"
+    #expect(
+      apply(text, MarkdownEditing.newline(at: 12, in: text, spans: MarkdownSpan.spans(in: text)))
+        == "1. a\n   more\n2. ")
+  }
+
+  @Test func joinsANextLineBackOnBackspace() {
+    let text = "- a\n  b"
+    #expect(
+      MarkdownEditing.deleteBackward(at: 6, in: text, spans: MarkdownSpan.spans(in: text))
+        == .remove(NSRange(location: 3, length: 3)))
+  }
+}

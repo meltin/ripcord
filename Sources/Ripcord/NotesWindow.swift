@@ -1085,6 +1085,15 @@ private struct MarkdownEditor: NSViewRepresentable {
           edit.range, with: edit.replacement, selecting: NSRange(location: edit.caret, length: 0))
         return true
       case #selector(NSResponder.insertNewline(_:)):
+        // Shift-Return in a list item breaks the line inside the item, as most editors do.
+        if selection.length == 0,
+          let edit = MarkdownEditing.softBreak(at: selection.location, in: text, spans: spans)
+        {
+          textView.replace(
+            edit.range, with: edit.replacement,
+            selecting: NSRange(location: edit.caret, length: 0))
+          return true
+        }
         // Return ends a heading; Shift-Return starts another of the same level, as in Raycast.
         guard
           let prefix = spans.first(where: {
@@ -1247,6 +1256,12 @@ private struct MarkdownEditor: NSViewRepresentable {
       ]
     case .quote:
       return [.paragraphStyle: paragraph(indent: quoteIndent, minimumHeight: lineHeight)]
+    // Under its item's text, with no mark of its own.
+    case .continuation(let level):
+      return [
+        .paragraphStyle: paragraph(
+          indent: listIndent * CGFloat(level + 1), minimumHeight: lineHeight)
+      ]
     case .bold:
       return [.font: NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)]
     case .italic:

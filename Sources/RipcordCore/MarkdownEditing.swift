@@ -4,6 +4,10 @@ import Foundation
 /// weren't in the text, as in Raycast Notes: the caret never rests inside one, and a delete takes
 /// visible text, or a whole heading or style once nothing of it is left.
 public enum MarkdownEditing {
+  static func isContinuation(_ span: MarkdownSpan) -> Bool {
+    if case .continuation = span.style { true } else { false }
+  }
+
   static func isHeading(_ span: MarkdownSpan) -> Bool {
     if case .heading = span.style { true } else { false }
   }
@@ -11,7 +15,7 @@ public enum MarkdownEditing {
   /// A heading, list item, task or quote: a style of the whole line, marked at its start.
   static func isLine(_ span: MarkdownSpan) -> Bool {
     switch span.style {
-    case .heading, .bullet, .ordered, .task, .quote: true
+    case .heading, .bullet, .ordered, .task, .quote, .continuation: true
     default: false
     }
   }
@@ -44,22 +48,21 @@ public enum MarkdownEditing {
       }),
       let prefix = span.marks.first, caret >= NSMaxRange(prefix)
     else { return nil }
+    // Return on an item's next line starts the next item, as on the item itself.
+    if case .continuation = span.style {
+      guard
+        let owner = spans.last(where: {
+          MarkdownSpan.isItem($0.style) && $0.range.location < span.range.location
+        }), let ownerMark = owner.marks.first
+      else { return nil }
+      let insert = "\n" + nextMark(after: string.substring(with: ownerMark), style: owner.style)
+      return (NSRange(location: caret, length: 0), insert, caret + (insert as NSString).length)
+    }
     let mark = string.substring(with: prefix)
     if NSMaxRange(span.range) == NSMaxRange(prefix) {
       return (prefix, "", prefix.location)
     }
-    let next: String
-    switch span.style {
-    case .ordered:
-      let indent = String(mark.prefix { $0 == " " || $0 == "\t" })
-      let number = Int(mark.drop { $0 == " " || $0 == "\t" }.prefix { $0.isNumber }) ?? 0
-      next = "\(indent)\(number + 1). "
-    case .task:
-      next = mark.replacingOccurrences(of: "[x]", with: "[ ]")
-        .replacingOccurrences(of: "[X]", with: "[ ]")
-    case .bullet, .quote: next = mark
-    default: return nil
-    }
+    let next = nextMark(after: mark, style: span.style)
     let insert = "\n" + next
     return (NSRange(location: caret, length: 0), insert, caret + (insert as NSString).length)
   }
@@ -145,6 +148,35 @@ public enum MarkdownEditing {
     }
     let box = NSRange(location: caret - 3, length: 2)
     return (box, "[ ]", caret + 1)
+  }
+
+  /// The mark the item after one marked `mark` starts with: a number one up, a task unchecked.
+  static func nextMark(after mark: String, style: MarkdownSpan.Style) -> String {
+    switch style {
+    case .ordered:
+      let indent = String(mark.prefix { $0 == " " || $0 == "\t" })
+      let number = Int(mark.drop { $0 == " " || $0 == "\t" }.prefix { $0.isNumber }) ?? 0
+      return "\(indent)\(number + 1). "
+    case .task:
+      return mark.replacingOccurrences(of: "[x]", with: "[ ]")
+        .replacingOccurrences(of: "[X]", with: "[ ]")
+    default: return mark
+    }
+  }
+
+  /// Shift-Return in a list item: a line break inside the item, its next line written under
+  /// the item's text, as in most editors. Nil outside a list.
+  public static func softBreak(at caret: Int, in text: String, spans: [MarkdownSpan])
+    -> (range: NSRange, replacement: String, caret: Int)?
+  {
+    guard
+      let span = spans.first(where: {
+        (MarkdownSpan.isItem($0.style) || isContinuation($0))
+          && $0.range.location <= caret && caret <= NSMaxRange($0.range)
+      }), let mark = span.marks.first
+    else { return nil }
+    let insert = "\n" + String(repeating: " ", count: mark.length)
+    return (NSRange(location: caret, length: 0), insert, caret + (insert as NSString).length)
   }
 
   /// ↓ on a code block's last line when the block ends the note: a line goes in after its
@@ -310,6 +342,11 @@ public enum MarkdownEditing {
     // does an empty heading, while a written one stays, as in Raycast.
     for span in spans where isLine(span) {
       guard let prefix = span.marks.first, NSMaxRange(prefix) == caret else { continue }
+      // An item's next line joins the line above, as a soft line break is taken back.
+      if case .continuation = span.style {
+        return prefix.location > 0
+          ? .remove(NSRange(location: prefix.location - 1, length: prefix.length + 1)) : .nothing
+      }
       if case .heading = span.style, NSMaxRange(span.range) != caret { return .nothing }
       return .remove(prefix)
     }
