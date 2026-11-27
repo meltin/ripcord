@@ -1882,6 +1882,13 @@ final class LauncherController: NSObject, NSWindowDelegate {
       }
       return open(.emoji)
     }
+    if case .pasteText(let text) = action {
+      model.menu = nil
+      return paste(text, copyOnly: false)
+    }
+    if case .setQuery(let text) = action {
+      return update(text)
+    }
     if case .emoji(let shown, let base, let how) = action {
       model.menu = nil
       do { try emojiHistory.use(base) } catch { onError(error.localizedDescription) }
@@ -2123,8 +2130,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .cleanShot:
       break  // Run with its field, above.
     case .run(.settings), .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey,
-      .deleteAlias, .disableCommand:
-      break  // Opened or saved before hide(), above.
+      .deleteAlias, .disableCommand, .pasteText, .setQuery:
+      break  // Opened, saved or pasted before hide(), above.
     case .openWith(let url, let app):
       NSWorkspace.shared.open([url], withApplicationAt: app, configuration: .init()) { _, error in
         if error != nil { DispatchQueue.main.async { NSSound.beep() } }

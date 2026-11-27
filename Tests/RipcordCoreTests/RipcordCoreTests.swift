@@ -154,9 +154,20 @@ import Testing
     #expect(Search.results(for: "settings", apps: apps, quicklinks: []).first?.title == "システム設定")
   }
 
-  @Test func calculatorComesFirst() {
+  @Test func calculatorComesFirst() throws {
     let results = Search.results(for: "2+2", apps: apps, quicklinks: links)
     #expect(results.first?.action == .copy("4"))
+    // Raycast's ⌘K, without its calculation history.
+    let answer = try #require(results.first)
+    #expect(
+      answer.actions.map(\.title) == [
+        "Copy Answer", "Paste Answer", "Copy Question and Answer", "Put Answer in Search Bar",
+      ])
+    #expect(answer.actions.map(\.shortcut) == ["↵", "⌘↵", "⌥⇧⌘C", "⇧⌘↵"])
+    #expect(
+      answer.actions.map(\.action) == [
+        .copy("4"), .pasteText("4"), .copy("2+2 = 4"), .setQuery("4"),
+      ])
   }
 
   @Test func keywordExpandsQuicklink() {

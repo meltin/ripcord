@@ -483,6 +483,8 @@ private struct ResultIcon: View {
       tile("folder", .gray)
     case .showInfo:
       tile("info.circle", .gray)
+    case .pasteText, .setQuery:
+      tile("plus.forwardslash.minus", .orange)
     case .cleanShot:
       // CleanShot X's own icon, as Raycast shows its extension's commands.
       if let icon = Self.cleanShotIcon {
