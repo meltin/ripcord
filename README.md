@@ -21,8 +21,9 @@
   of the empty search, across relaunches; Return opens it again and ⌃X discards it
 - Favorites: ⇧⌘F on an app, command or Quicklink pins it to the top of the empty search, in
   your order (⌥⌘↑ and ⌥⌘↓ move it), as Raycast's Favorites do
-- ⌘K lists the selected row's actions (Open Command ↵, Show in Finder ⌘↵, Copy Path or URL ⇧⌘C,
-  Add to Favorites ⇧⌘F)
+- ⌘K lists the selected row's actions, with Raycast's names and keys. An app's: Open Application
+  ↵, Show in Finder ⌘↵, Show Info in Finder ⌘I, Show Package Contents ⌥⌘I, Add to Favorites ⇧⌘F,
+  Copy Path ⌥⌘C, Copy Name ⌃⌘C and Copy Bundle Identifier ⇧⌘C
 - Backdrop: an optional Metal shader animated behind the panel's text, built in (Glow, Matrix) or
   your own; off by default
 - Settings (⌘,): Launch at Login, the hotkey, the input source to type in and Quicklinks, kept

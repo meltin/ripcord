@@ -2114,6 +2114,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
         Bundle.main.bundleIdentifier ?? "", forType: .init("org.nspasteboard.source"))
     case .reveal(let url):
       NSWorkspace.shared.activateFileViewerSelecting([url])
+    case .showInfo(let url):
+      // Finder's own Show Info service: no Apple Events, so no Automation prompt.
+      let board = NSPasteboard(name: .init("io.github.meltin.ripcord.show-info"))
+      board.clearContents()
+      board.writeObjects([url as NSURL])
+      if !NSPerformService("Finder/Show Info", board) { NSSound.beep() }
     case .cleanShot:
       break  // Run with its field, above.
     case .run(.settings), .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey,

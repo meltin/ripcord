@@ -234,6 +234,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case open(URL)
     case copy(String)
     case reveal(URL)
+    /// Finder's Get Info window for the file, as its Show Info service opens it.
+    case showInfo(URL)
     case run(BuiltinCommand)
     case clip(UUID, ClipAction)
     /// The snippet at this index in the config.
@@ -337,7 +339,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
       switch self {
       case .calculator: "Copy Answer"
       case .text, .image, .file, .snippet: "Paste to App"
-      case .application, .quicklink, .command: "Open Command"
+      case .application: "Open Application"
+      case .quicklink, .command: "Open Command"
       case .repository: "Open"
       case .statusCode: "Open in Browser"
       case .color: "Copy"
@@ -357,6 +360,31 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     let primary = MenuAction(
       title: kind.primaryAction, symbol: "return", shortcut: "↵", action: action)
     switch action {
+    case .open(let url) where kind == .application:
+      // Raycast's, in its order and with its keys; Add to Favorites goes before Copy Path.
+      let bundleID = Bundle(url: url)?.bundleIdentifier
+      return [
+        primary,
+        MenuAction(
+          title: "Show in Finder", symbol: "folder", shortcut: "⌘↵", action: .reveal(url)),
+        MenuAction(
+          title: "Show Info in Finder", symbol: "info.circle", shortcut: "⌘I",
+          action: .showInfo(url)),
+        MenuAction(
+          title: "Show Package Contents", symbol: "folder", shortcut: "⌥⌘I",
+          action: .open(url.appending(path: "Contents"))),
+        MenuAction(
+          title: "Copy Path", symbol: "doc.on.doc", shortcut: "⌥⌘C", action: .copy(url.path),
+          startsSection: true),
+        MenuAction(title: "Copy Name", symbol: "doc.on.doc", shortcut: "⌃⌘C", action: .copy(title)),
+      ]
+        + [
+          bundleID.map {
+            MenuAction(
+              title: "Copy Bundle Identifier", symbol: "doc.on.doc", shortcut: "⇧⌘C",
+              action: .copy($0))
+          }
+        ].compactMap { $0 } + [settingsKey.map(MenuAction.configure)].compactMap { $0 }
     case .open(let url) where url.isFileURL:
       return [
         primary,
@@ -597,15 +625,17 @@ public enum Search {
             action: .toggleFavorite(key), startsSection: true)
         ]
       }
-    // Above Configure Command…, which Raycast keeps last.
+    // Before the row's second section, as an app's Copy Path, or else above Configure Command…,
+    // which Raycast keeps last.
     let actions = result.actions
     let configure = actions.last.flatMap { last -> MenuAction? in
       if case .configureMenu = last.action { last } else { nil }
     }
+    let cut =
+      actions.indices.dropFirst().first { actions[$0].startsSection }
+      ?? actions.count - (configure == nil ? 0 : 1)
     var decorated = result
-    decorated.menu =
-      Array(actions.dropLast(configure == nil ? 0 : 1)) + favorite
-      + [configure].compactMap { $0 }
+    decorated.menu = Array(actions[..<cut]) + favorite + Array(actions[cut...])
     return decorated
   }
 
