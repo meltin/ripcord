@@ -12,23 +12,28 @@ import Testing
   }
 
   @Test func readsHeadingsWithTheirLevel() {
-    #expect(styled("## Plan") == ["heading(2):## Plan", "mark:## "])
+    #expect(styled("## Plan") == ["heading(2):## Plan", "hidden:## "])
     #expect(styled("#hashtag").isEmpty)
   }
 
   @Test func readsEmphasisAndCodeButNotInsideCode() {
-    #expect(styled("a **bold** b") == ["bold:bold", "mark:**", "mark:**"])
-    #expect(styled("an *it* word") == ["italic:it", "mark:*", "mark:*"])
-    #expect(styled("`**x**`") == ["code:**x**", "mark:`", "mark:`"])
+    #expect(styled("a **bold** b") == ["bold:bold", "hidden:**", "hidden:**"])
+    #expect(styled("an *it* word") == ["italic:it", "hidden:*", "hidden:*"])
+    #expect(styled("`**x**`") == ["code:**x**", "hidden:`", "hidden:`"])
     #expect(styled("2 * 3 * 4").isEmpty)
     // Underscores inside a word aren't emphasis.
     #expect(styled("foo__bar__baz").isEmpty)
-    #expect(styled("__strong__") == ["bold:strong", "mark:__", "mark:__"])
+    #expect(styled("__strong__") == ["bold:strong", "hidden:__", "hidden:__"])
     // Code inside emphasis keeps both.
     #expect(
       styled("**run `make` first**") == [
-        "code:make", "mark:`", "mark:`", "bold:run `make` first", "mark:**", "mark:**",
+        "code:make", "hidden:`", "hidden:`", "bold:run `make` first", "hidden:**", "hidden:**",
       ])
+  }
+
+  @Test func readsStrikethrough() {
+    #expect(styled("~~gone~~ here") == ["strike:gone", "hidden:~~", "hidden:~~"])
+    #expect(styled("~~ not ~~").isEmpty)
   }
 
   @Test func readsListsTasksQuotesAndLinks() {
@@ -37,7 +42,9 @@ import Testing
     #expect(styled("- [ ] todo") == ["mark:- [ ] "])
     #expect(styled("> said") == ["quote:> said", "mark:> "])
     #expect(
-      styled("[Swift](https://swift.org)") == ["link:Swift", "mark:[", "mark:](https://swift.org)"])
+      styled("[Swift](https://swift.org)") == [
+        "link:Swift", "hidden:[", "hidden:](https://swift.org)",
+      ])
   }
 
   @Test func keepsCodeBlocksPlain() {
@@ -45,12 +52,12 @@ import Testing
     #expect(
       styled(text) == [
         "codeBlock:```", "codeBlock:# not a heading", "codeBlock:```", "heading(1):# Heading",
-        "mark:# ",
+        "hidden:# ",
       ])
   }
 
   @Test func countsInUTF16() {
     // An emoji is two UTF-16 units; the bold after it must still land on its word.
-    #expect(styled("😀 **ok**") == ["bold:ok", "mark:**", "mark:**"])
+    #expect(styled("😀 **ok**") == ["bold:ok", "hidden:**", "hidden:**"])
   }
 }

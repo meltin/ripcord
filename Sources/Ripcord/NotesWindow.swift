@@ -245,6 +245,9 @@ final class NotesPanel: NSPanel {
     if flags == .command, let selector = key.flatMap({ editing[$0] }) {
       return NSApp.sendAction(selector, to: nil, from: self)
     }
+    if let editor = firstResponder as? NoteTextView, editor.performFormatShortcut(event) {
+      return true
+    }
     if key == "z", flags == .command || flags == [.command, .shift] {
       return NSApp.sendAction(
         flags.contains(.shift) ? Selector(("redo:")) : Selector(("undo:")), to: nil, from: self)
@@ -308,8 +311,26 @@ private struct NotesView: View {
   }
 }
 
-/// The note's editor: an NSTextView that formats Markdown as you type, keeping its marks in the
-/// text, dimmed. Formatting waits while an input method is composing.
+extension NSAttributedString.Key {
+  /// A Markdown mark the editor hides, as Raycast Notes does once it's complete: drawn clear and
+  /// next to no width. Its value is the font it would have, which what's typed after it takes.
+  fileprivate static let hiddenMark = NSAttributedString.Key("RipcordHiddenMark")
+}
+
+extension [NSAttributedString.Key: Any] {
+  /// As typing attributes: a hidden mark's own look given back, so what's typed shows.
+  fileprivate var shown: Self {
+    guard let font = self[.hiddenMark] else { return self }
+    var shown = filter { $0.key != .hiddenMark && $0.key != .foregroundColor }
+    shown[.font] = font
+    return shown
+  }
+}
+
+/// The note's editor: an NSTextView that formats Markdown as you type. Its marks stay in the
+/// text, so the file is exactly what's typed; a heading's and emphasis's are hidden once complete,
+/// as in Raycast Notes, and a list's or quote's dimmed. Formatting waits while an input method is
+/// composing.
 private struct MarkdownEditor: NSViewRepresentable {
   @Binding var text: String
   /// Which note the text is: the same one changed elsewhere keeps the caret and scroll.
@@ -321,7 +342,7 @@ private struct MarkdownEditor: NSViewRepresentable {
   static let fontSize: CGFloat = 14
 
   func makeNSView(context: Context) -> NSScrollView {
-    let scrollView = NSTextView.scrollableTextView()
+    let scrollView = NSScrollView()
     scrollView.drawsBackground = false
     scrollView.hasVerticalScroller = true
     // A thin scroller shown while scrolling, as the rest of Ripcord draws them.
@@ -333,7 +354,18 @@ private struct MarkdownEditor: NSViewRepresentable {
     ) { [weak scrollView] _ in
       MainActor.assumeIsolated { scrollView?.scrollerStyle = .overlay }
     }
-    guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
+    // TextKit 1, whose layout manager places the empty headings' placeholders.
+    let textView = NoteTextView(usingTextLayoutManager: false)
+    textView.minSize = .zero
+    textView.maxSize = NSSize(
+      width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+    textView.isVerticallyResizable = true
+    textView.isHorizontallyResizable = false
+    textView.autoresizingMask = .width
+    textView.textContainer?.widthTracksTextView = true
+    textView.textContainer?.containerSize = NSSize(
+      width: 0, height: CGFloat.greatestFiniteMagnitude)
+    scrollView.documentView = textView
     textView.delegate = context.coordinator
     textView.drawsBackground = false
     textView.isRichText = false
@@ -404,10 +436,68 @@ private struct MarkdownEditor: NSViewRepresentable {
       parent.onChange()
       if !textView.hasMarkedText() { MarkdownEditor.format(textView) }
     }
+
+    /// The caret steps over hidden marks as if they weren't there.
+    func textView(
+      _ textView: NSTextView, willChangeSelectionFromCharacterRange old: NSRange,
+      toCharacterRange new: NSRange
+    ) -> NSRange {
+      guard new.length == 0, !isReplacing, !textView.hasMarkedText() else { return new }
+      let text = textView.string
+      let hidden = MarkdownEditing.hidden(in: MarkdownSpan.spans(in: text))
+      let location = MarkdownEditing.caret(
+        new.location, from: old.location + old.length, in: text, hidden: hidden)
+      return NSRange(location: location, length: 0)
+    }
+
+    /// What's typed next never takes a hidden mark's look, or it would be drawn as nothing.
+    func textView(
+      _ textView: NSTextView, shouldChangeTypingAttributes old: [String: Any],
+      toAttributes new: [NSAttributedString.Key: Any]
+    ) -> [NSAttributedString.Key: Any] {
+      new.shown
+    }
+
+    func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+      guard let textView = textView as? NoteTextView, !textView.hasMarkedText() else {
+        return false
+      }
+      let selection = textView.selectedRange()
+      let text = textView.string
+      switch selector {
+      case #selector(NSResponder.deleteBackward(_:)) where selection.length == 0:
+        return textView.apply(
+          MarkdownEditing.deleteBackward(
+            at: selection.location, in: text, spans: MarkdownSpan.spans(in: text)))
+      case #selector(NSResponder.deleteForward(_:)) where selection.length == 0:
+        return textView.apply(
+          MarkdownEditing.deleteForward(
+            at: selection.location, in: text, spans: MarkdownSpan.spans(in: text)))
+      case #selector(NSResponder.insertNewline(_:)):
+        // Return ends a heading; Shift-Return starts another of the same level, as in Raycast.
+        guard NSApp.currentEvent?.modifierFlags.contains(.shift) == true,
+          let prefix = MarkdownSpan.spans(in: text).first(where: {
+            if case .heading = $0.style {
+              return NSLocationInRange(selection.location, $0.range)
+                || NSMaxRange($0.range) == selection.location
+            }
+            return false
+          })?.marks.first
+        else { return false }
+        textView.insertText(
+          "\n" + (text as NSString).substring(with: prefix), replacementRange: selection)
+        return true
+      default: return false
+      }
+    }
   }
 
-  private static var base: [NSAttributedString.Key: Any] {
+  fileprivate static var base: [NSAttributedString.Key: Any] {
     [.font: NSFont.systemFont(ofSize: fontSize), .foregroundColor: NSColor.labelColor]
+  }
+
+  fileprivate static func headingFont(_ level: Int) -> NSFont {
+    .systemFont(ofSize: [24, 20, 17][min(level, 3) - 1], weight: .bold)
   }
 
   /// Sets every character's look from the Markdown; the text itself is left as it is.
@@ -422,7 +512,15 @@ private struct MarkdownEditor: NSViewRepresentable {
         attributes(for: span.style, at: span.range, in: storage), range: span.range)
     }
     storage.endEditing()
-    textView.typingAttributes = base
+    textView.needsDisplay = true
+    // What's typed next looks like the text before the caret: a heading's size even while an
+    // input method composes, and plain after a closing `**`.
+    let caret = textView.selectedRange().location
+    textView.typingAttributes =
+      caret > 0 && caret <= storage.length
+      ? storage.attributes(at: caret - 1, effectiveRange: nil).shown.filter {
+        $0.key != .strikethroughStyle
+      } : base
   }
 
   private static func attributes(
@@ -433,15 +531,20 @@ private struct MarkdownEditor: NSViewRepresentable {
       ?? .systemFont(ofSize: fontSize)
     switch style {
     case .heading(let level):
-      let size: CGFloat = [22, 18, 16][min(level, 3) - 1]
-      return [.font: NSFont.systemFont(ofSize: size, weight: .bold)]
+      // As tall as the heading even when its marks are all there is.
+      let lineHeight = NSParagraphStyle.default.mutableCopy() as? NSMutableParagraphStyle
+      lineHeight?.minimumLineHeight = NSLayoutManager().defaultLineHeight(for: headingFont(level))
+      // Set off from the text below, as Raycast Notes' headings are.
+      lineHeight?.paragraphSpacing = 6
+      return [.font: headingFont(level), .paragraphStyle: lineHeight ?? .default]
     case .bold:
       return [.font: NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)]
     case .italic:
       return [.font: NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)]
+    case .strike: return [.strikethroughStyle: NSUnderlineStyle.single.rawValue]
     case .code, .codeBlock:
       return [
-        .font: NSFont.monospacedSystemFont(ofSize: fontSize - 1, weight: .regular),
+        .font: NSFont.monospacedSystemFont(ofSize: font.pointSize - 1, weight: .regular),
         .backgroundColor: NSColor.quaternaryLabelColor.withAlphaComponent(0.12),
       ]
     case .quote: return [.foregroundColor: NSColor.secondaryLabelColor]
@@ -452,6 +555,88 @@ private struct MarkdownEditor: NSViewRepresentable {
         .strikethroughStyle: NSUnderlineStyle.single.rawValue,
       ]
     case .mark: return [.foregroundColor: NSColor.tertiaryLabelColor]
+    case .hidden:
+      return [
+        .hiddenMark: font, .font: NSFont.systemFont(ofSize: 0.01),
+        .foregroundColor: NSColor.clear,
+      ]
+    }
+  }
+}
+
+/// The note's text view: Raycast Notes' placeholders, its format shortcuts, and deletes that
+/// treat hidden marks as one with their text.
+final class NoteTextView: NSTextView {
+  /// ⌘B bold, ⌘I italic, ⇧⌘X strikethrough and ⌘E code, on the selected words; true when the
+  /// keys were one of them.
+  func performFormatShortcut(_ event: NSEvent) -> Bool {
+    let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+    let key = event.charactersIgnoringModifiers?.lowercased()
+    let format: (MarkdownSpan.Style, String)? =
+      switch (flags, key) {
+      case (.command, "b"): (.bold, "**")
+      case (.command, "i"): (.italic, "*")
+      case (.command, "e"): (.code, "`")
+      case ([.command, .shift], "x"): (.strike, "~~")
+      default: nil
+      }
+    guard let format else { return false }
+    guard !hasMarkedText(),
+      let edit = MarkdownEditing.toggle(
+        format.0, mark: format.1, selection: selectedRange(), in: string,
+        spans: MarkdownSpan.spans(in: string))
+    else {
+      NSSound.beep()
+      return true
+    }
+    replace(edit.range, with: edit.replacement, selecting: edit.selection)
+    return true
+  }
+
+  /// Carries out what a delete key was found to do; true when the key is dealt with.
+  func apply(_ delete: MarkdownEditing.Delete) -> Bool {
+    switch delete {
+    case .normal: return false
+    case .nothing: return true
+    case .remove(let range):
+      replace(range, with: "", selecting: NSRange(location: range.location, length: 0))
+      return true
+    }
+  }
+
+  /// An edit made as typing is, so it's undone with ⌘Z and saved.
+  private func replace(_ range: NSRange, with replacement: String, selecting selection: NSRange) {
+    guard shouldChangeText(in: range, replacementString: replacement) else { return }
+    textStorage?.replaceCharacters(in: range, with: replacement)
+    didChangeText()
+    setSelectedRange(selection)
+  }
+
+  /// "Start writing..." in an empty note, and "Heading 1" on a heading with nothing in it yet.
+  override func draw(_ dirtyRect: NSRect) {
+    super.draw(dirtyRect)
+    let origin = textContainerOrigin
+    let padding = textContainer?.lineFragmentPadding ?? 0
+    let color = NSColor.placeholderTextColor
+    guard !string.isEmpty else {
+      ("Start writing..." as NSString).draw(
+        at: NSPoint(x: origin.x + padding, y: origin.y),
+        withAttributes: [
+          .font: NSFont.systemFont(ofSize: MarkdownEditor.fontSize), .foregroundColor: color,
+        ])
+      return
+    }
+    guard let layoutManager else { return }
+    for span in MarkdownSpan.spans(in: string) {
+      guard case .heading(let level) = span.style, let prefix = span.marks.first,
+        NSMaxRange(prefix) == NSMaxRange(span.range)
+      else { continue }
+      let line = layoutManager.lineFragmentRect(
+        forGlyphAt: layoutManager.glyphIndexForCharacter(at: span.range.location),
+        effectiveRange: nil)
+      ("Heading \(level)" as NSString).draw(
+        at: NSPoint(x: origin.x + line.minX + padding, y: origin.y + line.minY),
+        withAttributes: [.font: MarkdownEditor.headingFont(level), .foregroundColor: color])
     }
   }
 }

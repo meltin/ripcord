@@ -1,25 +1,31 @@
 import Foundation
 
 /// Where a note's Markdown asks for a look, so the editor can format it as you type: headings,
-/// emphasis, code, quotes, lists, checkboxes and links. Its marks (`#`, `**`, `- [ ]`) stay in
-/// the text, dimmed, so what's saved is exactly what's typed.
+/// emphasis, code, quotes, lists, checkboxes and links. Every mark stays in the text, so what's
+/// saved is exactly what's typed; as in Raycast Notes, a heading's or emphasis's marks are hidden
+/// once complete, and a list's or quote's are shown dimmed.
 public struct MarkdownSpan: Equatable, Sendable {
   public enum Style: Equatable, Sendable {
     case heading(Int)
-    case bold, italic, code, codeBlock, quote, link
+    case bold, italic, strike, code, codeBlock, quote, link
     /// A checked task's text.
     case done
-    /// The Markdown's own marks, shown dimmed.
+    /// A list's, task's or quote's marks, shown dimmed.
     case mark
+    /// A heading's, emphasis's, code's or link's marks, hidden.
+    case hidden
   }
 
   /// UTF-16 offsets, as NSTextView counts them.
   public let range: NSRange
   public let style: Style
+  /// A heading's or inline style's hidden marks, so a delete can take them with the text.
+  public let marks: [NSRange]
 
-  public init(_ range: NSRange, _ style: Style) {
+  public init(_ range: NSRange, _ style: Style, marks: [NSRange] = []) {
     self.range = range
     self.style = style
+    self.marks = marks
   }
 
   /// The spans of `text`, line by line; inline styles skip code blocks.
@@ -49,8 +55,9 @@ public struct MarkdownSpan: Equatable, Sendable {
     }
     var spans: [MarkdownSpan] = []
     if let match = first(heading, in: line) {
-      spans.append(MarkdownSpan(whole, .heading(match.range(at: 1).length)))
-      spans.append(MarkdownSpan(shifted(match.range), .mark))
+      spans.append(
+        MarkdownSpan(whole, .heading(match.range(at: 1).length), marks: [shifted(match.range)]))
+      spans.append(MarkdownSpan(shifted(match.range), .hidden))
     } else if let match = first(quote, in: line) {
       spans.append(MarkdownSpan(whole, .quote))
       spans.append(MarkdownSpan(shifted(match.range), .mark))
@@ -74,12 +81,13 @@ public struct MarkdownSpan: Equatable, Sendable {
       spans.append(
         MarkdownSpan(
           shifted(NSRange(location: open.upperBound, length: close.location - open.upperBound)),
-          .code))
-      spans.append(MarkdownSpan(shifted(open), .mark))
-      spans.append(MarkdownSpan(shifted(close), .mark))
+          .code, marks: [shifted(open), shifted(close)]))
+      spans.append(MarkdownSpan(shifted(open), .hidden))
+      spans.append(MarkdownSpan(shifted(close), .hidden))
     }
     let emphasis = [
       (boldStars, MarkdownSpan.Style.bold), (boldUnderscores, .bold), (italic, .italic),
+      (strike, .strike),
     ]
     for (pattern, style) in emphasis {
       for match in all(pattern, in: line) {
@@ -90,20 +98,20 @@ public struct MarkdownSpan: Equatable, Sendable {
         let closing = NSRange(
           location: inner.upperBound, length: match.range.upperBound - inner.upperBound)
         guard !inCode(opening), !inCode(closing) else { continue }
-        spans.append(MarkdownSpan(shifted(inner), style))
-        spans.append(MarkdownSpan(shifted(opening), .mark))
-        spans.append(MarkdownSpan(shifted(closing), .mark))
+        spans.append(
+          MarkdownSpan(shifted(inner), style, marks: [shifted(opening), shifted(closing)]))
+        spans.append(MarkdownSpan(shifted(opening), .hidden))
+        spans.append(MarkdownSpan(shifted(closing), .hidden))
       }
     }
     for match in all(link, in: line) where !inCode(match.range) {
       let label = match.range(at: 1)
-      spans.append(MarkdownSpan(shifted(label), .link))
-      spans.append(MarkdownSpan(shifted(NSRange(location: match.range.location, length: 1)), .mark))
-      spans.append(
-        MarkdownSpan(
-          shifted(
-            NSRange(location: label.upperBound, length: match.range.upperBound - label.upperBound)),
-          .mark))
+      let open = shifted(NSRange(location: match.range.location, length: 1))
+      let close = shifted(
+        NSRange(location: label.upperBound, length: match.range.upperBound - label.upperBound))
+      spans.append(MarkdownSpan(shifted(label), .link, marks: [open, close]))
+      spans.append(MarkdownSpan(open, .hidden))
+      spans.append(MarkdownSpan(close, .hidden))
     }
     return spans
   }
@@ -119,6 +127,7 @@ public struct MarkdownSpan: Equatable, Sendable {
   /// Not inside a word, as in `foo__bar__baz`.
   private static let boldUnderscores = regex(#"(?<!\w)(__)(?=\S)(.+?)(?<=\S)__(?!\w)"#)
   private static let italic = regex(#"(?<![*_\w])([*_])(?=\S)([^*_]+?)(?<=\S)\1(?![*_\w])"#)
+  private static let strike = regex(#"(~~)(?=\S)(.+?)(?<=\S)~~"#)
   private static let link = regex(#"\[([^\]]+)\]\([^)\s]+\)"#)
 
   private static func regex(_ pattern: String) -> NSRegularExpression {

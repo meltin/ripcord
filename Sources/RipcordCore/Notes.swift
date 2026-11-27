@@ -18,12 +18,17 @@ public struct Note: Equatable, Sendable {
 
   public var title: String { Self.title(of: text) }
 
-  /// The first line with text, without a heading's `#`s; "Untitled" for none.
+  /// The first line with text, as the editor shows it: without a heading's `#`s or the marks of
+  /// its emphasis; "Untitled" for none.
   public static func title(of text: String) -> String {
     let line = text.split(whereSeparator: \.isNewline).lazy
       .map { $0.trimmingCharacters(in: .whitespaces) }
       .first { !$0.isEmpty }
-    let title = line.map { String($0.drop { $0 == "#" }).trimmingCharacters(in: .whitespaces) }
+    let title = line.map { line in
+      let shown = MarkdownEditing.hidden(in: MarkdownSpan.spans(in: line)).reversed()
+        .reduce(line as NSString) { $0.replacingCharacters(in: $1, with: "") as NSString }
+      return String((shown as String).drop { $0 == "#" }).trimmingCharacters(in: .whitespaces)
+    }
     return title.flatMap { $0.isEmpty ? nil : $0 } ?? "Untitled"
   }
 }

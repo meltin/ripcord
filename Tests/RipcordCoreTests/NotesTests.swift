@@ -12,6 +12,7 @@ import Testing
     #expect(Note.title(of: "  plain first line  \nmore") == "plain first line")
     #expect(Note.title(of: "") == "Untitled")
     #expect(Note.title(of: "#\n") == "Untitled")
+    #expect(Note.title(of: "# **Big** ~~plan~~\nmore") == "Big plan")
   }
 
   @Test func writesANewNoteOnlyOnceSomethingIsTyped() throws {
