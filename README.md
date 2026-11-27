@@ -178,6 +178,7 @@ the settings window opens. The settings window writes every change back to it.
     "enabled": true, "mode": "immediately", "withinWords": false,
     "disabledApps": ["com.1password.1password", "com.apple.keychainaccess"]
   },
+  "dummyTextLanguage": "ja",
   "snippets": [
     { "name": "Address", "keyword": "addr", "text": "1 Infinite Loop\nCupertino", "icon": "house",
       "tags": ["home"] }
