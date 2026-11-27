@@ -213,3 +213,37 @@ import Testing
         == NSRange(location: 12, length: 2))
   }
 }
+
+@Suite struct MarkdownCodeBlockEditingTests {
+  let text = "a\n```\nlet x\n```\nb"
+  var spans: [MarkdownSpan] { MarkdownSpan.spans(in: text) }
+
+  @Test func restsAtTheEndOfTheLastCodeLine() {
+    let hidden = MarkdownEditing.hidden(in: spans)
+    let stops = MarkdownEditing.stops(in: spans)
+    // The end of "let x" is 11; the fence after it is hidden.
+    #expect(stops == [11])
+    #expect(MarkdownEditing.caret(11, from: 10, in: text, hidden: hidden, stops: stops) == 11)
+    // Up from b lands there rather than past the fence again.
+    #expect(MarkdownEditing.caret(13, from: 16, in: text, hidden: hidden, stops: stops) == 11)
+  }
+
+  @Test func keepsTheFencesThroughDeletes() {
+    #expect(MarkdownEditing.deleteBackward(at: 6, in: text, spans: spans) == .nothing)
+    #expect(MarkdownEditing.deleteForward(at: 11, in: text, spans: spans) == .nothing)
+    // Deleting its last letter leaves the block, empty, to write in.
+    #expect(
+      MarkdownEditing.deleteBackward(
+        at: 7, in: "```\nx\n```", spans: MarkdownSpan.spans(in: "```\nx\n```"))
+        == .normal)
+  }
+
+  @Test func closesABlockOnReturnAfterAnOpeningFence() {
+    let open = "a\n```"
+    let edit = MarkdownEditing.newline(at: 5, in: open, spans: MarkdownSpan.spans(in: open))
+    #expect(
+      edit.map { (open as NSString).replacingCharacters(in: $0.range, with: $0.replacement) }
+        == "a\n```\n\n```")
+    #expect(edit?.caret == 6)
+  }
+}

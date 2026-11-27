@@ -54,8 +54,12 @@ import Testing
     #expect(
       styled(text) == [
         "codeBlock:```", "codeBlock:# not a heading", "codeBlock:```", "heading(1):# Heading",
-        "hidden:# ",
+        "hidden:# ", "fenced:# not a heading", "hidden:```\n", "hidden:\n```\n",
       ])
+  }
+
+  @Test func showsTheFenceOfABlockNotClosedYet() {
+    #expect(styled("```\nlet a") == ["codeBlock:```", "codeBlock:let a"])
   }
 
   @Test func countsInUTF16() {

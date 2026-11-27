@@ -11,6 +11,9 @@ public struct MarkdownSpan: Equatable, Sendable {
     /// A list item's line; its mark (`- `, `1. `, with any indent before it) says which.
     case bullet, ordered
     case task(checked: Bool)
+    /// A closed ``` block, as a whole: its text between the fences, the fences its marks. Each
+    /// of its lines is also a `codeBlock`.
+    case fenced
     /// A checked task's text.
     case done
     /// The marks, hidden.
@@ -33,19 +36,41 @@ public struct MarkdownSpan: Equatable, Sendable {
   /// The spans of `text`, line by line; inline styles skip code blocks.
   public static func spans(in text: String) -> [MarkdownSpan] {
     let string = text as NSString
-    var spans: [MarkdownSpan] = []
-    var inFence = false
+    var lines: [(text: String, range: NSRange, enclosing: NSRange)] = []
     string.enumerateSubstrings(
       in: NSRange(location: 0, length: string.length), options: .byLines
-    ) { line, range, _, _ in
-      guard let line else { return }
-      let isFence = line.trimmingCharacters(in: .whitespaces).hasPrefix("```")
+    ) { line, range, enclosing, _ in
+      if let line { lines.append((line, range, enclosing)) }
+    }
+    let fences = lines.indices.filter {
+      lines[$0].text.trimmingCharacters(in: .whitespaces).hasPrefix("```")
+    }
+    var spans: [MarkdownSpan] = []
+    var inFence = false
+    for (index, line) in lines.enumerated() {
+      let isFence = fences.contains(index)
       if isFence || inFence {
-        spans.append(MarkdownSpan(range, .codeBlock))
+        spans.append(MarkdownSpan(line.range, .codeBlock))
         if isFence { inFence.toggle() }
-        return
+        continue
       }
-      spans += lineSpans(line, at: range.location)
+      spans += lineSpans(line.text, at: line.range.location)
+    }
+    // A closed block's fences are hidden, each with its line break, so no empty line is left;
+    // one still open shows its fence, so a lone ``` doesn't turn what follows into hidden code.
+    for pair in stride(from: 0, to: fences.count - 1, by: 2) {
+      let open = lines[fences[pair]]
+      let close = lines[fences[pair + 1]]
+      let start = NSMaxRange(open.enclosing)
+      let content =
+        fences[pair + 1] > fences[pair] + 1
+        ? NSRange(location: start, length: NSMaxRange(lines[fences[pair + 1] - 1].range) - start)
+        : NSRange(location: start, length: 0)
+      let closing = NSRange(
+        location: NSMaxRange(content), length: NSMaxRange(close.enclosing) - NSMaxRange(content))
+      spans.append(MarkdownSpan(content, .fenced, marks: [open.enclosing, closing]))
+      spans.append(MarkdownSpan(open.enclosing, .hidden))
+      spans.append(MarkdownSpan(closing, .hidden))
     }
     return spans
   }

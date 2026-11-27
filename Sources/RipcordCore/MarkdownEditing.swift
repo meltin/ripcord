@@ -18,6 +18,19 @@ public enum MarkdownEditing {
   public static func newline(at caret: Int, in text: String, spans: [MarkdownSpan])
     -> (range: NSRange, replacement: String, caret: Int)?
   {
+    let string = text as NSString
+    // Return after a lone opening ``` closes the block, with the caret on the line between.
+    let line = string.lineRange(for: NSRange(location: caret, length: 0))
+    let lineText = string.substring(with: line).trimmingCharacters(in: .newlines)
+    let inBlock = spans.contains {
+      $0.style == .fenced && $0.marks.contains { NSLocationInRange(line.location, $0) }
+    }
+    if lineText.trimmingCharacters(in: .whitespaces).hasPrefix("```"), !inBlock,
+      caret == line.location + (lineText as NSString).length,
+      !string.substring(from: NSMaxRange(line)).contains("```")
+    {
+      return (NSRange(location: caret, length: 0), "\n\n```", caret + 1)
+    }
     guard
       let span = spans.first(where: {
         isLine($0)
@@ -26,7 +39,6 @@ public enum MarkdownEditing {
       }),
       let prefix = span.marks.first, caret >= NSMaxRange(prefix)
     else { return nil }
-    let string = text as NSString
     let mark = string.substring(with: prefix)
     if NSMaxRange(span.range) == NSMaxRange(prefix) {
       return (prefix, "", prefix.location)
@@ -82,27 +94,43 @@ public enum MarkdownEditing {
 
   /// Whether the caret may rest at `location`: not on a hidden mark's first character or inside.
   /// It rests after one instead, so what's typed after a heading's `# ` lands in the heading and
-  /// what's typed after a closing `**` isn't bold.
-  static func canRest(at location: Int, hidden: [NSRange]) -> Bool {
-    !hidden.contains { $0.location <= location && location < NSMaxRange($0) }
+  /// what's typed after a closing `**` isn't bold. `stops` are allowed anyway: the end of a code
+  /// block's last line, where its closing fence starts.
+  static func canRest(at location: Int, hidden: [NSRange], stops: [Int] = []) -> Bool {
+    stops.contains(location)
+      || !hidden.contains { $0.location <= location && location < NSMaxRange($0) }
+  }
+
+  /// Where the caret may rest though a hidden mark starts there: the end of each code block.
+  public static func stops(in spans: [MarkdownSpan]) -> [Int] {
+    spans.filter { $0.style == .fenced }.compactMap { $0.marks.last?.location }
   }
 
   /// Where a caret moved from `old` to `proposed` lands. An arrow step into hidden marks carries
   /// on past them to the next visible character; a click or a jump lands after them.
   public static func caret(
-    _ proposed: Int, from old: Int, in text: String, hidden: [NSRange]
+    _ proposed: Int, from old: Int, in text: String, hidden: [NSRange], stops: [Int] = []
   ) -> Int {
     let string = text as NSString
-    guard !canRest(at: proposed, hidden: hidden) else { return proposed }
+    let canRest = { (location: Int) in Self.canRest(at: location, hidden: hidden, stops: stops) }
+    guard !canRest(proposed) else { return proposed }
+    // Up from below a code block lands at the end of its last line, not past its fence again.
+    if proposed < old,
+      let stop = stops.first(where: { stop in
+        hidden.contains { $0.location == stop && NSLocationInRange(proposed, $0) }
+      })
+    {
+      return stop
+    }
     if proposed == old - 1 {
       var location = proposed
-      while location > 0, !canRest(at: location, hidden: hidden) {
+      while location > 0, !canRest(location) {
         location = string.rangeOfComposedCharacterSequence(at: location - 1).location
       }
-      if canRest(at: location, hidden: hidden) { return location }
+      if canRest(location) { return location }
     }
     var location = proposed
-    while location < string.length, !canRest(at: location, hidden: hidden) {
+    while location < string.length, !canRest(location) {
       location = NSMaxRange(string.rangeOfComposedCharacterSequence(at: location))
     }
     return location
@@ -113,6 +141,11 @@ public enum MarkdownEditing {
     -> Delete
   {
     let string = text as NSString
+    // At a code block's start: an empty block goes, a written one stays whole.
+    if let block = spans.first(where: { $0.style == .fenced && $0.range.location == caret }) {
+      guard block.range.length == 0 else { return .nothing }
+      return .remove(block.marks.reduce(block.range) { NSUnionRange($0, $1) })
+    }
     // At a line style's start: a list item, task or quote goes back to a plain line, and so
     // does an empty heading, while a written one stays, as in Raycast.
     for span in spans where isLine(span) {
@@ -135,6 +168,10 @@ public enum MarkdownEditing {
     -> Delete
   {
     let string = text as NSString
+    // At a code block's end, its closing fence isn't taken.
+    if spans.contains(where: { $0.style == .fenced && $0.marks.last?.location == caret }) {
+      return .nothing
+    }
     let hidden = hidden(in: spans)
     var start = caret
     while let mark = hidden.first(where: { $0.location == start && $0.length > 0 }) {
@@ -150,7 +187,8 @@ public enum MarkdownEditing {
   private static func wholeIfLast(_ range: NSRange, _ spans: [MarkdownSpan]) -> NSRange {
     guard
       let span = spans.first(where: {
-        $0.range == range && $0.marks.count == 2 && $0.style != .codeBlock
+        // A code block emptied by Backspace stays, to write in again.
+        $0.range == range && $0.marks.count == 2 && $0.style != .fenced
       })
     else { return range }
     return span.marks.reduce(range) { NSUnionRange($0, $1) }

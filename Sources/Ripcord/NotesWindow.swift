@@ -869,7 +869,9 @@ private struct MarkdownEditor: NSViewRepresentable {
     ) -> NSRange {
       guard !isReplacing, !textView.hasMarkedText() else { return new }
       let text = textView.string
-      let hidden = MarkdownEditing.hidden(in: MarkdownSpan.spans(in: text))
+      let spans = MarkdownSpan.spans(in: text)
+      let hidden = MarkdownEditing.hidden(in: spans)
+      let stops = MarkdownEditing.stops(in: spans)
       guard new.length > 0 else {
         if isTyping,
           MarkdownSpan.spans(in: text).contains(where: {
@@ -878,8 +880,17 @@ private struct MarkdownEditor: NSViewRepresentable {
         {
           return new
         }
+        // ↑ from below a code block is offered the line after its hidden fence; it goes up to
+        // the end of the block's last line instead.
+        if NSApp.currentEvent?.type == .keyDown, NSApp.currentEvent?.keyCode == UInt16(kVK_UpArrow),
+          let stop = stops.first(where: { stop in
+            hidden.contains { $0.location == stop && NSMaxRange($0) == new.location }
+          })
+        {
+          return NSRange(location: stop, length: 0)
+        }
         let location = MarkdownEditing.caret(
-          new.location, from: old.location + old.length, in: text, hidden: hidden)
+          new.location, from: old.location + old.length, in: text, hidden: hidden, stops: stops)
         return NSRange(location: location, length: 0)
       }
       // A selection made in one go (⌘A, a drag) takes in a line's hidden mark; Shift and an
@@ -892,10 +903,12 @@ private struct MarkdownEditor: NSViewRepresentable {
       var start = new.location
       var end = NSMaxRange(new)
       if start != old.location {
-        start = MarkdownEditing.caret(start, from: old.location, in: text, hidden: hidden)
+        start = MarkdownEditing.caret(
+          start, from: old.location, in: text, hidden: hidden, stops: stops)
       }
       if end != NSMaxRange(old) {
-        end = MarkdownEditing.caret(end, from: NSMaxRange(old), in: text, hidden: hidden)
+        end = MarkdownEditing.caret(
+          end, from: NSMaxRange(old), in: text, hidden: hidden, stops: stops)
       }
       return end > start ? NSRange(location: start, length: end - start) : new
     }
@@ -984,15 +997,18 @@ private struct MarkdownEditor: NSViewRepresentable {
   static let listIndent: CGFloat = 22
   /// A quote's text, past its bar.
   static let quoteIndent: CGFloat = 12
+  /// A code block's text, inside its background.
+  static let codeInset: CGFloat = 12
 
   /// Lines a little apart, as Raycast Notes spaces them; `indent` for every line of an item,
   /// and `minimumHeight` for one whose marks are all there is.
   fileprivate static func paragraph(
-    indent: CGFloat = 0, minimumHeight: CGFloat = 0, spacing: CGFloat = 6
+    indent: CGFloat = 0, tail: CGFloat = 0, minimumHeight: CGFloat = 0, spacing: CGFloat = 6
   ) -> NSParagraphStyle {
     let style = NSMutableParagraphStyle()
     style.firstLineHeadIndent = indent
     style.headIndent = indent
+    style.tailIndent = tail
     style.minimumLineHeight = minimumHeight
     style.paragraphSpacing = spacing
     return style
@@ -1017,6 +1033,17 @@ private struct MarkdownEditor: NSViewRepresentable {
     for span in MarkdownSpan.spans(in: storage.string)
     where NSMaxRange(span.range) <= storage.length {
       storage.addAttributes(attributes(for: span, in: storage), range: span.range)
+    }
+    // A closed block's hidden fence lines leave room above and below its background.
+    let string = storage.string as NSString
+    for span in MarkdownSpan.spans(in: storage.string) where span.style == .fenced {
+      for mark in span.marks {
+        let fence = string.range(of: "```", range: mark)
+        guard fence.location != NSNotFound else { continue }
+        storage.addAttribute(
+          .paragraphStyle, value: paragraph(spacing: 14),
+          range: string.lineRange(for: NSRange(location: fence.location, length: 0)))
+      }
     }
     storage.endEditing()
     textView.needsDisplay = true
@@ -1062,11 +1089,13 @@ private struct MarkdownEditor: NSViewRepresentable {
     // Its rounded background is drawn by the text view.
     case .code:
       return [.font: NSFont.monospacedSystemFont(ofSize: font.pointSize - 1, weight: .regular)]
+    // Inside the block's rounded background, drawn by the text view.
     case .codeBlock:
       return [
         .font: NSFont.monospacedSystemFont(ofSize: font.pointSize - 1, weight: .regular),
-        .backgroundColor: NSColor.quaternaryLabelColor.withAlphaComponent(0.12),
+        .paragraphStyle: paragraph(indent: codeInset, tail: -codeInset, spacing: 0),
       ]
+    case .fenced: return [:]
     case .link: return [.foregroundColor: NSColor.linkColor]
     case .done: return [.foregroundColor: NSColor.secondaryLabelColor]
     case .hidden:
@@ -1180,6 +1209,17 @@ final class NoteTextView: NSTextView {
           NSColor.labelColor.withAlphaComponent(0.08).setFill()
           NSBezierPath(roundedRect: pill, xRadius: 4, yRadius: 4).fill()
         }
+      case .fenced:
+        // From the block's first line to its last, across the container, with room around.
+        guard let first = lineRect(at: span.range.location),
+          let last = lineRect(at: max(span.range.location, NSMaxRange(span.range) - 1))
+        else { continue }
+        let padding = textContainer.lineFragmentPadding
+        let box = NSRect(
+          x: first.minX, y: first.minY - 7,
+          width: textContainer.size.width - padding * 2, height: last.maxY - first.minY + 14)
+        NSColor.labelColor.withAlphaComponent(0.06).setFill()
+        NSBezierPath(roundedRect: box, xRadius: 10, yRadius: 10).fill()
       case .quote:
         // From the quote's first line to its last, wrapped lines too.
         guard let first = lineRect(at: span.range.location),
