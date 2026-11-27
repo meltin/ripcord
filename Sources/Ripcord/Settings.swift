@@ -424,7 +424,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case cleanKeyboard = "Clean Keyboard"
   case bookmarks = "Bookmarks"
   case notes = "Notes"
-  case dummyText = "Japanese Lorem Ipsum Generator"
+  case dummyText = "Lorem Ipsum Generator JP"
   case scripts = "Script Commands"
   case emoji = "Emoji & Symbols"
   case cleanShot = "CleanShot X"
