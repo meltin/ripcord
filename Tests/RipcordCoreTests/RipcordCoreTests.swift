@@ -107,19 +107,26 @@ import Testing
       app.actions.map(\.title) == [
         "Open Application", "Show in Finder", "Show Info in Finder", "Show Package Contents",
         "Add to Favorites", "Copy Path", "Copy Name",
-      ] + (hasBundle ? ["Copy Bundle Identifier"] : []) + ["Configure Command…"])
+      ] + (hasBundle ? ["Copy Bundle Identifier"] : []) + ["Configure Command…", "Disable Command"])
     #expect(
       app.actions.map(\.shortcut)
-        == ["↵", "⌘↵", "⌘I", "⌥⌘I", "⇧⌘F", "⌥⌘C", "⌃⌘C"] + (hasBundle ? ["⇧⌘C"] : []) + ["⇧⌘,"])
+        == ["↵", "⌘↵", "⌘I", "⌥⌘I", "⇧⌘F", "⌥⌘C", "⌃⌘C"] + (hasBundle ? ["⇧⌘C"] : []) + [
+          "⇧⌘,", "⌃⇧⌘D",
+        ])
     #expect(
       app.actions[3].action
         == .open(URL(fileURLWithPath: "/Applications/Safari.app").appending(path: "Contents")))
     #expect(app.actions[5].action == .copy("/Applications/Safari.app"))
     #expect(app.actions[6].action == .copy("Safari"))
     // An app is configured by its settings key, as the Applications page lists it.
-    #expect(app.actions.last?.action == .configureMenu(apps[0].settingsKey))
+    #expect(app.actions.dropLast().last?.action == .configureMenu(apps[0].settingsKey))
     let link = try #require(Search.results(for: "google", apps: [], quicklinks: links).first)
-    #expect(link.actions.map(\.title) == ["Open Command", "Copy URL", "Add to Favorites"])
+    #expect(
+      link.actions.map(\.title) == [
+        "Open Command", "Copy URL", "Add to Favorites", "Disable Command",
+      ])
+    // A Quicklink's is found by its row's key, as its switch is on the Quicklink itself.
+    #expect(link.actions.last?.action == .disableCommand(link.id))
   }
 
   @Test func typedQueryShowsOneResultsSection() {
