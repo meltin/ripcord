@@ -7,6 +7,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case caffeinate, decaffeinate, toggleCaffeinate, caffeinateFor, caffeinateUntil
   case caffeinateWhile, caffeinateStatus
   case sleepTimer, stopSleepTimer
+  case sleepTimer15, sleepTimer30, sleepTimer45, sleepTimer60, sleepTimer90
   case lidAwake
   case pickColor, colorHistory, colorNames, convertColor, favoriteColors, colorWheel
   case cleanKeyboard
@@ -17,6 +18,18 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case ripcordNotes, createNote, searchNotes
   case generateDummyText
   case resetWindowPosition, checkForUpdates, quit
+
+  /// Raycast's Start 15, 30, 45, 60 and 90 Minute Sleep Timer: how long each waits.
+  public var sleepTimerMinutes: Int? {
+    switch self {
+    case .sleepTimer15: 15
+    case .sleepTimer30: 30
+    case .sleepTimer45: 45
+    case .sleepTimer60: 60
+    case .sleepTimer90: 90
+    default: nil
+    }
+  }
 
   public var title: String {
     switch self {
@@ -39,6 +52,8 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .caffeinateWhile: "Caffeinate While"
     case .caffeinateStatus: "Caffeinate Status"
     case .sleepTimer: "Sleep Timer"
+    case .sleepTimer15, .sleepTimer30, .sleepTimer45, .sleepTimer60, .sleepTimer90:
+      "Start \(sleepTimerMinutes ?? 0) Minute Sleep Timer"
     case .stopSleepTimer: "Stop Sleep Timer"
     case .lidAwake: "Lid Awake"
     case .pickColor: "Pick Color"
@@ -72,7 +87,9 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .caffeinate, .decaffeinate, .toggleCaffeinate, .caffeinateFor, .caffeinateUntil,
       .caffeinateWhile, .caffeinateStatus:
       "Coffee"
-    case .sleepTimer, .stopSleepTimer: "Sleep Timer"
+    case .sleepTimer, .stopSleepTimer, .sleepTimer15, .sleepTimer30, .sleepTimer45, .sleepTimer60,
+      .sleepTimer90:
+      "Sleep Timer"
     case .lidAwake: "Keep the Mac awake with the lid closed"
     case .pickColor, .colorHistory, .colorNames, .convertColor, .favoriteColors, .colorWheel:
       "Color Picker"
@@ -113,6 +130,8 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .caffeinateWhile: "command:caffeinate-while"
     case .caffeinateStatus: "command:caffeinate-status"
     case .sleepTimer: "command:sleep-timer"
+    case .sleepTimer15, .sleepTimer30, .sleepTimer45, .sleepTimer60, .sleepTimer90:
+      "command:sleep-timer-\(sleepTimerMinutes ?? 0)"
     case .stopSleepTimer: "command:stop-sleep-timer"
     case .pickColor: "command:pick-color"
     case .colorHistory: "command:color-history"

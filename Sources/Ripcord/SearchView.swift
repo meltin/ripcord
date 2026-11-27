@@ -642,7 +642,8 @@ extension BuiltinCommand {
     case .caffeinate, .toggleCaffeinate, .caffeinateFor, .caffeinateUntil, .caffeinateWhile:
       "cup.and.saucer.fill"
     case .decaffeinate, .caffeinateStatus: "cup.and.saucer"
-    case .sleepTimer: "moon.zzz.fill"
+    case .sleepTimer, .sleepTimer15, .sleepTimer30, .sleepTimer45, .sleepTimer60, .sleepTimer90:
+      "moon.zzz.fill"
     case .stopSleepTimer: "moon.zzz"
     case .lidAwake: "sun.max"
     case .pickColor: "eyedropper"
@@ -677,7 +678,9 @@ extension BuiltinCommand {
     case .caffeinate, .decaffeinate, .toggleCaffeinate, .caffeinateFor, .caffeinateUntil,
       .caffeinateWhile, .caffeinateStatus:
       .brown
-    case .sleepTimer, .stopSleepTimer: .indigo
+    case .sleepTimer, .stopSleepTimer, .sleepTimer15, .sleepTimer30, .sleepTimer45, .sleepTimer60,
+      .sleepTimer90:
+      .indigo
     case .lidAwake: .orange
     case .pickColor, .colorHistory, .colorNames, .convertColor, .favoriteColors, .colorWheel: .pink
     case .cleanKeyboard: .cyan

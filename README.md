@@ -68,7 +68,8 @@
   when. Settings › Coffee picks what's kept awake (the display, the system and the disk by
   default, and the system on AC power with the lid closed if asked) and can start it with Ripcord
 - Sleep Timer: type a time after it, as in `sleep timer 30m`, then pick Sleep or Turn Off Display;
-  a moon with the time left shows in the menu bar until it fires or Stop Sleep Timer
+  a moon with the time left shows in the menu bar until it fires or Stop Sleep Timer. As
+  Raycast's, Start 15, 30, 45, 60 and 90 Minute Sleep Timer sleep the Mac after that long
 - Lid Awake: keeps the Mac from sleeping, with the lid closed and on battery too, until turned off
   or for a time typed after it, as in `lid awake 2h`; while on, it's pinned at the top of the
   search with the time left, and a sun shows in the menu bar. It sets `pmset -a disablesleep 1`,
