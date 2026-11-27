@@ -105,8 +105,8 @@ struct SearchView: View {
       } else if model.mode == .emoji {
         EmojiGrid(model: model, onCommand: onCommand)
       } else if [
-        .repositories, .httpStatusCodes, .colors, .colorNames, .convertColor, .bookmarks, .notes,
-        .pick,
+        .repositories, .httpStatusCodes, .colors, .colorNames, .convertColor, .favoriteColors,
+        .bookmarks, .notes, .pick,
       ].contains(
         model.mode)
       {
@@ -285,6 +285,10 @@ private struct EmptyState: View {
       "Colors you pick with Pick Color show up here."
     case .colors:
       "No color matches “\(query)”."
+    case .favoriteColors where query.trimmingCharacters(in: .whitespaces).isEmpty:
+      "Add colors to your favorites from Color History, with ⇧⌘F."
+    case .favoriteColors:
+      "No favorite color matches “\(query)”."
     case .convertColor where query.trimmingCharacters(in: .whitespaces).isEmpty:
       "Type or paste a CSS color, such as #FF6363, rgb(255 99 99), or color(display-p3 1 0 0)."
     case .convertColor:
@@ -456,6 +460,8 @@ private struct ResultIcon: View {
       } else {
         tile("camera.viewfinder", .purple)
       }
+    case .toggleFavoriteColor:
+      tile("star", .yellow)
     case .deleteColor, .deleteBookmark:
       tile("trash", .gray)
     case .editBookmark, .moveBookmarkMenu, .moveBookmark:
@@ -609,6 +615,7 @@ extension BuiltinCommand {
     case .colorHistory: "swatchpalette.fill"
     case .colorNames: "tag"
     case .convertColor: "arrow.clockwise"
+    case .favoriteColors: "star"
     case .cleanKeyboard: "keyboard"
     case .searchBookmarks: "bookmark.fill"
     case .searchEmoji: "face.smiling"
@@ -632,7 +639,7 @@ extension BuiltinCommand {
       .brown
     case .sleepTimer, .stopSleepTimer: .indigo
     case .lidAwake: .orange
-    case .pickColor, .colorHistory, .colorNames, .convertColor: .pink
+    case .pickColor, .colorHistory, .colorNames, .convertColor, .favoriteColors: .pink
     case .cleanKeyboard: .cyan
     case .searchBookmarks, .addBookmark: .yellow
     case .searchEmoji: .orange
@@ -2386,6 +2393,7 @@ extension LauncherMode {
     case .colors: "Search Colors…"
     case .colorNames: "Search HEX (#00ff00)"
     case .convertColor: "Type or paste a color..."
+    case .favoriteColors: "Search favorite colors"
     case .bookmarks: "Search Bookmarks…"
     case .emoji: "Search Emoji & Symbols…"
     case .notes: "Search Notes…"

@@ -102,7 +102,7 @@ enum NotesRequest {
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
   case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, colorNames
-  case convertColor
+  case convertColor, favoriteColors
   case bookmarks
   case bookmarkForm, emoji, scriptOutput, notes
   /// `ripcord pick`: lines handed in, one to choose.
@@ -123,6 +123,7 @@ enum LauncherMode {
     case .colors: .colorHistory
     case .colorNames: .colorNames
     case .convertColor: .convertColor
+    case .favoriteColors: .favoriteColors
     case .bookmarks: .searchBookmarks
     case .bookmarkForm: .addBookmark
     case .emoji: .searchEmoji
@@ -751,6 +752,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return Search.colorSections(for: query, history: colors, format: colorFormat)
     }
     if model.mode == .colorNames { return Search.colorNameSections(for: query) }
+    if model.mode == .favoriteColors {
+      return Search.colorSections(
+        for: query, history: colors, format: colorFormat, favoritesOnly: true)
+    }
     if model.mode == .convertColor {
       let last = UserDefaults.standard.string(forKey: Self.lastConvertedFormatKey)
       return Search.convertColorSections(
@@ -1625,6 +1630,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.colorHistory) { return open(.colors) }
     if action == .run(.colorNames) { return open(.colorNames) }
     if action == .run(.convertColor) { return open(.convertColor) }
+    if action == .run(.favoriteColors) { return open(.favoriteColors) }
     // Convert Color: the format copied comes first next time, as Raycast keeps it.
     // The row whose text it is, clicked or selected.
     if model.mode == .convertColor, case .copy(let text) = action,
@@ -1781,6 +1787,13 @@ final class LauncherController: NSObject, NSWindowDelegate {
       }
       return
     }
+    if case .toggleFavoriteColor(let hex) = action {
+      model.menu = nil
+      let wasFavorite = colors.colors.first { $0.hex == hex }?.isFavorite == true
+      do { try colors.toggleFavorite(hex: hex) } catch { onError(error.localizedDescription) }
+      refreshRows(selecting: model.mode == .favoriteColors ? nil : "color:\(hex)")
+      return HUD.show(wasFavorite ? "Removed from favorites" : "Added to favorites")
+    }
     if case .deleteColor(let hex) = action {
       model.menu = nil
       do { try colors.delete(hex: hex) } catch { onError(error.localizedDescription) }
@@ -1918,13 +1931,13 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onCleanKeyboard(seconds)
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
       .run(.searchRepositories), .run(.httpStatusCodes), .run(.sleepTimer), .run(.colorHistory),
-      .run(.colorNames), .run(.convertColor),
+      .run(.colorNames), .run(.convertColor), .run(.favoriteColors),
       .run(.cleanKeyboard), .run(.searchBookmarks), .run(.addBookmark), .deleteBookmark,
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,
       .openDraft, .discardDraft, .runScript, .run(.searchNotes), .deleteNote,
       .moveFavorite,
-      .deleteColor,
+      .deleteColor, .toggleFavoriteColor,
       .run(.createSnippet), .clip, .snippet, .system, .window:
       break  // Handled above, without hiding the panel.
     case .run(.checkForUpdates):

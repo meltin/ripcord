@@ -71,7 +71,8 @@ import Testing
     #expect(
       row.actions.map(\.title)
         == ["Copy RGB"]
-        + ColorFormat.allCases.filter { $0 != .rgb }.map { "Copy \($0.title)" } + ["Delete Color"])
+        + ColorFormat.allCases.filter { $0 != .rgb }.map { "Copy \($0.title)" }
+        + ["Add to Favorites", "Delete Color"])
     #expect(row.actions.last?.action == .deleteColor("#FF8000"))
     // Any format matches the search.
     #expect(!Search.colorSections(for: "ff80", history: history, format: .rgb).isEmpty)
@@ -159,5 +160,32 @@ import Testing
         #expect(PickedColor(css: text)?.hex == color.hex, "\(format.title) \(text)")
       }
     }
+  }
+
+  /// A favorite is listed first, kept past the limit, and still a favorite when picked again.
+  @Test func keepsFavoriteColors() throws {
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    var history = ColorHistory(fileURL: file)
+    try history.add(PickedColor(rgb: 0x112233))
+    try history.toggleFavorite(hex: "#112233")
+    try history.add(PickedColor(rgb: 0x112233))
+    #expect(history.colors.first?.isFavorite == true)
+    for value in 0..<UInt32(ColorHistory.limit + 5) { try history.add(PickedColor(rgb: value)) }
+    #expect(history.colors.contains { $0.hex == "#112233" })
+    #expect(history.colors.count == ColorHistory.limit + 1)
+    let sections = Search.colorSections(for: "", history: history, format: .hex)
+    #expect(sections.map(\.title) == ["Favorites", "History"])
+    #expect(sections.first?.results.map(\.id) == ["color:#112233"])
+    let favorite = try #require(sections.first?.results.first)
+    #expect(
+      favorite.actions.contains { $0.title == "Remove from Favorites" && $0.shortcut == "⇧⌘F" })
+    let only = Search.colorSections(for: "", history: history, format: .hex, favoritesOnly: true)
+    #expect(only.flatMap(\.results).map(\.id) == ["color:#112233"])
+    try history.toggleFavorite(hex: "#112233")
+    #expect(
+      Search.colorSections(for: "", history: history, format: .hex, favoritesOnly: true).isEmpty)
+    // Read back from disk too.
+    #expect(ColorHistory(fileURL: file).colors.first { $0.hex == "#112233" }?.isFavorite == nil)
   }
 }
