@@ -35,7 +35,12 @@ public struct Quicklink: Codable, Equatable, Sendable {
     let unreserved = CharacterSet(
       charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
     let encoded = argument.addingPercentEncoding(withAllowedCharacters: unreserved) ?? ""
-    return URL(string: url.replacingOccurrences(of: "{query}", with: encoded))
+    let filled = url.replacingOccurrences(of: "{query}", with: encoded)
+    // A file or folder, as Raycast's Quicklinks take one: ~/Downloads or /Applications.
+    if filled.hasPrefix("~/") || filled == "~" || filled.hasPrefix("/") {
+      return URL(fileURLWithPath: (filled as NSString).expandingTildeInPath)
+    }
+    return URL(string: filled)
   }
 }
 
@@ -109,5 +114,60 @@ extension Search {
         settingsKey: link.rowID)
     }
     return results.isEmpty ? [] : [SearchSection(title: "Quicklinks", results: results)]
+  }
+}
+
+/// Raycast's Import Quicklinks and Export Quicklinks file: an array of `name` and `link`, with
+/// `openWith` and `iconName` Ripcord doesn't keep. Its `{argument}` is Ripcord's `{query}`.
+extension Quicklink {
+  private struct RaycastEntry: Codable {
+    var name: String
+    var link: String
+    /// Ripcord's own, which Raycast leaves alone.
+    var keyword: String?
+  }
+
+  /// Quicklinks as Raycast imports them, keywords kept for Ripcord to read back.
+  public static func exportData(_ links: [Quicklink]) throws -> Data {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+    return try encoder.encode(
+      links.map {
+        RaycastEntry(
+          name: $0.name, link: $0.url.replacingOccurrences(of: "{query}", with: "{argument}"),
+          keyword: $0.keyword)
+      })
+  }
+
+  /// `imported` added after `current`, as Raycast imports: one with the same name and link as
+  /// one already here is skipped. Another's name gets a number, and a keyword already used is
+  /// left off. Raycast's `{argument}` and `{argument name="…"}` become `{query}`.
+  public static func merging(_ data: Data, into current: [Quicklink]) throws -> (
+    links: [Quicklink], added: Int, skipped: Int
+  ) {
+    let entries = try JSONDecoder().decode([RaycastEntry].self, from: data)
+    var links = current
+    var skipped = 0
+    for entry in entries {
+      let name = entry.name.trimmingCharacters(in: .whitespaces)
+      let link = entry.link.replacingOccurrences(
+        of: #"\{argument( [^}]*)?\}"#, with: "{query}", options: .regularExpression)
+      guard !name.isEmpty, !link.isEmpty else { continue }
+      if links.contains(where: { $0.name == name && $0.url == link }) {
+        skipped += 1
+        continue
+      }
+      var unique = name
+      var number = 2
+      while links.contains(where: { $0.name == unique }) {
+        unique = "\(name) \(number)"
+        number += 1
+      }
+      let keyword = entry.keyword.flatMap { keyword in
+        links.contains { $0.keyword == keyword } ? nil : keyword
+      }
+      links.append(Quicklink(name: unique, url: link, keyword: keyword))
+    }
+    return (links, links.count - current.count, skipped)
   }
 }

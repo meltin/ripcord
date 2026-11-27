@@ -805,7 +805,7 @@ extension BuiltinCommand {
       .colorPicker
     case .cleanKeyboard: .cleanKeyboard
     case .searchBookmarks, .addBookmark: .bookmarks
-    case .createQuicklink, .searchQuicklinks: .quicklinks
+    case .createQuicklink, .searchQuicklinks, .importQuicklinks, .exportQuicklinks: .quicklinks
     case .ripcordNotes, .createNote, .searchNotes: .notes
     case .generateDummyText: .dummyText
     case .searchEmoji: .emoji
