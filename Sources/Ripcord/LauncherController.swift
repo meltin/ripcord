@@ -355,11 +355,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
           folders: RepositoryIndex.roots(repositorySettings.folders))
         // Kept open behind Settings, the list would otherwise come back empty, or keep a removed
         // folder's repositories until the scan ends.
-        if model.mode == .repositories {
+        if [.repositories, .removeRepos].contains(model.mode) {
           refreshRows(selecting: nil)
           scanRepositories()
         }
-      } else if repositorySettings != oldValue, model.mode == .repositories {
+      } else if repositorySettings != oldValue, [.repositories, .removeRepos].contains(model.mode) {
         refreshRows(selecting: model.selected?.id)
       }
     }
@@ -784,8 +784,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     if model.mode == .repositories || model.mode == .removeRepos {
       return Search.repositorySections(
-        for: query, repositories: repositories, settings: repositorySettings,
-        removing: model.mode == .removeRepos)
+        for: query,
+        repositories: model.mode == .removeRepos
+          ? repositories.filter { !$0.isLinkedCheckout } : repositories,
+        settings: repositorySettings, removing: model.mode == .removeRepos)
     }
     if model.mode == .snippets {
       // A tag no snippet carries any more lists nothing; drop it.
@@ -1098,8 +1100,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
         HUD.show("Cloned \(name)")
         scanRepositories()
       } else {
-        let line = errors.split(separator: "\n").last.map(String.init) ?? "git clone failed."
-        HUD.show(line, failed: true)
+        HUD.show(CloneRepo.failure(errors), failed: true)
       }
     }
   }
@@ -1120,6 +1121,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     guard !force else { return ask() }
     Task {
       let problem = await Task.detached { RepositoryCheck.unsaved(in: url) }.value
+      // Closed or left meanwhile: no card whose Return trashes it should turn up later.
+      guard panel.isVisible, model.mode == .removeRepos else { return }
       guard let problem else { return ask() }
       HUD.show("Cannot remove repository: \(problem)", failed: true)
     }
@@ -1731,11 +1734,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
       do {
         try FileManager.default.trashItem(at: url, resultingItemURL: nil)
         HUD.show("Moved \(url.lastPathComponent) to the Trash")
+        repositories = repositories.filter { $0.url != url }
+        return refreshRows(selecting: nil)
       } catch {
-        HUD.show("Couldn't move \(url.lastPathComponent) to the Trash.", failed: true)
+        return HUD.show("Couldn't move \(url.lastPathComponent) to the Trash.", failed: true)
       }
-      repositories = repositories.filter { $0.url != url }
-      return refreshRows(selecting: nil)
     }
     // Read before hide(), which clears what's typed in the fields.
     if case .run(let command) = action,
@@ -2117,7 +2120,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
         settings.depth == repositorySettings.depth
       else { return }
       repositories = found
-      if model.mode == .repositories { refreshRows(selecting: model.selected?.id) }
+      if [.repositories, .removeRepos].contains(model.mode) {
+        refreshRows(selecting: model.selected?.id)
+      }
     }
   }
 
@@ -2694,40 +2699,4 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
 extension String {
   fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
-}
-
-/// Remove Repo's check, as Raycast's: what isn't safe elsewhere yet.
-enum RepositoryCheck {
-  /// Why `folder` can't go to the Trash as it is, or nil when everything in it is committed and,
-  /// where it has a remote, pushed.
-  nonisolated static func unsaved(in folder: URL) -> String? {
-    guard let status = git(["status", "--porcelain"], in: folder) else {
-      return "git couldn't read it."
-    }
-    if !status.isEmpty { return "There are uncommitted changes or untracked files" }
-    guard let remotes = git(["remote"], in: folder) else { return "git couldn't read it." }
-    if !remotes.isEmpty,
-      let local = git(["log", "--oneline", "--branches", "--not", "--remotes"], in: folder),
-      !local.isEmpty
-    {
-      return "There are local commits that haven't been pushed"
-    }
-    return nil
-  }
-
-  /// git's output, trimmed; nil when it couldn't run or failed.
-  nonisolated private static func git(_ arguments: [String], in folder: URL) -> String? {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-    process.arguments = arguments
-    process.currentDirectoryURL = folder
-    let pipe = Pipe()
-    process.standardOutput = pipe
-    process.standardError = FileHandle.nullDevice
-    guard (try? process.run()) != nil else { return nil }
-    let output = pipe.fileHandleForReading.readDataToEndOfFile()
-    process.waitUntilExit()
-    guard process.terminationStatus == 0 else { return nil }
-    return String(decoding: output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-  }
 }
