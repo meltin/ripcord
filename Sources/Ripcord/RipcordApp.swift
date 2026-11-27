@@ -88,6 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     launcher.onOpenSettings = { [weak self] in self?.openSettings() }
     launcher.onCheckForUpdates = { [weak self] in self?.checkForUpdates() }
     settings.model.onClearClipboard = { [weak self] in self?.launcher.clearClipboardHistory() }
+    launcher.onBackdropError = { [weak self] in self?.settings.model.backdropError = $0 }
     snippetExpander.onExpand = { [weak self] in self?.launcher.pasteExpansion($0, trailing: $1) }
     launcher.onNotes = { [weak self] in self?.notes.handle($0) }
     notes.onBrowse = { [weak self] in self?.launcher.perform(.run(.searchNotes)) }
@@ -217,6 +218,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   @objc private func openSettings() {
+    // A shader saved since shows its error, or its fix, on the General page.
+    launcher.loadBackdrop()
     settings.show()
   }
 
@@ -240,6 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.scriptFolders = config.scriptFolders
       launcher.dummyTextLanguage = config.dummyTextLanguage
       launcher.clipboardSettings = config.clipboardHistory
+      launcher.backdrop = config.backdrop
       applyLaunchAtLogin(config.launchAtLogin)
       // Saving mid-recording must not bring back the hotkeys the recorder turned off.
       if !isRecording { applyHotkeys(config) }

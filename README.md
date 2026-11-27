@@ -16,6 +16,8 @@
   your order (⌥⌘↑ and ⌥⌘↓ move it), as Raycast's Favorites do
 - ⌘K lists the selected row's actions (Open Command ↵, Show in Finder ⌘↵, Copy Path or URL ⇧⌘C,
   Add to Favorites ⇧⌘F)
+- Backdrop: an optional Metal shader animated behind the panel's text, built in (Glow, Matrix) or
+  your own; off by default
 - Settings (⌘,): Launch at Login, the hotkey, the input source to type in and Quicklinks, kept
   in sync with the config file. "Search settings..." at the top of the sidebar finds a page by
   its name or by a setting or command on it, as in Raycast
@@ -183,6 +185,7 @@ the settings window opens. The settings window writes every change back to it.
   },
   "dummyTextLanguage": "ja",
   "clipboardHistory": { "keepFor": "unlimited", "maxEntries": 300 },
+  "backdrop": "off",
   "snippets": [
     { "name": "Address", "keyword": "addr", "text": "1 Infinite Loop\nCupertino", "icon": "house",
       "tags": ["home"] }
@@ -213,6 +216,26 @@ bundle ID) and Ripcord's commands; a Quicklink keeps its own `hotkey` and `disab
 
 `snippetExpansion` sets keyword expansion, as Settings › Snippets does: `mode` is `immediately`,
 `afterDelimiterKeeping` or `afterDelimiterDiscarding`, and `disabledApps` lists bundle IDs.
+
+`backdrop` animates a Metal shader behind the panel's text: `off` (the default), `glow`, `matrix`,
+or the name of a `.metal` file in `~/.config/ripcord/shaders`. Pick it under Settings › General,
+whose Open Folder button opens that folder. A shader defines one function:
+
+```metal
+float4 backdrop(float2 p, Backdrop b) {
+  float2 uv = p / b.size;
+  return float4(b.accent.rgb, 0.3 * uv.y);
+}
+```
+
+`p` is the pixel's position in points from the panel's top-left corner; return a straight sRGB
+color and its alpha, which Ripcord premultiplies and clips to the panel's corners. `b` holds the
+panel's `size`, `time` since it showed, `dark` (1 or 0), the system `accent` color (`.rgb`),
+`keystroke` (seconds since the query last changed), `query` (its length) and `field` (the search
+field's height). A file can be at most 32 KB. It's read each time the panel or Settings opens;
+one that doesn't compile keeps the last that did, and Settings › General shows why. It runs on
+the GPU for every pixel while the panel shows, so a heavy one slows the panel; under Reduce
+Motion or Low Power Mode it holds still.
 
 `inputSource` is the keyboard input source the panel switches to while it's open, so a Japanese
 input method left on doesn't turn the query into kana; the previous one comes back when it closes.

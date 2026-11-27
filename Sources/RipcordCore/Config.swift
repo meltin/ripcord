@@ -24,6 +24,8 @@ public struct Config: Codable, Equatable, Sendable {
   public var dummyTextLanguage: DummyText.Language
   /// How long and how many Clipboard History keeps.
   public var clipboardHistory: ClipboardSettings
+  /// The panel's backdrop shader: "off", a built-in one's name, or a file in the shaders folder.
+  public var backdrop: String
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
@@ -32,7 +34,8 @@ public struct Config: Codable, Equatable, Sendable {
     favorites: [String] = [], scriptFolders: [String] = [],
     snippetExpansion: SnippetExpansion = SnippetExpansion(),
     dummyTextLanguage: DummyText.Language = .japanese,
-    clipboardHistory: ClipboardSettings = ClipboardSettings()
+    clipboardHistory: ClipboardSettings = ClipboardSettings(),
+    backdrop: String = Backdrop.off
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
@@ -47,6 +50,7 @@ public struct Config: Codable, Equatable, Sendable {
     self.snippetExpansion = snippetExpansion
     self.dummyTextLanguage = dummyTextLanguage
     self.clipboardHistory = clipboardHistory
+    self.backdrop = backdrop
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -75,6 +79,7 @@ public struct Config: Codable, Equatable, Sendable {
     clipboardHistory =
       try container.decodeIfPresent(ClipboardSettings.self, forKey: .clipboardHistory)
       ?? ClipboardSettings()
+    backdrop = try container.decodeIfPresent(String.self, forKey: .backdrop) ?? Backdrop.off
   }
 
   public static let `default` = Config(
