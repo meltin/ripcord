@@ -25,9 +25,10 @@
 - Clipboard History: copied text and images, including a copied image file such as a CleanShot X
   capture, and other copied files with their Finder icons, with a preview and details of the
   selected one (a file's kind, size and path). Return pastes into the app you were in (files paste
-  as files, into Finder too),
-  ⇧⌘P pins an item to the top and ⌃X deletes it. Copies a password manager marks as concealed are
-  never recorded, and switching the command off on its settings page stops recording
+  as files, into Finder too), ⇧⌘P pins an item to the top, ⌃X deletes it and ⇧⌘X deletes all but
+  the pinned ones; the All Types menu narrows the list to text, images, files, links, emails or
+  colors. Copies a password manager marks as concealed are never recorded, and switching the
+  command off on its settings page stops recording
 - Snippets: Create Snippet saves text with a name, keyword, icon and tags from the panel, and
   Search Snippets pastes it into the app you were in. `{clipboard}`, `{date}`, `{time}`,
   `{datetime}`, `{day}` and `{uuid}` are filled in, and `{cursor}` is where the caret lands.
@@ -181,6 +182,7 @@ the settings window opens. The settings window writes every change back to it.
     "disabledApps": ["com.1password.1password", "com.apple.keychainaccess"]
   },
   "dummyTextLanguage": "ja",
+  "clipboardHistory": { "keepFor": "unlimited", "maxEntries": 300 },
   "snippets": [
     { "name": "Address", "keyword": "addr", "text": "1 Infinite Loop\nCupertino", "icon": "house",
       "tags": ["home"] }
@@ -198,7 +200,9 @@ the settings window opens. The settings window writes every change back to it.
 
 `hotkey` is `cmd`, `option` or `ctrl` (plus `shift` if you like), then `space`, `return`, an
 arrow (`left`, `right`, `up`, `down`), a letter or a digit.
-Clipboard History keeps its last 300 unpinned items (plus every pinned one) in
+Clipboard History keeps its last 300 unpinned items (plus every pinned one), for as long as
+Settings › Clipboard History says (`clipboardHistory`'s `keepFor` is `day`, `week`, `month`,
+`threeMonths`, `sixMonths`, `year` or `unlimited`, and `maxEntries` the most kept), in
 `~/Library/Application Support/Ripcord/Clipboard`, as plain text and image files; copied files
 are kept by path, not copied, so one moved or deleted since can't be pasted. An image over
 32 MB or a text over 1 MB isn't kept. Delete the folder to clear it.

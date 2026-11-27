@@ -232,10 +232,10 @@ private func temporaryDirectory() -> URL {
     let image = try png(width: 1, height: 1)
     try history.add(.image(image, fileExtension: "png", width: 1, height: 1))
     let imageURL = try #require(history.imageURL(of: history.items[0]))
-    for index in 0..<ClipboardHistory.limit {
+    for index in 0..<history.settings.maxEntries {
       try history.add(.text("\(index)"))
     }
-    #expect(history.items.count == ClipboardHistory.limit + 1)
+    #expect(history.items.count == history.settings.maxEntries + 1)
     #expect(history.items.last?.content == .text("pinned"))
     // The image was the oldest unpinned item, so it alone made room.
     #expect(history.items.contains { $0.content == .text("0") })
@@ -394,9 +394,10 @@ private func temporaryDirectory() -> URL {
     #expect(row.action == .clip(id, .paste))
     #expect(
       row.actions.map(\.title) == [
-        "Paste to App", "Copy to Clipboard", "Pin", "Delete", "Configure Command…",
+        "Paste to App", "Copy to Clipboard", "Pin", "Delete", "Delete All Entries…",
+        "Configure Command…",
       ])
-    #expect(row.actions.map(\.shortcut) == ["↵", "⇧⌘C", "⇧⌘P", "⌃X", "⇧⌘,"])
+    #expect(row.actions.map(\.shortcut) == ["↵", "⇧⌘C", "⇧⌘P", "⌃X", "⇧⌘X", "⇧⌘,"])
     #expect(row.actions.last?.action == .configureMenu(BuiltinCommand.clipboardHistory.settingsKey))
     try history.togglePin(id)
     let pinned = try #require(

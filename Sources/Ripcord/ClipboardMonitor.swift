@@ -18,6 +18,9 @@ final class ClipboardMonitor {
 
   init(directory: URL, pasteboard: NSPasteboard = .general) {
     history = ClipboardHistory(directory: directory)
+    // Nothing trimmed until the settings are read: a config that fails to load would otherwise
+    // cut a history kept longer than the default down to it on the next copy.
+    history.settings = ClipboardSettings(keepFor: .unlimited, maxEntries: .max)
     self.pasteboard = pasteboard
     // What was copied before launch isn't recorded, as it wasn't seen being copied.
     changeCount = pasteboard.changeCount
@@ -62,6 +65,17 @@ final class ClipboardMonitor {
 
   func togglePin(_ id: UUID) { update { try $0.togglePin(id) } }
   func delete(_ id: UUID) { update { try $0.delete(id) } }
+  func deleteAll() { update { try $0.deleteAll() } }
+  /// Drops what the settings no longer keep: older entries, and those past the most kept.
+  func prune() { update { try $0.prune() } }
+
+  func apply(_ settings: ClipboardSettings) {
+    guard settings != history.settings else { return }
+    update {
+      $0.settings = settings
+      try $0.prune()
+    }
+  }
 
   private func update(_ change: (inout ClipboardHistory) throws -> Void) {
     do {

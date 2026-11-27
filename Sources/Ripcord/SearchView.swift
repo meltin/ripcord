@@ -42,6 +42,9 @@ struct SearchView: View {
               // Another script's fields are new ones: a focused field gone hands the focus back.
               .id(path)
           }
+          if model.mode == .clipboard {
+            ClipTypeFilter(selection: model.clipType) { onCommand(.filterClipType($0)) }
+          }
           if model.mode == .snippets {
             // Only tags of listed snippets: one on a snippet without text would list nothing.
             TagFilter(
@@ -1348,6 +1351,32 @@ private struct CategoryFilter: View {
         Text(selection.map { groups[$0] } ?? "All Categories")
       } icon: {
         Glyph("square.grid.2x2.fill")
+      }
+    }
+    .menuStyle(.borderlessButton)
+    .fixedSize()
+    .font(.system(size: 13))
+    .foregroundStyle(.secondary)
+  }
+}
+
+/// Clipboard History's "All Types" dropdown, as Raycast's type filter.
+private struct ClipTypeFilter: View {
+  let selection: ClipType?
+  let onSelect: (ClipType?) -> Void
+
+  var body: some View {
+    Menu {
+      Button("All Types") { onSelect(nil) }
+      Divider()
+      ForEach(ClipType.allCases, id: \.self) { type in
+        Button(type.title) { onSelect(type) }
+      }
+    } label: {
+      Label {
+        Text(selection?.title ?? "All Types")
+      } icon: {
+        Glyph("line.3.horizontal.decrease")
       }
     }
     .menuStyle(.borderlessButton)

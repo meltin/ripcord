@@ -131,6 +131,8 @@ final class LauncherModel {
   var mode = LauncherMode.root
   /// The history the clipboard rows were built from, for the preview of the selected one.
   var clipboard: ClipboardHistory?
+  /// Clipboard History's type filter; nil lists every type.
+  var clipType: ClipType?
   /// The app a paste lands in: the one in front when the panel opened, as it never activates.
   var pasteTarget: String?
   var query = ""
@@ -213,6 +215,7 @@ enum SearchCommand {
   case activate(String)
   case toggleMenu(root: Bool)
   case filterTag(String?)
+  case filterClipType(ClipType?)
   case runMenuItem(Int)
   case selectMenuItem(Int)
   case editAlias(String)
@@ -481,6 +484,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     } else {
       // What was left open is dropped, filter included.
       model.snippetTag = nil
+      model.clipType = nil
       model.emojiCategory = nil
       model.mode = mode
       update("")
@@ -575,8 +579,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     model.isPickingIcon = false
     leftOpen = nil
-    // A filter left on would hide snippets or emoji the next time, unasked.
+    // A filter left on would hide snippets, clips or emoji the next time, unasked.
     model.snippetTag = nil
+    model.clipType = nil
     model.emojiCategory = nil
     model.mode = .root
     update("")
@@ -612,7 +617,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private func sections(for query: String) -> [SearchSection] {
     if model.mode == .clipboard {
       model.clipboard = clipboard.history
-      return Search.clipboardSections(for: query, history: clipboard.history)
+      return Search.clipboardSections(
+        for: query, history: clipboard.history, type: model.clipType)
     }
     if model.mode == .httpStatusCodes { return Search.httpStatusSections(for: query) }
     if model.mode == .bookmarks { return Search.bookmarkSections(for: query, file: bookmarks) }
@@ -759,6 +765,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
       }
     case .activate(let id): model.results.first { $0.id == id }.map { perform($0.action) }
     case .toggleMenu(let root): toggleMenu(root: root)
+    case .filterClipType(let type):
+      model.clipType = type
+      refreshRows(selecting: nil)
     case .filterTag(let tag):
       model.snippetTag = tag
       update(model.query)
@@ -1185,7 +1194,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.generateDummyText) || action == .copyDummyText {
       return generateDummyText(copyOnly: action == .copyDummyText)
     }
-    if action == .run(.clipboardHistory) { return open(.clipboard) }
+    if action == .run(.clipboardHistory) {
+      // Entries past their retention go as the list opens, though nothing new was copied.
+      clipboard.prune()
+      return open(.clipboard)
+    }
     if action == .run(.searchSnippets) { return open(.snippets) }
     if action == .run(.httpStatusCodes) { return open(.httpStatusCodes) }
     if action == .run(.colorHistory) { return open(.colors) }
@@ -1932,6 +1945,18 @@ final class LauncherController: NSObject, NSWindowDelegate {
     clipboard.pasteSnippet(text, trailing: trailing)
   }
 
+  /// How long and how many Clipboard History keeps, from the settings.
+  var clipboardSettings = ClipboardSettings() {
+    didSet { clipboard.apply(clipboardSettings) }
+  }
+
+  /// Every entry but the pinned ones gone, from Delete All Entries or Settings' Clear History.
+  func clearClipboardHistory() {
+    let selected = model.selected?.id
+    clipboard.deleteAll()
+    if model.mode == .clipboard { refreshRows(selecting: selected) }
+  }
+
   private func perform(_ action: SearchResult.ClipAction, on id: UUID) {
     switch action {
     case .paste, .copy:
@@ -1949,6 +1974,16 @@ final class LauncherController: NSObject, NSWindowDelegate {
       action == .delete ? clipboard.delete(id) : clipboard.togglePin(id)
       model.menu = nil
       refreshRows(selecting: action == .togglePin ? "clip:\(id)" : selected)
+    case .deleteAll:
+      // Asked first: the entries have no undo.
+      model.menu = nil
+      model.confirmation = Confirmation(
+        icon: .command(.clipboardHistory), title: "Delete All Entries?",
+        message: "Every entry but the pinned ones is deleted. This can't be undone.",
+        confirmTitle: "Delete All", action: .clip(id, .confirmDeleteAll))
+    case .confirmDeleteAll:
+      model.menu = nil
+      clearClipboardHistory()
     }
   }
 }
