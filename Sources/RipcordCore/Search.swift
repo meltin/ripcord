@@ -3,7 +3,7 @@ import Foundation
 /// Commands Ripcord runs itself, listed alongside apps.
 public enum BuiltinCommand: CaseIterable, Sendable {
   case clipboardHistory, searchSnippets, createSnippet, exportSnippets, importSnippets
-  case searchRepositories, cloneRepo, httpStatusCodes, settings
+  case searchRepositories, cloneRepo, removeRepo, httpStatusCodes, settings
   case caffeinate, decaffeinate, toggleCaffeinate, caffeinateFor, caffeinateUntil
   case caffeinateWhile, caffeinateStatus
   case sleepTimer, stopSleepTimer
@@ -22,6 +22,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .searchSnippets: "Search Snippets"
     case .searchRepositories: "Search Repositories"
     case .cloneRepo: "Clone Repo"
+    case .removeRepo: "Remove Repo"
     case .httpStatusCodes: "HTTP Status Codes"
     case .createSnippet: "Create Snippet"
     case .exportSnippets: "Export Snippets"
@@ -70,7 +71,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
       "Color Picker"
     case .cleanKeyboard: "Clean Keyboard"
     // Raycast's extension's name.
-    case .searchRepositories, .cloneRepo: "Git Repos"
+    case .searchRepositories, .cloneRepo, .removeRepo: "Git Repos"
     case .searchBookmarks, .addBookmark: "Bookmarks"
     case .searchEmoji: "Emoji & Symbols"
     case .ripcordNotes, .createNote, .searchNotes: "Notes"
@@ -88,6 +89,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .searchSnippets: "command:search-snippets"
     case .searchRepositories: "command:search-repositories"
     case .cloneRepo: "command:clone-repo"
+    case .removeRepo: "command:remove-repo"
     case .httpStatusCodes: "command:http-status-codes"
     case .createSnippet: "command:create-snippet"
     case .exportSnippets: "command:export-snippets"
@@ -229,6 +231,11 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case stopLidAwake
     /// Removes the picked color with this hex from Color History.
     case deleteColor(String)
+    /// Moves the repository to the Trash: once checked for work not committed or pushed, or,
+    /// `force`d, as it is; asked first either way.
+    case removeRepository(URL, force: Bool)
+    /// Moves the repository to the Trash, once asked.
+    case trashRepository(URL)
     /// Adds the color with this hex to Favorite Colors, or takes it out.
     case toggleFavoriteColor(String)
     /// Blocks the keyboard for this many seconds, to wipe it.
@@ -870,9 +877,11 @@ public enum Search {
 
   /// Search Repositories' list: repositories whose name or path holds the query, best first.
   /// Each opens in the app its settings give the Return pressed, or in Finder.
+  /// `removing`, for Remove Repo: Return removes a repository and ⇧⌘D force-removes it, as
+  /// Raycast's Remove Repo does.
   public static func repositorySections(
     for query: String, repositories: [Repository], settings: RepositorySettings,
-    home: String = NSHomeDirectory()
+    home: String = NSHomeDirectory(), removing: Bool = false
   ) -> [SearchSection] {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
     // A pasted absolute path is matched in its `~` form, as the paths are.
@@ -909,8 +918,18 @@ public enum Search {
           title: page.host() == "github.com" ? "Open on GitHub" : "Open Remote", symbol: "globe",
           shortcut: "⌘O", action: .open(page))
       }
+      let removals = [
+        MenuAction(
+          title: "Remove Repository", symbol: "trash", shortcut: "↵",
+          action: .removeRepository(url, force: false), isDestructive: true),
+        MenuAction(
+          title: "Force Remove Repository", symbol: "trash", shortcut: "⇧⌘D",
+          action: .removeRepository(url, force: true), isDestructive: true),
+      ]
       let menu =
-        opens + [remote].compactMap { $0 } + [
+        removing
+        ? removals
+        : opens + [remote].compactMap { $0 } + [
           MenuAction(
             title: "Show in Finder", symbol: "folder", shortcut: "⇧⌘F", action: .reveal(url)),
           MenuAction(

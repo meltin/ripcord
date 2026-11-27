@@ -102,7 +102,7 @@ enum NotesRequest {
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
   case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, colorNames
-  case convertColor, favoriteColors, colorWheel
+  case convertColor, favoriteColors, colorWheel, removeRepos
   case bookmarks
   case bookmarkForm, emoji, scriptOutput, notes
   /// `ripcord pick`: lines handed in, one to choose.
@@ -125,6 +125,7 @@ enum LauncherMode {
     case .convertColor: .convertColor
     case .favoriteColors: .favoriteColors
     case .colorWheel: .colorWheel
+    case .removeRepos: .removeRepo
     case .bookmarks: .searchBookmarks
     case .bookmarkForm: .addBookmark
     case .emoji: .searchEmoji
@@ -781,9 +782,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return Search.convertColorSections(
         for: query, lastFormat: last.flatMap(ColorFormat.init(rawValue:)))
     }
-    if model.mode == .repositories {
+    if model.mode == .repositories || model.mode == .removeRepos {
       return Search.repositorySections(
-        for: query, repositories: repositories, settings: repositorySettings)
+        for: query, repositories: repositories, settings: repositorySettings,
+        removing: model.mode == .removeRepos)
     }
     if model.mode == .snippets {
       // A tag no snippet carries any more lists nothing; drop it.
@@ -1099,6 +1101,27 @@ final class LauncherController: NSObject, NSWindowDelegate {
         let line = errors.split(separator: "\n").last.map(String.init) ?? "git clone failed."
         HUD.show(line, failed: true)
       }
+    }
+  }
+
+  /// Remove Repo: asks before moving the repository to the Trash, as Raycast's does; unless
+  /// `force`d, not at all while it holds work not committed, or commits not pushed.
+  private func removeRepository(_ url: URL, force: Bool) {
+    let name = url.lastPathComponent
+    func ask() {
+      model.menu = nil
+      model.confirmation = Confirmation(
+        icon: .command(.removeRepo), title: force ? "Force remove “\(name)”?" : "Remove “\(name)”?",
+        message: force
+          ? "This will move the repository to the Trash, including any uncommitted changes or unpushed commits."
+          : "This will move the repository to the Trash.",
+        confirmTitle: force ? "Force Remove" : "Remove", action: .trashRepository(url))
+    }
+    guard !force else { return ask() }
+    Task {
+      let problem = await Task.detached { RepositoryCheck.unsaved(in: url) }.value
+      guard let problem else { return ask() }
+      HUD.show("Cannot remove repository: \(problem)", failed: true)
     }
   }
 
@@ -1696,6 +1719,24 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return
     }
     if action == .run(.cloneRepo) { return cloneRepo() }
+    if action == .run(.removeRepo) {
+      if !(panel.isVisible && model.mode == .removeRepos) { scanRepositories() }
+      return open(.removeRepos)
+    }
+    if case .removeRepository(let url, let force) = action {
+      return removeRepository(url, force: force)
+    }
+    if case .trashRepository(let url) = action {
+      model.confirmation = nil
+      do {
+        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        HUD.show("Moved \(url.lastPathComponent) to the Trash")
+      } catch {
+        HUD.show("Couldn't move \(url.lastPathComponent) to the Trash.", failed: true)
+      }
+      repositories = repositories.filter { $0.url != url }
+      return refreshRows(selecting: nil)
+    }
     // Read before hide(), which clears what's typed in the fields.
     if case .run(let command) = action,
       [.caffeinateFor, .caffeinateUntil, .caffeinateWhile].contains(command)
@@ -2018,7 +2059,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
       .run(.searchRepositories), .run(.httpStatusCodes), .run(.sleepTimer), .run(.colorHistory),
       .run(.colorNames), .run(.convertColor), .run(.favoriteColors), .run(.colorWheel),
-      .run(.cloneRepo),
+      .run(.cloneRepo), .run(.removeRepo), .removeRepository, .trashRepository,
       .run(.cleanKeyboard), .run(.searchBookmarks), .run(.addBookmark), .deleteBookmark,
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,
@@ -2653,4 +2694,40 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
 extension String {
   fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
+/// Remove Repo's check, as Raycast's: what isn't safe elsewhere yet.
+enum RepositoryCheck {
+  /// Why `folder` can't go to the Trash as it is, or nil when everything in it is committed and,
+  /// where it has a remote, pushed.
+  nonisolated static func unsaved(in folder: URL) -> String? {
+    guard let status = git(["status", "--porcelain"], in: folder) else {
+      return "git couldn't read it."
+    }
+    if !status.isEmpty { return "There are uncommitted changes or untracked files" }
+    guard let remotes = git(["remote"], in: folder) else { return "git couldn't read it." }
+    if !remotes.isEmpty,
+      let local = git(["log", "--oneline", "--branches", "--not", "--remotes"], in: folder),
+      !local.isEmpty
+    {
+      return "There are local commits that haven't been pushed"
+    }
+    return nil
+  }
+
+  /// git's output, trimmed; nil when it couldn't run or failed.
+  nonisolated private static func git(_ arguments: [String], in folder: URL) -> String? {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+    process.arguments = arguments
+    process.currentDirectoryURL = folder
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = FileHandle.nullDevice
+    guard (try? process.run()) != nil else { return nil }
+    let output = pipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else { return nil }
+    return String(decoding: output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+  }
 }
