@@ -49,5 +49,13 @@ import Testing
     #expect(SystemAction.unhideAllApps.title == "Unhide All Hidden Apps")
     #expect(SystemAction.volumeUp.rawValue == "volume-up")
     #expect(SystemAction.unhideAllApps.rawValue == "unhide-all-apps")
+    // The old words still find them first.
+    func top(_ query: String) -> String? {
+      Search.sections(for: query, apps: [], running: [], quicklinks: [], items: [:])
+        .flatMap(\.results).first?.title
+    }
+    #expect(top("volume up") == "Turn Volume Up")
+    #expect(top("volume down") == "Turn Volume Down")
+    #expect(top("unhide") == "Unhide All Hidden Apps")
   }
 }
