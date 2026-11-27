@@ -26,6 +26,8 @@ final class SettingsModel {
   var sidebarQuery = ""
   /// Clear History on the Clipboard History page, once confirmed.
   var onClearClipboard: () -> Void = {}
+  /// Why the chosen backdrop shader isn't drawing; nil when it is, or it's off.
+  var backdropError: String?
   /// Bumped as the window opens, so the search field takes the keys every time, not only the
   /// first, when it's first put in the window.
   var sidebarFocusRequest = 0
@@ -573,6 +575,11 @@ private enum SettingText {
     detail: "Off, a keyword expands only as a word of its own, not at the end of a longer one.")
   static let disabledApps = SettingsSearch.Item(
     title: "Disabled Applications", detail: "Apps where keywords are never expanded.")
+  static let backdrop = SettingsSearch.Item(
+    title: "Backdrop",
+    detail:
+      "A Metal shader animated behind the panel's text. Add your own as .metal files to the shaders folder."
+  )
   static let keepHistoryFor = SettingsSearch.Item(
     title: "Keep History For",
     detail:
@@ -601,7 +608,10 @@ extension SettingsPage {
       switch self {
       case .general:
         [SettingText.launchAtLogin] + (updates ? [SettingText.checkForUpdates] : [])
-          + [SettingText.hotkey, SettingText.inputSource, SettingText.configFile]
+          + [
+            SettingText.hotkey, SettingText.inputSource, SettingText.backdrop,
+            SettingText.configFile,
+          ]
       case .colorPicker: [SettingText.colorFormat]
       case .scripts: [SettingText.scriptFolders]
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
@@ -1100,6 +1110,8 @@ private struct GeneralPage: View {
         HotkeyRecorder(target: .launcher, model: model, clearable: false)
       }
       Divider()
+      BackdropRow(model: model)
+      Divider()
       SettingRow(
         title: SettingText.inputSource.title, description: SettingText.inputSource.detail
       ) {
@@ -1536,6 +1548,44 @@ private struct RepositoriesSettings: View {
     }
   }
 
+}
+
+/// The panel's backdrop shader: Off, the built-in ones and the shaders folder's files, with why
+/// the chosen one isn't drawing when it doesn't compile.
+private struct BackdropRow: View {
+  @Bindable var model: SettingsModel
+
+  /// What can be chosen; a setting whose file is gone stays listed, so the picker never goes
+  /// blank.
+  private var choices: [String] {
+    let found = Backdrop.choices(in: LauncherController.shadersFolder)
+    return found.contains(model.config.backdrop) ? found : found + [model.config.backdrop]
+  }
+
+  var body: some View {
+    SettingRow(
+      title: SettingText.backdrop.title,
+      description: SettingText.backdrop.detail,
+      detail: model.backdropError.map { "Not drawing: \($0)" }
+    ) {
+      HStack(spacing: 8) {
+        Button("Open Shaders Folder") {
+          let folder = LauncherController.shadersFolder
+          try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+          NSWorkspace.shared.open(folder)
+        }
+        Picker(SettingText.backdrop.title, selection: $model.config.backdrop) {
+          ForEach(choices, id: \.self) { Text(Self.title(of: $0)).tag($0) }
+        }
+        .labelsHidden()
+        .fixedSize()
+      }
+    }
+  }
+
+  private static func title(of choice: String) -> String {
+    choice == Backdrop.off ? "Off" : choice.hasSuffix(".metal") ? choice : choice.capitalized
+  }
 }
 
 /// How long and how many Clipboard History keeps, and Clear History, as Raycast's settings.

@@ -133,6 +133,8 @@ final class LauncherModel {
   var clipboard: ClipboardHistory?
   /// Clipboard History's type filter; nil lists every type.
   var clipType: ClipType?
+  /// The backdrop shader's renderer; nil while it's off, so nothing is drawn or kept.
+  var backdrop: BackdropRenderer?
   /// The app a paste lands in: the one in front when the panel opened, as it never activates.
   var pasteTarget: String?
   var query = ""
@@ -433,11 +435,15 @@ final class LauncherController: NSObject, NSWindowDelegate {
         : NSColor(srgbRed: 0.902, green: 0.918, blue: 0.918, alpha: 0.52)
     }
     glass.contentView = NSHostingView(
-      rootView: SearchView(
-        model: model,
-        onQueryChange: { [weak self] in self?.update($0) },
-        onCommand: { [weak self] in self?.handle($0) }
-      ).background(Color(nsColor: background)))
+      rootView: ZStack {
+        Color(nsColor: background)
+        // Over the gray and under the text, as dupin and Ghostty draw theirs.
+        PanelBackdrop(model: model)
+        SearchView(
+          model: model,
+          onQueryChange: { [weak self] in self?.update($0) },
+          onCommand: { [weak self] in self?.handle($0) })
+      })
     panel.contentView = glass
 
     clipboard.onChange = { [weak self] in
@@ -471,6 +477,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     leftOpen = nil
     refreshApps()
+    loadBackdrop()
+    model.backdrop?.state.lastKeystroke = nil
+    model.backdrop?.start()
     model.pasteTarget = NSWorkspace.shared.frontmostApplication?.localizedName
     // A script added or edited since shows up; only each file's head is read.
     rescanScripts()
@@ -555,6 +564,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// `keepingMode` leaves a command's list or form as it is, to come back to (`leftOpen`).
   private func hide(keepingMode: Bool = false) {
+    model.backdrop?.stop()
     stashDraft()
     model.toast = nil
     model.argumentValues = [:]
@@ -606,6 +616,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
   }
 
   private func update(_ query: String) {
+    // The backdrop's inputs: a keystroke just now, and how long the query is.
+    if query != model.query { model.backdrop?.state.lastKeystroke = .now }
+    model.backdrop?.state.queryLength = query.count
     model.query = query
     model.sections = sections(for: query)
     model.selection = 0
@@ -1943,6 +1956,44 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// `trailing` is the delimiter kept after it.
   func pasteExpansion(_ text: String, trailing: String) {
     clipboard.pasteSnippet(text, trailing: trailing)
+  }
+
+  /// The backdrop setting: "off", a built-in shader's name, or a file in the shaders folder.
+  var backdrop = Backdrop.off {
+    didSet { if backdrop != oldValue { loadBackdrop() } }
+  }
+  /// Why the chosen backdrop isn't drawing, for Settings; nil when it is.
+  var onBackdropError: (String?) -> Void = { _ in }
+  static let shadersFolder = FileManager.default.homeDirectoryForCurrentUser
+    .appending(path: ".config/ripcord/shaders")
+
+  /// Reads the chosen shader, again each time the panel shows so a saved edit appears, and
+  /// compiles it when its text changed; off, the renderer and its Metal device go.
+  func loadBackdrop() {
+    let body: String?
+    do {
+      body = try Backdrop.body(for: backdrop, in: Self.shadersFolder)
+    } catch {
+      model.backdrop?.fail(error.localizedDescription)
+      if model.backdrop == nil { onBackdropError(error.localizedDescription) }
+      return
+    }
+    guard let body else {
+      model.backdrop = nil
+      return onBackdropError(nil)
+    }
+    if model.backdrop == nil {
+      guard let renderer = BackdropRenderer() else {
+        return onBackdropError("This Mac has no Metal device to draw a backdrop with.")
+      }
+      renderer.onError = { [weak self] message in
+        guard let self else { return }
+        // Metal calls the source "program_source"; the file's name says which one.
+        onBackdropError(message?.replacingOccurrences(of: "program_source", with: backdrop))
+      }
+      model.backdrop = renderer
+    }
+    model.backdrop?.load(body)
   }
 
   /// How long and how many Clipboard History keeps, from the settings.
