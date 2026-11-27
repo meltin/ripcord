@@ -454,4 +454,36 @@ import Testing
       MarkdownEditing.deleteBackward(at: 6, in: text, spans: MarkdownSpan.spans(in: text))
         == .remove(NSRange(location: 3, length: 3)))
   }
+
+  @Test func movesAnItemsNextLinesWithItOnTab() {
+    let text = "- a\n  b"
+    let edit = MarkdownEditing.indentItems(
+      selection: NSRange(location: 1, length: 0), in: text, spans: MarkdownSpan.spans(in: text),
+      outdent: false)
+    #expect(
+      edit.map { (text as NSString).replacingCharacters(in: $0.range, with: $0.replacement) }
+        == "  - a\n    b")
+  }
+
+  @Test func joinsANextLineThatStartsWithAStyle() {
+    let text = "- a\n  **b**"
+    // The caret rests after the spaces and the bold's marks (8).
+    #expect(
+      MarkdownEditing.deleteBackward(at: 8, in: text, spans: MarkdownSpan.spans(in: text))
+        == .remove(NSRange(location: 3, length: 3)))
+  }
+
+  @Test func joinsANextLineOnForwardDelete() {
+    let text = "- a\n  b"
+    #expect(
+      MarkdownEditing.deleteForward(at: 3, in: text, spans: MarkdownSpan.spans(in: text))
+        == .remove(NSRange(location: 3, length: 3)))
+  }
+
+  @Test func turnsAnEmptyNextLineIntoTheNextItem() {
+    let text = "1. a\n   "
+    #expect(
+      apply(text, MarkdownEditing.newline(at: 8, in: text, spans: MarkdownSpan.spans(in: text)))
+        == "1. a\n2. ")
+  }
 }

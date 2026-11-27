@@ -55,7 +55,12 @@ public enum MarkdownEditing {
           MarkdownSpan.isItem($0.style) && $0.range.location < span.range.location
         }), let ownerMark = owner.marks.first
       else { return nil }
-      let insert = "\n" + nextMark(after: string.substring(with: ownerMark), style: owner.style)
+      let next = nextMark(after: string.substring(with: ownerMark), style: owner.style)
+      // An empty next line becomes the next item where it is, rather than leaving its spaces.
+      if let prefix = span.marks.first, NSMaxRange(span.range) == NSMaxRange(prefix) {
+        return (prefix, next, prefix.location + (next as NSString).length)
+      }
+      let insert = "\n" + next
       return (NSRange(location: caret, length: 0), insert, caret + (insert as NSString).length)
     }
     let mark = string.substring(with: prefix)
@@ -74,15 +79,24 @@ public enum MarkdownEditing {
     selection: NSRange, in text: String, spans: [MarkdownSpan], outdent: Bool
   ) -> (range: NSRange, replacement: String, selection: NSRange)? {
     let string = text as NSString
-    let range = string.lineRange(for: selection)
+    var range = string.lineRange(for: selection)
+    guard
+      spans.contains(where: {
+        MarkdownSpan.isItem($0.style) && NSLocationInRange($0.range.location, range)
+      })
+    else { return nil }
+    // An item's next lines (Shift-Return) move with it, or they'd fall out of it.
+    while NSMaxRange(range) < string.length,
+      spans.contains(where: { isContinuation($0) && $0.range.location == NSMaxRange(range) })
+    {
+      range = NSUnionRange(
+        range, string.lineRange(for: NSRange(location: NSMaxRange(range), length: 0)))
+    }
     let items = spans.filter {
-      switch $0.style {
-      case .bullet, .ordered, .task: NSLocationInRange($0.range.location, range)
-      default: false
-      }
+      (MarkdownSpan.isItem($0.style) || isContinuation($0))
+        && NSLocationInRange($0.range.location, range)
     }
     .map(\.range.location)
-    guard !items.isEmpty else { return nil }
     var replacement = ""
     var shifts: [(at: Int, by: Int)] = []
     var location = range.location
@@ -338,15 +352,24 @@ public enum MarkdownEditing {
       guard block.range.length == 0 else { return .nothing }
       return .remove(block.marks.reduce(block.range) { NSUnionRange($0, $1) })
     }
+    // At an item's next line's start, it joins the line above, as a soft line break is taken
+    // back; its hidden spaces may run on into a style's opening marks, and a CRLF goes whole.
+    let merged = hidden(in: spans)
+    for span in spans where isContinuation(span) {
+      guard let prefix = span.marks.first, prefix.location > 0,
+        NSMaxRange(prefix) == caret
+          || merged.contains(where: { $0.location == prefix.location && NSMaxRange($0) == caret })
+      else { continue }
+      let string = text as NSString
+      let crlf = prefix.location > 1 && string.character(at: prefix.location - 2) == 0x0D
+      let lineBreak = crlf ? 2 : 1
+      return .remove(
+        NSRange(location: prefix.location - lineBreak, length: prefix.length + lineBreak))
+    }
     // At a line style's start: a list item, task or quote goes back to a plain line, and so
     // does an empty heading, while a written one stays, as in Raycast.
-    for span in spans where isLine(span) {
+    for span in spans where isLine(span) && !isContinuation(span) {
       guard let prefix = span.marks.first, NSMaxRange(prefix) == caret else { continue }
-      // An item's next line joins the line above, as a soft line break is taken back.
-      if case .continuation = span.style {
-        return prefix.location > 0
-          ? .remove(NSRange(location: prefix.location - 1, length: prefix.length + 1)) : .nothing
-      }
       if case .heading = span.style, NSMaxRange(span.range) != caret { return .nothing }
       return .remove(prefix)
     }
@@ -368,6 +391,19 @@ public enum MarkdownEditing {
     // At a code block's end, its closing fence isn't taken.
     if spans.contains(where: { $0.style == .fenced && $0.marks.last?.location == caret }) {
       return .nothing
+    }
+    // At the end of a line an item's next line follows: it joins, its hidden spaces with it.
+    if caret < string.length {
+      let lineBreak =
+        string.character(at: caret) == 0x0D && caret + 1 < string.length
+          && string.character(at: caret + 1) == 0x0A ? 2 : 1
+      if string.character(at: caret) == 0x0A || lineBreak == 2,
+        let next = spans.first(where: {
+          isContinuation($0) && $0.marks.first?.location == caret + lineBreak
+        }), let mark = next.marks.first
+      {
+        return .remove(NSRange(location: caret, length: lineBreak + mark.length))
+      }
     }
     let hidden = hidden(in: spans)
     var start = caret

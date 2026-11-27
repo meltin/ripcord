@@ -283,7 +283,9 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   private func runShortcut(_ event: NSEvent) -> Bool {
     let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
     // ⌘Return checks or unchecks the task the caret is on, as in Raycast.
-    if flags == .command, event.keyCode == UInt16(kVK_Return), let editor {
+    if flags == .command, event.keyCode == UInt16(kVK_Return), let editor,
+      window.firstResponder === editor, !editor.hasMarkedText()
+    {
       return editor.toggleTaskAtCaret()
     }
     if flags == .command, event.charactersIgnoringModifiers?.lowercased() == "k" {
@@ -386,9 +388,10 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
 
   /// Moves the note to the Trash, as Delete Note does in Raycast.
   private func deleteNote() {
+    // What was just typed goes with it, so Undo brings back the note as it was; a new note
+    // typed into is saved first, so it can be put back too.
+    flush()
     let note = model.note
-    pendingSave?.cancel()
-    pendingSave = nil
     let trashed: URL?
     do {
       trashed = try store.trash(note)
@@ -408,6 +411,8 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     show(next, focusing: focusing)
     guard let trashed, window.isVisible else { return }
     let toast = NotesToast(original: url, trashed: trashed)
+    // A toast that went away under the pointer may never have heard it leave.
+    model.isToastHovered = false
     withAnimation(.snappy) { model.toast = toast }
     dismissToast(toast, after: 4)
   }
@@ -423,11 +428,12 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
 
   /// Undo: the note back from the Trash, and open.
   private func undoDelete() {
-    guard let toast = model.toast else { return }
+    // The toast stays up until the note is back, so a failed Undo can be tried again.
+    guard let toast = model.toast, flushed(),
+      let note = try? store.restore(toast.trashed, to: toast.original)
+    else { return NSSound.beep() }
+    model.isToastHovered = false
     withAnimation(.snappy) { model.toast = nil }
-    guard flushed(), let note = try? store.restore(toast.trashed, to: toast.original) else {
-      return NSSound.beep()
-    }
     show(note)
   }
 
@@ -1104,13 +1110,12 @@ private struct MarkdownEditor: NSViewRepresentable {
       _ textView: NSTextView, shouldChangeTypingAttributes old: [String: Any],
       toAttributes new: [NSAttributedString.Key: Any]
     ) -> [NSAttributedString.Key: Any] {
-      // At a line's start, plain rather than the line above's indent.
-      let caret = textView.selectedRange().location
-      let string = textView.string as NSString
-      if caret == 0 || (caret <= string.length && string.character(at: caret - 1) == 0x0A) {
-        return MarkdownEditor.base
+      // At a line's start, plain rather than the line above's indent, except inside a code
+      // block, whose lines keep its inset.
+      guard let textView = textView as? NoteTextView, textView.isAtPlainLineStart else {
+        return new.shown
       }
-      return new.shown
+      return MarkdownEditor.base
     }
 
     func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
@@ -1305,10 +1310,8 @@ private struct MarkdownEditor: NSViewRepresentable {
   {
     guard let storage = textView.textStorage else { return base }
     let caret = textView.selectedRange().location
-    let string = storage.string as NSString
-    guard caret > 0, caret <= storage.length,
-      string.character(at: caret - 1) != 0x0A, string.character(at: caret - 1) != 0x0D
-    else { return base }
+    if (textView as? NoteTextView)?.isAtPlainLineStart == true || caret == 0 { return base }
+    guard caret <= storage.length else { return base }
     return storage.attributes(at: caret - 1, effectiveRange: nil).shown.filter {
       $0.key != .strikethroughStyle
     }
@@ -1428,6 +1431,18 @@ final class NoteTextView: NSTextView {
 
   /// Set while an edit made here is checked, which is already tidy.
   private(set) var isTidying = false
+
+  /// The caret is at a line's start outside a code block: what's typed there starts plain.
+  var isAtPlainLineStart: Bool {
+    let caret = selectedRange().location
+    let text = string as NSString
+    guard caret > 0, caret <= text.length else { return caret == 0 }
+    let previous = text.character(at: caret - 1)
+    guard previous == 0x0A || previous == 0x0D else { return false }
+    return !markdownSpans.contains {
+      $0.style == .fenced && $0.range.location <= caret && caret <= NSMaxRange($0.range)
+    }
+  }
 
   /// Checks or unchecks the task the caret is on; false when it isn't on one.
   func toggleTaskAtCaret() -> Bool {
