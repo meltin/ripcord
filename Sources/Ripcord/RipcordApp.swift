@@ -484,7 +484,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       guard config.quicklinks.indices.contains(index) else { return NSSound.beep() }
       let link = config.quicklinks[index]
       // As Raycast does: the text selected in the app in front fills its query.
-      let selected = link.url.contains("{query}") ? SelectedText.inFrontApp() : nil
+      let selected =
+        config.quicklinkSettings.passSelectedText && link.url.contains("{query}")
+        ? SelectedText.inFrontApp() : nil
       guard let url = link.url(for: selected ?? "") else { return NSSound.beep() }
       launcher.perform(.open(url))
     }

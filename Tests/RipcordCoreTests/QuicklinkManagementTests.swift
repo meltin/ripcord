@@ -87,3 +87,13 @@ struct QuicklinkFileTests {
     #expect(try Quicklink.merging(data, into: []).links == links)
   }
 }
+
+/// Pass Selected Text as Argument is off unless set, as Raycast's is.
+@Test func readsQuicklinkSettings() throws {
+  let empty = try JSONDecoder().decode(Config.self, from: Data(#"{"hotkey":"cmd+space"}"#.utf8))
+  #expect(!empty.quicklinkSettings.passSelectedText)
+  let on = try JSONDecoder().decode(
+    Config.self,
+    from: Data(#"{"hotkey":"cmd+space","quicklinkSettings":{"passSelectedText":true}}"#.utf8))
+  #expect(on.quicklinkSettings.passSelectedText)
+}
