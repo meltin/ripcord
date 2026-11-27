@@ -77,6 +77,9 @@ public struct ClipboardSettings: Codable, Equatable, Sendable {
   /// Whether a paste puts only the text, leaving out the formatting it was copied with, as
   /// Raycast's "Prefer pasting as plain text"; Copy to Clipboard keeps it either way.
   public var preferPlainText: Bool
+  /// Whether links' favicons and social images are fetched and shown, in Clipboard History and
+  /// for Quicklinks, as Raycast's "Show visual information for links".
+  public var showLinkPreviews: Bool
   /// Whether text in copied images is read, so a search finds them by it.
   public var textRecognition: Bool
   public var recognitionMode: RecognitionMode
@@ -85,7 +88,8 @@ public struct ClipboardSettings: Codable, Equatable, Sendable {
   public init(
     keepFor: Retention = .unlimited, maxEntries: Int = 300,
     disabledApps: [String] = defaultDisabledApps, primaryAction: PrimaryAction = .paste,
-    updateAfterAction: Bool = true, preferPlainText: Bool = true, textRecognition: Bool = true,
+    updateAfterAction: Bool = true, preferPlainText: Bool = true, showLinkPreviews: Bool = true,
+    textRecognition: Bool = true,
     recognitionMode: RecognitionMode = .fast
   ) {
     self.keepFor = keepFor
@@ -94,6 +98,7 @@ public struct ClipboardSettings: Codable, Equatable, Sendable {
     self.primaryAction = primaryAction
     self.updateAfterAction = updateAfterAction
     self.preferPlainText = preferPlainText
+    self.showLinkPreviews = showLinkPreviews
     self.textRecognition = textRecognition
     self.recognitionMode = recognitionMode
   }
@@ -110,6 +115,8 @@ public struct ClipboardSettings: Codable, Equatable, Sendable {
     updateAfterAction =
       try container.decodeIfPresent(Bool.self, forKey: .updateAfterAction) ?? true
     preferPlainText = try container.decodeIfPresent(Bool.self, forKey: .preferPlainText) ?? true
+    showLinkPreviews =
+      try container.decodeIfPresent(Bool.self, forKey: .showLinkPreviews) ?? true
     textRecognition = try container.decodeIfPresent(Bool.self, forKey: .textRecognition) ?? true
     recognitionMode =
       (try? container.decodeIfPresent(RecognitionMode.self, forKey: .recognitionMode)) ?? .fast
@@ -143,7 +150,7 @@ public enum ClipType: String, CaseIterable, Sendable {
   }
 
   /// One web address, nothing around it.
-  static func isLink(_ text: String) -> Bool {
+  public static func isLink(_ text: String) -> Bool {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.contains(where: \.isWhitespace), let url = URL(string: trimmed),
       let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme), url.host != nil

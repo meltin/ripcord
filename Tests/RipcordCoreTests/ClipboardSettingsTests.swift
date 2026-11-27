@@ -77,6 +77,7 @@ struct ClipboardSettingsTests {
       config.clipboardHistory.disabledApps == ["com.apple.Passwords", "com.apple.keychainaccess"])
     #expect(config.clipboardHistory.primaryAction == .paste)
     #expect(config.clipboardHistory.updateAfterAction)
+    #expect(config.clipboardHistory.showLinkPreviews)
   }
 
   @Test func unlimitedKeepsEveryEntry() throws {

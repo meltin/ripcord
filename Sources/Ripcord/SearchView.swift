@@ -422,6 +422,8 @@ private struct ResultIcon: View {
       tile("textformat", .purple)
     case .pick:
       tile("list.bullet", .gray)
+    case .open(let url) where result.kind == .quicklink:
+      LinkIcon(url: url) { tile("link", .blue) }
     case .open:
       tile("link", .blue)
     case .run(let command):
@@ -480,6 +482,10 @@ private struct ResultIcon: View {
         Image(nsImage: NSWorkspace.shared.icon(forFile: path))
           .resizable()
           .frame(width: 24, height: 24)
+      }
+    case .clip where result.kind == .text && ClipType.isLink(result.title):
+      LinkIcon(url: URL(string: result.title.trimmingCharacters(in: .whitespaces))) {
+        tile("doc.text", .gray)
       }
     case .clip:
       if let thumbnail = result.thumbnail {
@@ -679,6 +685,15 @@ private struct ClipPreview: View {
         switch item.content {
         case .text(let text):
           ScrollView {
+            // A link's social image over it, as Raycast shows a copied link.
+            if ClipType.isLink(text),
+              let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let image = LinkPreviews.shared.image(for: url)
+            {
+              Thumbnail(url: image, maxPixelSize: 800, cornerRadius: 10)
+                .frame(maxWidth: .infinity, maxHeight: 180)
+                .padding([.horizontal, .top], 16)
+            }
             // A 1 MB clip would stall layout; the start is what anyone reads here.
             Text(String(text.prefix(20_000)))
               .font(.system(size: Metrics.previewFontSize))
@@ -2352,6 +2367,22 @@ extension LauncherMode {
     case .snippetForm, .bookmarkForm: ""
     case .scriptOutput: "Script Output"
     case .pick: "Pick a Line…"
+    }
+  }
+}
+
+/// A link's favicon in a row, once fetched; `placeholder` until then, or with link previews off.
+private struct LinkIcon<Placeholder: View>: View {
+  let url: URL?
+  @ViewBuilder let placeholder: () -> Placeholder
+
+  var body: some View {
+    if let url, let icon = LinkPreviews.shared.icon(for: url) {
+      Thumbnail(url: icon, maxPixelSize: 64)
+        .frame(width: 24, height: 24)
+        .clipShape(RoundedRectangle(cornerRadius: 5))
+    } else {
+      placeholder()
     }
   }
 }

@@ -636,6 +636,11 @@ private enum SettingText {
     title: "Prefer Pasting as Plain Text",
     detail:
       "When enabled, pasting will prioritise plain text over restoring the original formats.")
+  static let showLinkPreviews = SettingsSearch.Item(
+    title: "Show Visual Information for Links",
+    detail:
+      "When enabled, social card images and favicons are fetched and displayed for links, here and for Quicklinks."
+  )
   static let updateAfterAction = SettingsSearch.Item(
     title: "Update History After Action",
     detail:
@@ -690,7 +695,7 @@ extension SettingsPage {
           SettingText.keepHistoryFor, SettingText.maxEntries, SettingText.clearHistory,
           SettingText.textRecognition, SettingText.recognitionMode,
           SettingText.clipboardDisabledApps, SettingText.clipboardPrimaryAction,
-          SettingText.preferPlainText, SettingText.updateAfterAction,
+          SettingText.preferPlainText, SettingText.showLinkPreviews, SettingText.updateAfterAction,
         ]
       case .snippets:
         [
@@ -1781,6 +1786,17 @@ private struct ClipboardHistorySettings: View {
       ) {
         Toggle(
           SettingText.preferPlainText.title, isOn: $model.config.clipboardHistory.preferPlainText
+        )
+        .toggleStyle(.switch)
+        .labelsHidden()
+      }
+      Divider()
+      SettingRow(
+        title: SettingText.showLinkPreviews.title, description: SettingText.showLinkPreviews.detail
+      ) {
+        Toggle(
+          SettingText.showLinkPreviews.title,
+          isOn: $model.config.clipboardHistory.showLinkPreviews
         )
         .toggleStyle(.switch)
         .labelsHidden()

@@ -236,7 +236,11 @@ bundle IDs whose copies aren't recorded, `primaryAction` is `paste` or `copy` (w
 and `updateAfterAction` (on by default) moves an entry to the top once it's pasted or copied.
 A text copied with formatting keeps it, as an RTF or HTML file in `formats`; `preferPlainText` (on
 by default, as Raycast's Prefer pasting as plain text) leaves it out of a paste, while Copy to
-Clipboard puts it back either way.
+Clipboard puts it back either way. `showLinkPreviews` (on by default, as Raycast's Show visual
+information for links) fetches favicons and social images with LinkPresentation, keeping them in
+`~/Library/Caches/Ripcord/Links`: a Quicklink's or copied link's site home page is requested for
+its favicon when its row shows, and a copied link's own address, query and all, once its preview
+shows. Off, Ripcord requests nothing.
 `textRecognition` (on by default) reads the text in copied images for search, kept in
 `history.json`, and `recognitionMode` is `fast` or `accurate`; Accurate also reads Japanese and
 other non-Latin scripts. When Fast finds nothing in an image, Ripcord reads it again as Accurate.
