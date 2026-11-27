@@ -1465,20 +1465,23 @@ final class NoteTextView: NSTextView {
   }
 
   override func insertText(_ string: Any, replacementRange: NSRange) {
-    startLineAfterFinalBlock(replacementRange)
+    startLineAfterFinalBlock(for: string, replacementRange)
     super.insertText(string, replacementRange: replacementRange)
   }
 
   override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
-    startLineAfterFinalBlock(replacementRange)
+    startLineAfterFinalBlock(for: string, replacementRange)
     super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
   }
 
   /// What's typed or composed after a code block that ends the note goes on the line below.
   /// Done before the input method's own edit, so its composing isn't broken.
-  private func startLineAfterFinalBlock(_ replacementRange: NSRange) {
+  /// Nothing (an input method clearing its text) and a line break (Return) need no line.
+  private func startLineAfterFinalBlock(for input: Any, _ replacementRange: NSRange) {
+    let typed = (input as? NSAttributedString)?.string ?? (input as? String) ?? ""
     let caret = selectedRange()
-    guard replacementRange.location == NSNotFound, caret.length == 0, !hasMarkedText(),
+    guard let first = typed.first, !first.isNewline,
+      replacementRange.location == NSNotFound, caret.length == 0, !hasMarkedText(),
       let edit = MarkdownEditing.lineAfterFinalBlock(
         at: caret.location, in: string, spans: markdownSpans)
     else { return }
