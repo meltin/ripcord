@@ -82,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     launcher.onOpenSettings = { [weak self] in self?.openSettings() }
     launcher.onNotes = { [weak self] in self?.notes.handle($0) }
     notes.onBrowse = { [weak self] in self?.launcher.perform(.run(.searchNotes)) }
+    notes.onSettings = { [weak self] in self?.settings.show(configuring: "command:ripcord-notes") }
     launcher.onConfigure = { [weak self] in self?.settings.show(configuring: $0) }
     launcher.settings = settings.model
     launcher.onError = { [weak self] in self?.showError($0) }

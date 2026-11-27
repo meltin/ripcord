@@ -14,6 +14,8 @@ final class NotesModel {
   var focusRequest = 0
   /// The pointer is over the window: its buttons show, as Raycast Notes shows them.
   var isHovered = false
+  /// Zoom In and Zoom Out's scale of the text.
+  var zoom: CGFloat = 1
 
   init(note: Note) {
     self.note = note
@@ -29,12 +31,20 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   private let model: NotesModel
   /// Search Notes, in the launcher, for ⌘P.
   var onBrowse: () -> Void = {}
+  /// Settings' Notes page, for Open Notes Settings.
+  var onSettings: () -> Void = {}
+  private let actionsModel = NotesActionsModel()
+  /// The note's text as last laid out, for the window to fit when auto-sizing comes back on.
+  private var textHeight: CGFloat = 0
   private var pendingSave: DispatchWorkItem?
   /// Reads the note again while the window shows, to pick up edits made in another editor.
   private var watch: Timer?
   /// What the last tick read, so a file read halfway through being written isn't taken.
   private var lastSeen: String?
   private static let lastNoteKey = "lastNote"
+  private static let autoSizingKey = "notesWindowAutoSizing"
+  private static let hiddenWhileSharingKey = "notesHiddenWhileSharing"
+  private static let zoomKey = "notesZoom"
   private static let saveDelay = 0.6
 
   /// Raycast Notes' window, measured: 396pt wide, 144pt tall empty, 39pt in from the right of
@@ -66,6 +76,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
         onTextChange: { [weak self] in self?.scheduleSave() },
         onReload: { [weak self] in self?.reload() },
         onSaveAsNew: { [weak self] in self?.saveAsNew() },
+        onActions: { [weak self] in self?.showActions() },
         onTextHeight: { [weak self] in self?.fit(textHeight: $0) },
         onHover: { [weak self] in self?.hover($0) }))
     // The window's size follows the note, not the view's ideal size.
@@ -76,9 +87,43 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     window.contentView = content
     window.delegate = self
     window.onEscape = { [weak self] in self?.hide() }
+    window.onKeyEquivalent = { [weak self] in self?.runShortcut($0) ?? false }
+    window.sharingType = Self.isHiddenWhileSharing ? .none : .readOnly
+    if !Self.isAutoSizing { window.styleMask.insert(.resizable) }
     Self.showTrafficLights(false, of: window)
     return window
   }()
+
+  private lazy var actionsPanel: NotesActionsPanel = {
+    let panel = NotesActionsPanel(
+      contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered,
+      defer: false)
+    panel.isFloatingPanel = true
+    // Over the note's window, which floats too.
+    panel.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
+    panel.isOpaque = false
+    panel.backgroundColor = .clear
+    panel.hasShadow = true
+    panel.hidesOnDeactivate = false
+    panel.isReleasedWhenClosed = false
+    panel.contentViewController = actionsContent
+    panel.delegate = self
+    panel.onEscape = { [weak self] in self?.closeActions() }
+    return panel
+  }()
+
+  private lazy var actionsContent = NSHostingController(
+    rootView: NotesActionsView(
+      model: actionsModel, onRun: { [weak self] in self?.run($0) },
+      onClose: { [weak self] in self?.closeActions() }))
+
+  private static var isAutoSizing: Bool {
+    UserDefaults.standard.object(forKey: autoSizingKey) as? Bool ?? true
+  }
+
+  private static var isHiddenWhileSharing: Bool {
+    UserDefaults.standard.bool(forKey: hiddenWhileSharingKey)
+  }
 
   init(store: NoteStore) {
     self.store = store
@@ -86,6 +131,152 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     let last = UserDefaults.standard.string(forKey: Self.lastNoteKey)
       .flatMap { store.read(URL(fileURLWithPath: $0)) }
     model = NotesModel(note: last ?? store.list().first ?? store.newNote())
+    let zoom = UserDefaults.standard.double(forKey: Self.zoomKey)
+    model.zoom = zoom > 0 ? zoom : 1
+  }
+
+  /// Raycast Notes' actions that Ripcord has: what ⌘K lists and what their keys run.
+  private var actions: [NotesAction] {
+    [
+      NotesAction(
+        title: "New Note", symbol: "plus", keys: ["n"], modifiers: .command,
+        run: { [weak self] in self?.create() }),
+      NotesAction(
+        title: "Duplicate Note", symbol: "plus.square.on.square", keys: ["d"], modifiers: .command,
+        run: { [weak self] in self?.duplicate() }),
+      NotesAction(
+        title: "Browse Notes", symbol: "rectangle.stack", keys: ["p"], modifiers: .command,
+        run: { [weak self] in self?.browse() }),
+      NotesAction(
+        title: "Find in Note", symbol: "magnifyingglass", keys: ["f"], modifiers: .command,
+        startsSection: true, run: { [weak self] in self?.find() }),
+      NotesAction(
+        title: Self.isAutoSizing ? "Disable Window Auto-Sizing" : "Enable Window Auto-Sizing",
+        symbol: "macwindow", keys: ["/"], modifiers: [.command, .shift], startsSection: true,
+        run: { [weak self] in self?.toggleAutoSizing() }),
+      NotesAction(
+        title: Self.isHiddenWhileSharing
+          ? "Show While Screen Sharing" : "Hide While Screen Sharing",
+        symbol: "eye.slash", keys: ["h"], modifiers: [.command, .shift],
+        run: { [weak self] in self?.toggleHiddenWhileSharing() }),
+      NotesAction(
+        title: "Actual Size", symbol: "1.magnifyingglass", keys: ["0"], modifiers: .command,
+        isEnabled: model.zoom != 1, startsSection: true, run: { [weak self] in self?.zoom(to: 1) }
+      ),
+      NotesAction(
+        title: "Zoom In", symbol: "plus.magnifyingglass", keys: ["+", "="], modifiers: .command,
+        isEnabled: model.zoom < Self.zoomRange.upperBound,
+        run: { [weak self] in self?.zoom(by: 1.1) }),
+      NotesAction(
+        title: "Zoom Out", symbol: "minus.magnifyingglass", keys: ["-"], modifiers: .command,
+        isEnabled: model.zoom > Self.zoomRange.lowerBound,
+        run: { [weak self] in self?.zoom(by: 1 / 1.1) }),
+      NotesAction(
+        title: "Open Notes Settings", symbol: "gearshape", keys: [","], modifiers: .command,
+        startsSection: true, run: { [weak self] in self?.onSettings() }),
+      NotesAction(
+        title: "Delete Note", symbol: "trash", keys: ["x"], modifiers: .control,
+        isDestructive: true, startsSection: true, run: { [weak self] in self?.deleteNote() }),
+    ]
+  }
+
+  private static let zoomRange: ClosedRange<CGFloat> = 0.6...2
+
+  /// ⌘K opens the actions; the others run theirs.
+  private func runShortcut(_ event: NSEvent) -> Bool {
+    let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+    if flags == .command, event.charactersIgnoringModifiers?.lowercased() == "k" {
+      showActions()
+      return true
+    }
+    guard let action = actions.first(where: { $0.matches(event) }) else { return false }
+    if action.isEnabled { action.run() } else { NSSound.beep() }
+    return true
+  }
+
+  /// Raycast Notes' ⌘K panel, below the buttons and over the note.
+  private func showActions() {
+    actionsModel.actions = actions
+    actionsModel.filter = ""
+    let content = actionsContent.sizeThatFits(
+      in: NSSize(width: NotesActionsView.width, height: .greatestFiniteMagnitude))
+    let frame = window.frame
+    actionsPanel.setContentSize(content)
+    actionsPanel.setFrameTopLeftPoint(
+      NSPoint(x: frame.maxX - 38 - content.width, y: frame.maxY - 50))
+    window.addChildWindow(actionsPanel, ordered: .above)
+    actionsPanel.makeKeyAndOrderFront(nil)
+  }
+
+  private func closeActions() {
+    guard actionsPanel.isVisible else { return }
+    window.removeChildWindow(actionsPanel)
+    actionsPanel.orderOut(nil)
+    window.makeKey()
+  }
+
+  private func run(_ action: NotesAction) {
+    closeActions()
+    action.run()
+  }
+
+  private func duplicate() {
+    guard flushed() else { return NSSound.beep() }
+    do {
+      show(try store.save(model.text, over: store.newNote()))
+    } catch {
+      model.problem = error.localizedDescription
+    }
+  }
+
+  /// The editor's find bar, as ⌘F shows it in a text view.
+  private func find() {
+    bringForward()
+    DispatchQueue.main.async {
+      let item = NSMenuItem()
+      item.tag = NSTextFinder.Action.showFindInterface.rawValue
+      NSApp.sendAction(#selector(NSTextView.performTextFinderAction(_:)), to: nil, from: item)
+    }
+  }
+
+  private func toggleAutoSizing() {
+    UserDefaults.standard.set(!Self.isAutoSizing, forKey: Self.autoSizingKey)
+    // Without auto-sizing, the window is sized by hand.
+    if Self.isAutoSizing {
+      window.styleMask.remove(.resizable)
+      fit(textHeight: textHeight)
+    } else {
+      window.styleMask.insert(.resizable)
+    }
+  }
+
+  private func toggleHiddenWhileSharing() {
+    UserDefaults.standard.set(!Self.isHiddenWhileSharing, forKey: Self.hiddenWhileSharingKey)
+    window.sharingType = Self.isHiddenWhileSharing ? .none : .readOnly
+  }
+
+  private func zoom(by factor: CGFloat) {
+    zoom(to: model.zoom * factor)
+  }
+
+  private func zoom(to scale: CGFloat) {
+    let clamped = min(max(scale, Self.zoomRange.lowerBound), Self.zoomRange.upperBound)
+    // Back to exactly 1 when a step lands near it, so Actual Size reads as such.
+    model.zoom = abs(clamped - 1) < 0.01 ? 1 : clamped
+    UserDefaults.standard.set(model.zoom, forKey: Self.zoomKey)
+  }
+
+  /// Moves the note to the Trash, as Delete Note does in Raycast.
+  private func deleteNote() {
+    let note = model.note
+    pendingSave?.cancel()
+    pendingSave = nil
+    do {
+      try store.trash(note)
+    } catch {
+      return NSSound.beep()
+    }
+    show(store.list().first { $0.url != note.url } ?? store.newNote())
   }
 
   func handle(_ request: NotesRequest) {
@@ -186,6 +377,8 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
 
   /// As tall as the note, top edge kept, up to the screen's bottom, as Raycast Notes grows.
   private func fit(textHeight: CGFloat) {
+    self.textHeight = textHeight
+    guard Self.isAutoSizing else { return }
     let chrome = NotesView.headerHeight + NotesView.footerHeight
     let screen = window.screen ?? .main
     let top = window.frame.maxY
@@ -274,6 +467,13 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     flush()
   }
 
+  /// The actions close when something else is clicked, as a menu does.
+  func windowDidResignKey(_ notification: Notification) {
+    guard notification.object as? NSWindow === actionsPanel, actionsPanel.isVisible else { return }
+    window.removeChildWindow(actionsPanel)
+    actionsPanel.orderOut(nil)
+  }
+
   func windowWillClose(_ notification: Notification) {
     flush()
     stopWatching()
@@ -283,6 +483,8 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
 /// A panel that can take keys while another app stays in front.
 final class NotesPanel: NSPanel {
   var onEscape: () -> Void = {}
+  /// The note's actions' keys, as ⌘K lists them; true when one ran.
+  var onKeyEquivalent: (NSEvent) -> Bool = { _ in false }
 
   override var canBecomeKey: Bool { true }
 
@@ -309,6 +511,7 @@ final class NotesPanel: NSPanel {
       return NSApp.sendAction(
         flags.contains(.shift) ? Selector(("redo:")) : Selector(("undo:")), to: nil, from: self)
     }
+    if onKeyEquivalent(event) { return true }
     return super.performKeyEquivalent(with: event)
   }
 }
@@ -320,6 +523,7 @@ private struct NotesView: View {
   let onTextChange: () -> Void
   let onReload: () -> Void
   let onSaveAsNew: () -> Void
+  let onActions: () -> Void
   let onTextHeight: (CGFloat) -> Void
   let onHover: (Bool) -> Void
 
@@ -339,9 +543,9 @@ private struct NotesView: View {
         HStack(spacing: 0) {
           Spacer()
           HStack(spacing: 0) {
-            button("command", help: "Actions (⌘K)", key: "k") {}
-            button("rectangle.stack", help: "Browse Notes (⌘P)", key: "p", action: onBrowse)
-            button("plus", help: "New Note (⌘N)", key: "n", action: onCreate)
+            button("command", help: "Actions (⌘K)", action: onActions)
+            button("rectangle.stack", help: "Browse Notes (⌘P)", action: onBrowse)
+            button("plus", help: "New Note (⌘N)", action: onCreate)
           }
           .padding(.horizontal, 6)
           .frame(height: 34)
@@ -363,7 +567,7 @@ private struct NotesView: View {
       }
       MarkdownEditor(
         text: $model.text, noteURL: model.note.url, focusRequest: model.focusRequest,
-        onChange: onTextChange, onHeight: onTextHeight)
+        zoom: model.zoom, onChange: onTextChange, onHeight: onTextHeight)
       ZStack {
         Text("\(Self.shownCount(of: model.text)) characters")
           .font(.system(size: 13))
@@ -391,16 +595,14 @@ private struct NotesView: View {
     return text.count - hidden.reduce(0) { $0 + $1.length }
   }
 
-  private func button(
-    _ symbol: String, help: String, key: KeyEquivalent, action: @escaping () -> Void
-  ) -> some View {
+  /// The window's keys run these, through its actions.
+  private func button(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
     Button(action: action) {
       Glyph(symbol, pointSize: 17).frame(width: 27, height: 28)
     }
     .buttonStyle(.plain)
     .foregroundStyle(.primary)
     .help(help)
-    .keyboardShortcut(key, modifiers: .command)
   }
 }
 
@@ -431,6 +633,8 @@ private struct MarkdownEditor: NSViewRepresentable {
   let noteURL: URL
   /// Bumped to put the caret in the editor.
   let focusRequest: Int
+  /// Zoom In and Zoom Out's scale.
+  let zoom: CGFloat
   let onChange: () -> Void
   /// How tall the text is laid out, for the window to fit it.
   let onHeight: (CGFloat) -> Void
@@ -470,6 +674,17 @@ private struct MarkdownEditor: NSViewRepresentable {
     textView.allowsUndo = true
     textView.isAutomaticQuoteSubstitutionEnabled = false
     textView.isAutomaticDashSubstitutionEnabled = false
+    textView.usesFindBar = true
+    textView.isIncrementalSearchingEnabled = true
+    // The window grows to keep the text in view under ⌘F's find bar.
+    context.coordinator.findBarObservation = scrollView.observe(\.isFindBarVisible) {
+      [weak textView, coordinator = context.coordinator] _, _ in
+      MainActor.assumeIsolated {
+        if let textView { coordinator.reportHeight(of: textView) }
+      }
+    }
+    scrollView.allowsMagnification = true
+    scrollView.magnification = zoom
     // Raycast Notes' margins: 24pt from the sides, text 65pt from the window's top.
     textView.textContainerInset = NSSize(width: 19, height: 13)
     textView.font = .systemFont(ofSize: Self.fontSize)
@@ -503,6 +718,7 @@ private struct MarkdownEditor: NSViewRepresentable {
       }
     }
     context.coordinator.noteURL = noteURL
+    if scrollView.magnification != zoom { scrollView.magnification = zoom }
     context.coordinator.reportHeight(of: textView)
     if context.coordinator.focusRequest != focusRequest {
       context.coordinator.focusRequest = focusRequest
@@ -512,15 +728,16 @@ private struct MarkdownEditor: NSViewRepresentable {
 
   func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
-  final class Coordinator: NSObject, NSTextViewDelegate {
+  @MainActor final class Coordinator: NSObject, NSTextViewDelegate {
     var parent: MarkdownEditor
     var focusRequest: Int
     /// The editor is being given another note's text: no change of the user's to pass on.
     var isReplacing = false
     var noteURL: URL?
     var scrollerObserver: NSObjectProtocol?
+    var findBarObservation: NSKeyValueObservation?
 
-    deinit {
+    isolated deinit {
       if let scrollerObserver { NotificationCenter.default.removeObserver(scrollerObserver) }
     }
 
@@ -540,12 +757,16 @@ private struct MarkdownEditor: NSViewRepresentable {
 
     /// Laid out first, then passed on after this update, as resizing the window lays it out
     /// again.
-    @MainActor func reportHeight(of textView: NSTextView) {
+    func reportHeight(of textView: NSTextView) {
       guard let layoutManager = textView.layoutManager, let container = textView.textContainer
       else { return }
       layoutManager.ensureLayout(for: container)
+      let scrollView = textView.enclosingScrollView
+      let findBar =
+        scrollView?.isFindBarVisible == true ? scrollView?.findBarView?.frame.height ?? 0 : 0
       let height =
-        layoutManager.usedRect(for: container).height + textView.textContainerInset.height * 2
+        (layoutManager.usedRect(for: container).height + textView.textContainerInset.height * 2)
+        * (scrollView?.magnification ?? 1) + findBar
       let onHeight = parent.onHeight
       DispatchQueue.main.async { onHeight(height) }
     }
