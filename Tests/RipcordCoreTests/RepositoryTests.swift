@@ -120,4 +120,15 @@ import Testing
     #expect(CloneRepo.folderName(for: "https://github.com/o/repo.git") == "repo")
     #expect(CloneRepo.folderName(for: "git@github.com:o/tool") == "tool")
   }
+
+  /// Remove Repo's list: Return removes, ⇧⌘D force-removes, as Raycast's does.
+  @Test func removeRepoOffersRemoveAndForceRemove() {
+    let repository = Repository(url: URL(fileURLWithPath: "/Users/al/dev/ripcord"), remote: nil)
+    let row = Search.repositorySections(
+      for: "", repositories: [repository], settings: RepositorySettings(), removing: true
+    ).first?.results.first
+    #expect(row?.actions.map(\.title) == ["Remove Repository", "Force Remove Repository"])
+    #expect(row?.action == .removeRepository(repository.url, force: false))
+    #expect(row?.actions.last?.shortcut == "⇧⌘D")
+  }
 }

@@ -107,7 +107,8 @@ struct SearchView: View {
       } else if model.mode == .emoji {
         EmojiGrid(model: model, onCommand: onCommand)
       } else if [
-        .repositories, .httpStatusCodes, .colors, .colorNames, .convertColor, .favoriteColors,
+        .repositories, .removeRepos, .httpStatusCodes, .colors, .colorNames, .convertColor,
+        .favoriteColors,
         .bookmarks, .notes, .pick,
       ].contains(
         model.mode)
@@ -275,6 +276,10 @@ private struct EmptyState: View {
       ""
     case .repositories where query.trimmingCharacters(in: .whitespaces).isEmpty:
       "Repositories in the folders set under Settings › Git Repositories show up here."
+    case .removeRepos where query.trimmingCharacters(in: .whitespaces).isEmpty:
+      "Repositories in the folders set under Settings › Git Repositories show up here."
+    case .removeRepos:
+      "No repository matches “\(query)”."
     case .repositories:
       "No repository matches “\(query)”."
     case .notes where query.trimmingCharacters(in: .whitespaces).isEmpty:
@@ -466,6 +471,8 @@ private struct ResultIcon: View {
       }
     case .toggleFavoriteColor:
       tile("star", .yellow)
+    case .removeRepository, .trashRepository:
+      tile("trash", .gray)
     case .deleteColor, .deleteBookmark:
       tile("trash", .gray)
     case .editBookmark, .moveBookmarkMenu, .moveBookmark:
@@ -604,6 +611,7 @@ extension BuiltinCommand {
     case .searchSnippets: "doc.plaintext.fill"
     case .searchRepositories: "arrow.triangle.branch"
     case .cloneRepo: "square.and.arrow.down"
+    case .removeRepo: "trash"
     case .httpStatusCodes: "network"
     case .createSnippet: "doc.badge.plus"
     case .exportSnippets: "square.and.arrow.up"
@@ -639,7 +647,7 @@ extension BuiltinCommand {
     switch self {
     case .clipboardHistory, .quit: .red
     case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .blue
-    case .searchRepositories, .cloneRepo: .orange
+    case .searchRepositories, .cloneRepo, .removeRepo: .orange
     case .caffeinate, .decaffeinate, .toggleCaffeinate, .caffeinateFor, .caffeinateUntil,
       .caffeinateWhile, .caffeinateStatus:
       .brown
@@ -2396,6 +2404,7 @@ extension LauncherMode {
     case .clipboard: "Search Clipboard History…"
     case .snippets: "Search Snippets…"
     case .repositories: "Search Repositories…"
+    case .removeRepos: "Search repositories to remove…"
     case .httpStatusCodes: "Search HTTP Status Codes…"
     case .colors: "Search Colors…"
     case .colorNames: "Search HEX (#00ff00)"

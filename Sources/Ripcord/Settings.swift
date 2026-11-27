@@ -780,7 +780,7 @@ extension BuiltinCommand {
     switch self {
     case .clipboardHistory: .clipboardHistory
     case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .snippets
-    case .searchRepositories, .cloneRepo: .repositories
+    case .searchRepositories, .cloneRepo, .removeRepo: .repositories
     case .caffeinate, .decaffeinate, .toggleCaffeinate, .caffeinateFor, .caffeinateUntil,
       .caffeinateWhile, .caffeinateStatus:
       .coffee
