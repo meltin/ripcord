@@ -53,8 +53,9 @@
 - System Actions: lock the screen, show the screen saver, log out, restart, shut down, sleep,
   control music and volume, hide, unhide or quit apps, restart the frontmost app, open or empty the
   Trash, eject disks, show the desktop, and toggle Dark Mode or Finder's hidden files. Ones that
-  lose work ask first. As Raycast's, Set Volume takes a level typed after it (`set volume 40`), and
-  Set Volume to 0%, 25%, 50%, 75% and 100% set those
+  lose work ask first; Settings › System Actions turns Empty Trash's and the Quit Alls' warnings
+  off and picks the apps each Quit All leaves open, as Raycast's do. As Raycast's, Set Volume takes
+  a level typed after it (`set volume 40`), and Set Volume to 0%, 25%, 50%, 75% and 100% set those
 - Git Repositories: Search Repositories lists the repositories in the folders you pick (`~/dev`
   and the like) and opens one in the app you assign to ↵, ⌘↵, ⌥↵, ⌃↵ or ⇧↵, an editor or a
   terminal; ⌘K adds Open on GitHub, Show in Finder and Copy Path. Clone Repo, as Raycast's Git
@@ -241,6 +242,10 @@ the settings window opens. The settings window writes every change back to it.
   "httpStatusPicture": "none",
   "notes": { "escapeLosesFocus": false, "moveCheckedTasksToBottom": false },
   "quicklinkSettings": { "passSelectedText": false, "showDeleteWarning": true },
+  "systemActions": {
+    "warnBeforeEmptyingTrash": true, "warnBeforeQuittingAll": true, "quitAllExcluded": [],
+    "warnBeforeQuittingOthers": true, "quitOthersExcluded": []
+  },
   "favorites": ["com.apple.Safari", "command:search-snippets"],
   "snippetExpansion": {
     "enabled": true, "mode": "immediately", "withinWords": false,

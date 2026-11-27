@@ -725,6 +725,21 @@ private enum SettingText {
   static let quicklinkDeleteWarning = SettingsSearch.Item(
     title: "Show Warning Before Deleting Quicklinks",
     detail: "Ask for confirmation before a Quicklink is deleted.")
+  static let warnBeforeEmptyingTrash = SettingsSearch.Item(
+    title: "Show Warning Before Emptying Trash",
+    detail: "Ask before emptying; it can't be undone.")
+  static let warnBeforeQuittingAll = SettingsSearch.Item(
+    title: "Show Warning Before Quitting Applications",
+    detail: "Ask before every open app is told to quit.")
+  static let quitAllExcluded = SettingsSearch.Item(
+    title: "Excluded Applications",
+    detail: "These applications will remain open when quitting all applications.")
+  static let warnBeforeQuittingOthers = SettingsSearch.Item(
+    title: "Show Warning Before Quitting Applications",
+    detail: "Ask before every app but the frontmost one is told to quit.")
+  static let quitOthersExcluded = SettingsSearch.Item(
+    title: "Excluded Applications",
+    detail: "These applications will remain open when quitting all but the frontmost one.")
   static let windowGap = SettingsSearch.Item(
     title: "Window Gap", detail: "Gap between windows")
   static let screenGap = SettingsSearch.Item(
@@ -757,6 +772,12 @@ extension SettingsPage {
       case .colorPicker: [SettingText.colorFormat, SettingText.showColorName]
       case .httpStatusCodes: [SettingText.httpStatusPicture]
       case .quicklinks: [SettingText.passSelectedText, SettingText.quicklinkDeleteWarning]
+      case .systemActions:
+        [
+          SettingText.warnBeforeEmptyingTrash, SettingText.warnBeforeQuittingAll,
+          SettingText.quitAllExcluded, SettingText.warnBeforeQuittingOthers,
+          SettingText.quitOthersExcluded,
+        ]
       case .notes:
         [SettingText.escapeLosesFocus, SettingText.moveCheckedTasks, SettingText.notesZoom]
       case .scripts: [SettingText.scriptFolders]
@@ -906,6 +927,12 @@ struct SettingsView: View {
               }
             }
             CommandsList(model: model, page: .colorPicker)
+          }
+        case .systemActions:
+          PageScroll(model: model) {
+            PageHeader(page: .systemActions)
+            SystemActionSettingsCards(settings: $model.config.systemActions)
+            CommandsList(model: model, page: .systemActions)
           }
         case .notes:
           PageScroll(model: model) {
@@ -2695,6 +2722,35 @@ private struct GapRow: View {
       }
       .labelsHidden()
       .fixedSize()
+    }
+  }
+}
+
+/// The settings Raycast keeps inside Empty Trash, Quit All Apps and Quit All Apps Except
+/// Frontmost, a card each under its command's name.
+private struct SystemActionSettingsCards: View {
+  @Binding var settings: SystemActionSettings
+
+  var body: some View {
+    toggleCard(
+      SystemAction.emptyTrash, SettingText.warnBeforeEmptyingTrash,
+      $settings.warnBeforeEmptyingTrash)
+    toggleCard(
+      SystemAction.quitAllApps, SettingText.warnBeforeQuittingAll, $settings.warnBeforeQuittingAll)
+    DisabledAppsCard(item: SettingText.quitAllExcluded, apps: $settings.quitAllExcluded)
+    toggleCard(
+      SystemAction.quitOtherApps, SettingText.warnBeforeQuittingOthers,
+      $settings.warnBeforeQuittingOthers)
+    DisabledAppsCard(item: SettingText.quitOthersExcluded, apps: $settings.quitOthersExcluded)
+  }
+
+  private func toggleCard(
+    _ action: SystemAction, _ item: SettingsSearch.Item, _ isOn: Binding<Bool>
+  ) -> some View {
+    Card {
+      SettingRow(title: item.title, description: "\(action.title): \(item.detail)") {
+        Toggle(item.title, isOn: isOn).labelsHidden().toggleStyle(.switch)
+      }
     }
   }
 }

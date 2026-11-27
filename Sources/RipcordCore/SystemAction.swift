@@ -95,9 +95,73 @@ public enum SystemAction: String, CaseIterable, Sendable {
     case .restart: "Apps will quit and the Mac will restart."
     case .shutDown: "Apps will quit and the Mac will shut down."
     case .emptyTrash: "Everything in the Trash will be deleted. This can't be undone."
-    case .quitAllApps: "Every open app will be asked to quit."
-    case .quitOtherApps: "Every open app but the frontmost one will be asked to quit."
+    case .quitAllApps: "Every open app, but those excluded in Settings, will be asked to quit."
+    case .quitOtherApps:
+      "Every open app but the frontmost one, and those excluded in Settings, will be asked to quit."
     default: nil
+    }
+  }
+}
+
+/// The settings Raycast keeps inside Empty Trash, Quit All Apps and Quit All Apps Except
+/// Frontmost: whether each asks first, and the apps each Quit All leaves open.
+public struct SystemActionSettings: Codable, Equatable, Sendable {
+  public var warnBeforeEmptyingTrash: Bool
+  public var warnBeforeQuittingAll: Bool
+  /// Bundle IDs Quit All Apps leaves open.
+  public var quitAllExcluded: [String]
+  public var warnBeforeQuittingOthers: Bool
+  /// Bundle IDs Quit All Apps Except Frontmost leaves open.
+  public var quitOthersExcluded: [String]
+
+  public init(
+    warnBeforeEmptyingTrash: Bool = true, warnBeforeQuittingAll: Bool = true,
+    quitAllExcluded: [String] = [], warnBeforeQuittingOthers: Bool = true,
+    quitOthersExcluded: [String] = []
+  ) {
+    self.warnBeforeEmptyingTrash = warnBeforeEmptyingTrash
+    self.warnBeforeQuittingAll = warnBeforeQuittingAll
+    self.quitAllExcluded = quitAllExcluded
+    self.warnBeforeQuittingOthers = warnBeforeQuittingOthers
+    self.quitOthersExcluded = quitOthersExcluded
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    func flag(_ key: CodingKeys) throws -> Bool {
+      try container.decodeIfPresent(Bool.self, forKey: key) ?? true
+    }
+    func apps(_ key: CodingKeys) throws -> [String] {
+      try container.decodeIfPresent([String].self, forKey: key) ?? []
+    }
+    self.init(
+      warnBeforeEmptyingTrash: try flag(.warnBeforeEmptyingTrash),
+      warnBeforeQuittingAll: try flag(.warnBeforeQuittingAll),
+      quitAllExcluded: try apps(.quitAllExcluded),
+      warnBeforeQuittingOthers: try flag(.warnBeforeQuittingOthers),
+      quitOthersExcluded: try apps(.quitOthersExcluded))
+  }
+
+  /// Whether `action` asks before it runs: its warning, unless turned off here.
+  public func asksFirst(_ action: SystemAction) -> Bool {
+    guard action.warning != nil else { return false }
+    switch action {
+    case .emptyTrash: return warnBeforeEmptyingTrash
+    case .quitAllApps: return warnBeforeQuittingAll
+    case .quitOtherApps: return warnBeforeQuittingOthers
+    default: return true
+    }
+  }
+
+  /// Whether `action` leaves the app with `bundleID` open: Finder always, as before, and the
+  /// apps excluded for that action.
+  public func keepsOpen(_ bundleID: String?, for action: SystemAction) -> Bool {
+    guard let bundleID else { return false }
+    if bundleID == "com.apple.finder" { return true }
+    switch action {
+    case .quitAllApps: return quitAllExcluded.contains(bundleID)
+    case .quitOtherApps: return quitOthersExcluded.contains(bundleID)
+    default: return false
     }
   }
 }

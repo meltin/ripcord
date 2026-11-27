@@ -42,6 +42,7 @@ enum SystemActions {
   /// `frontmost` is the app the user was in when they asked.
   static func run(
     _ action: SystemAction, frontmost: NSRunningApplication?,
+    settings: SystemActionSettings = SystemActionSettings(),
     report: @escaping @MainActor (String) -> Void
   ) -> String? {
     switch action {
@@ -85,11 +86,18 @@ enum SystemActions {
       for app in regularApps() { app.unhide() }
       return nil
     case .quitAllApps:
-      for app in quittableApps() { app.terminate() }
+      // Asked to quit, never forced, so each can ask to save; Finder stays, as quitting it only
+      // makes it come back.
+      for app in regularApps() where !settings.keepsOpen(app.bundleIdentifier, for: action) {
+        app.terminate()
+      }
       return nil
     case .quitOtherApps:
       guard let frontmost = userApp(frontmost) else { return noFrontmostApp }
-      for app in quittableApps() where app != frontmost { app.terminate() }
+      for app in regularApps()
+      where app != frontmost && !settings.keepsOpen(app.bundleIdentifier, for: action) {
+        app.terminate()
+      }
       return nil
     case .restartFrontmostApp:
       guard let frontmost = userApp(frontmost) else { return noFrontmostApp }
@@ -129,12 +137,6 @@ enum SystemActions {
     NSWorkspace.shared.runningApplications.filter {
       $0.activationPolicy == .regular && $0 != NSRunningApplication.current
     }
-  }
-
-  /// Asked to quit, never forced, so each can ask to save; Finder stays, as quitting it only
-  /// makes it come back.
-  private static func quittableApps() -> [NSRunningApplication] {
-    regularApps().filter { $0.bundleIdentifier != "com.apple.finder" }
   }
 
   private static func relaunch(_ app: NSRunningApplication) -> String? {
