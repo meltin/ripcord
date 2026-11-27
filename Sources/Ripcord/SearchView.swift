@@ -1682,21 +1682,37 @@ private struct FilterMenu<Item: Hashable>: View {
   }
 }
 
-/// http.cat's or http.dog's picture of the selected status code.
+/// http.cat's or http.dog's picture of the selected status code. Read by hand rather than with
+/// AsyncImage: for a code it has no picture of, http.cat answers 404 with its own 404 picture.
 private struct HTTPStatusPictureView: View {
   let url: URL?
+  @State private var loaded: (url: URL, image: NSImage?)?
 
   var body: some View {
-    AsyncImage(url: url) { phase in
-      switch phase {
-      case .success(let image): image.resizable().scaledToFit()
-      case .failure: Text("No picture for this code.").foregroundStyle(.secondary)
-      default: ProgressView().controlSize(.small)
+    Group {
+      if let loaded, loaded.url == url {
+        if let image = loaded.image {
+          Image(nsImage: image).resizable().scaledToFit()
+        } else {
+          Text("No picture for this code.").foregroundStyle(.secondary)
+        }
+      } else {
+        ProgressView().controlSize(.small)
       }
     }
-    .id(url)
     .padding(12)
+    // Clear of the floating footer, where these pictures print the code.
+    .padding(.bottom, LauncherController.footerHeight)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .task(id: url) {
+      guard let url else { return }
+      let response = try? await URLSession.shared.data(from: url)
+      guard !Task.isCancelled else { return }
+      let image = response.flatMap { data, response in
+        (response as? HTTPURLResponse)?.statusCode == 200 ? NSImage(data: data) : nil
+      }
+      loaded = (url, image)
+    }
   }
 }
 

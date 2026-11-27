@@ -223,6 +223,7 @@ the settings window opens. The settings window writes every change back to it.
   "colorFormat": "hex",
   "showColorName": false,
   "emoji": { "columns": 8, "primaryAction": "paste", "disableInlinePicker": false },
+  "httpStatusPicture": "none",
   "favorites": ["com.apple.Safari", "command:search-snippets"],
   "snippetExpansion": {
     "enabled": true, "mode": "immediately", "withinWords": false,
