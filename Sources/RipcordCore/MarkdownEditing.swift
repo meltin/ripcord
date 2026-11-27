@@ -153,24 +153,31 @@ public enum MarkdownEditing {
   }
 
   /// The edit ⌘B and the like make on `selection`: its marks removed when it's already that
-  /// style, else added around it, as one replacement so one undo takes it back. Nil when there's
-  /// nothing to style; `selection` is then the styled text.
+  /// style, else added around it, as one replacement so one undo takes it back. With nothing
+  /// selected, an empty pair goes in with the caret between, so what's typed next takes the
+  /// style. `selection` is then the styled text, or the caret.
   public static func toggle(
-    _ style: MarkdownSpan.Style, mark: String, selection: NSRange, in text: String,
-    spans: [MarkdownSpan]
+    _ style: MarkdownSpan.Style, open: String, close: String, selection: NSRange,
+    in text: String, spans: [MarkdownSpan]
   ) -> (range: NSRange, replacement: String, selection: NSRange)? {
     let string = text as NSString
     // A selection that takes in hidden marks at its ends styles the words between them.
     let selection = visible(selection, hidden: hidden(in: spans))
-    guard selection.length > 0 else { return nil }
+    let openLength = (open as NSString).length
     if let span = spans.first(where: {
       $0.style == style && $0.marks.count == 2
         && NSIntersectionRange($0.range, selection) == selection
+        && (selection.length > 0 || NSLocationInRange(selection.location, $0.range))
     }) {
       let whole = span.marks.reduce(span.range) { NSUnionRange($0, $1) }
       return (
         whole, string.substring(with: span.range),
         NSRange(location: whole.location, length: span.range.length)
+      )
+    }
+    guard selection.length > 0 else {
+      return (
+        selection, open + close, NSRange(location: selection.location + openLength, length: 0)
       )
     }
     // Marks go round the words, not the spaces beside them, or they wouldn't read as marks.
@@ -180,8 +187,117 @@ public enum MarkdownEditing {
     let lead = (selected as NSString).range(of: trimmed).location
     let words = NSRange(location: selection.location + lead, length: (trimmed as NSString).length)
     return (
-      words, mark + trimmed + mark,
-      NSRange(location: words.location + (mark as NSString).length, length: words.length)
+      words, open + trimmed + close,
+      NSRange(location: words.location + openLength, length: words.length)
+    )
+  }
+
+  /// What Format as… makes the lines a selection touches.
+  public enum LineFormat: Equatable, Sendable {
+    case heading(Int)
+    case quote, bullet, ordered, task
+  }
+
+  /// A heading's, quote's or list item's mark at a line's start.
+  private static let linePrefix = try? NSRegularExpression(
+    pattern: #"^(?:#{1,6}\s+|>\s?|[-*+]\s\[[ xX]\]\s|[-*+]\s|\d+\.\s)"#)
+
+  /// The lines `selection` touches made `format`, or plain when they all are already; another
+  /// heading, quote or list mark is swapped for it, as Raycast's Format as… does.
+  public static func toggleLines(_ format: LineFormat, selection: NSRange, in text: String)
+    -> (range: NSRange, replacement: String, selection: NSRange)
+  {
+    let string = text as NSString
+    let range = string.lineRange(for: selection)
+    let block = string.substring(with: range)
+    var lines = block.components(separatedBy: "\n")
+    // lineRange takes in the last line break; its empty remainder isn't a line.
+    let endsWithBreak = block.hasSuffix("\n")
+    if endsWithBreak { lines.removeLast() }
+    func mark(_ number: Int) -> String {
+      switch format {
+      case .heading(let level): String(repeating: "#", count: level) + " "
+      case .quote: "> "
+      case .bullet: "- "
+      case .ordered: "\(number). "
+      case .task: "- [ ] "
+      }
+    }
+    func split(_ line: String) -> (mark: String, rest: String) {
+      let length =
+        linePrefix?.firstMatch(
+          in: line, range: NSRange(location: 0, length: (line as NSString).length))?.range.length
+        ?? 0
+      let ns = line as NSString
+      return (ns.substring(to: length), ns.substring(from: length))
+    }
+    let written = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+    let isAlready =
+      !written.isEmpty
+      && written.enumerated().allSatisfy { index, line in
+        let current = split(line).mark
+        return format == .ordered
+          ? current.range(of: #"^\d+\. $"#, options: .regularExpression) != nil
+          : current == mark(index + 1)
+      }
+    var number = 0
+    let changed = lines.map { line -> String in
+      let rest = split(line).rest
+      // Blank lines between others stay blank; a lone empty line gets the mark to type after.
+      if isAlready || (lines.count > 1 && line.trimmingCharacters(in: .whitespaces).isEmpty) {
+        return rest
+      }
+      number += 1
+      return mark(number) + rest
+    }
+    let replacement = changed.joined(separator: "\n") + (endsWithBreak ? "\n" : "")
+    // One line: the caret keeps its place in the text after the mark. More: they stay selected.
+    guard lines.count == 1 else {
+      return (
+        range, replacement,
+        NSRange(
+          location: range.location,
+          length: (replacement as NSString).length - (endsWithBreak ? 1 : 0))
+      )
+    }
+    let shift = (changed[0] as NSString).length - (lines[0] as NSString).length
+    let markEnd =
+      range.location + (changed[0] as NSString).length - (split(changed[0]).rest as NSString).length
+    let caret = max(markEnd, selection.location + shift)
+    return (range, replacement, NSRange(location: caret, length: selection.length))
+  }
+
+  /// The lines `selection` touches put in a ``` code block, or taken out of the one they're
+  /// the whole of.
+  public static func toggleCodeBlock(selection: NSRange, in text: String)
+    -> (range: NSRange, replacement: String, selection: NSRange)
+  {
+    let string = text as NSString
+    let lines = string.lineRange(for: selection)
+    let fence = { (range: NSRange) in
+      string.substring(with: range).trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("```")
+    }
+    if lines.location > 0, NSMaxRange(lines) < string.length {
+      let above = string.lineRange(for: NSRange(location: lines.location - 1, length: 0))
+      let below = string.lineRange(for: NSRange(location: NSMaxRange(lines), length: 0))
+      if fence(above), fence(below) {
+        // The lines keep the break after them only if the closing fence had one.
+        let inner = string.substring(with: lines)
+        let keepsBreak = string.substring(with: below).hasSuffix("\n")
+        let body = keepsBreak ? inner : String(inner.dropLast())
+        return (
+          NSUnionRange(above, below), body,
+          NSRange(location: above.location, length: (inner as NSString).length - 1)
+        )
+      }
+    }
+    let inner = string.substring(with: lines)
+    let endsWithBreak = inner.hasSuffix("\n")
+    let body = endsWithBreak ? String(inner.dropLast()) : inner
+    let replacement = "```\n" + body + "\n```" + (endsWithBreak ? "\n" : "")
+    return (
+      lines, replacement,
+      NSRange(location: lines.location + 4, length: (body as NSString).length)
     )
   }
 }

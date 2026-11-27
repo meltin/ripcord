@@ -7,7 +7,7 @@ import Foundation
 public struct MarkdownSpan: Equatable, Sendable {
   public enum Style: Equatable, Sendable {
     case heading(Int)
-    case bold, italic, strike, code, codeBlock, quote, link
+    case bold, italic, strike, underline, code, codeBlock, quote, link
     /// A checked task's text.
     case done
     /// A list's, task's or quote's marks, shown dimmed.
@@ -87,7 +87,7 @@ public struct MarkdownSpan: Equatable, Sendable {
     }
     let emphasis = [
       (boldStars, MarkdownSpan.Style.bold), (boldUnderscores, .bold), (italic, .italic),
-      (strike, .strike),
+      (strike, .strike), (underline, .underline),
     ]
     for (pattern, style) in emphasis {
       for match in all(pattern, in: line) {
@@ -128,6 +128,8 @@ public struct MarkdownSpan: Equatable, Sendable {
   private static let boldUnderscores = regex(#"(?<!\w)(__)(?=\S)(.+?)(?<=\S)__(?!\w)"#)
   private static let italic = regex(#"(?<![*_\w])([*_])(?=\S)([^*_]+?)(?<=\S)\1(?![*_\w])"#)
   private static let strike = regex(#"(~~)(?=\S)(.+?)(?<=\S)~~"#)
+  /// Markdown has no underline; `<u>` is the HTML other editors read as one.
+  private static let underline = regex(#"(<u>)(.+?)</u>"#)
   private static let link = regex(#"\[([^\]]+)\]\([^)\s]+\)"#)
 
   private static func regex(_ pattern: String) -> NSRegularExpression {

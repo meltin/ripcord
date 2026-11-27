@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import RipcordCore
 import SwiftUI
 
@@ -77,6 +78,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
         onReload: { [weak self] in self?.reload() },
         onSaveAsNew: { [weak self] in self?.saveAsNew() },
         onActions: { [weak self] in self?.showActions() },
+        onFormat: { [weak self] in self?.showFormats() },
         onTextHeight: { [weak self] in self?.fit(textHeight: $0) },
         onHover: { [weak self] in self?.hover($0) }))
     // The window's size follows the note, not the view's ideal size.
@@ -151,9 +153,13 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
         title: "Find in Note", symbol: "magnifyingglass", keys: ["f"], modifiers: .command,
         startsSection: true, run: { [weak self] in self?.find() }),
       NotesAction(
+        title: "Format…", symbol: "textformat", keys: [","], modifiers: [.command, .shift],
+        keyCode: kVK_ANSI_Comma, startsSection: true, keepsPanelOpen: true,
+        run: { [weak self] in self?.showFormats() }),
+      NotesAction(
         title: Self.isAutoSizing ? "Disable Window Auto-Sizing" : "Enable Window Auto-Sizing",
-        symbol: "macwindow", keys: ["/"], modifiers: [.command, .shift], startsSection: true,
-        run: { [weak self] in self?.toggleAutoSizing() }),
+        symbol: "macwindow", keys: ["/"], modifiers: [.command, .shift], keyCode: kVK_ANSI_Slash,
+        startsSection: true, run: { [weak self] in self?.toggleAutoSizing() }),
       NotesAction(
         title: Self.isHiddenWhileSharing
           ? "Show While Screen Sharing" : "Hide While Screen Sharing",
@@ -182,6 +188,67 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
 
   private static let zoomRange: ClosedRange<CGFloat> = 0.6...2
 
+  /// Raycast Notes' Format as…, with its keys.
+  private var formats: [NotesAction] {
+    func inline(
+      _ title: String, _ symbol: String, _ style: MarkdownSpan.Style, _ open: String,
+      _ close: String, key: String, _ modifiers: NSEvent.ModifierFlags = .command
+    ) -> NotesAction {
+      NotesAction(
+        title: title, symbol: symbol, keys: [key], modifiers: modifiers,
+        run: { [weak self] in self?.editor?.toggleInline(style, open: open, close: close) })
+    }
+    func lines(
+      _ title: String, _ symbol: String, _ format: MarkdownEditing.LineFormat, key: String,
+      keyCode: Int, section: String? = nil
+    ) -> NotesAction {
+      NotesAction(
+        title: title, symbol: symbol, keys: [key], modifiers: [.command, .shift],
+        keyCode: keyCode, section: section,
+        run: { [weak self] in self?.editor?.toggleLines(format) })
+    }
+    return [
+      NotesAction(
+        title: "Heading…", symbol: "textformat.size", keys: [], modifiers: [], section: "Inline",
+        keepsPanelOpen: true, run: { [weak self] in self?.showHeadings() }),
+      inline("Bold", "bold", .bold, "**", "**", key: "b"),
+      inline("Italic", "italic", .italic, "*", "*", key: "i"),
+      inline("Strikethrough", "strikethrough", .strike, "~~", "~~", key: "s", [.command, .shift]),
+      inline("Underline", "underline", .underline, "<u>", "</u>", key: "u"),
+      inline("Code", "chevron.left.forwardslash.chevron.right", .code, "`", "`", key: "e"),
+      inline("Link", "link", .link, "[", "]()", key: "l"),
+      NotesAction(
+        title: "Code Block", symbol: "curlybraces.square", keys: ["c"],
+        modifiers: [.command, .option], section: "Block",
+        run: { [weak self] in self?.editor?.toggleCodeBlock() }),
+      lines("Blockquote", "text.quote", .quote, key: "b", keyCode: kVK_ANSI_B),
+      lines(
+        "Ordered List", "list.number", .ordered, key: "7", keyCode: kVK_ANSI_7, section: "List"),
+      lines("Bullet List", "list.bullet", .bullet, key: "8", keyCode: kVK_ANSI_8),
+      lines("Task List", "checklist", .task, key: "9", keyCode: kVK_ANSI_9),
+    ]
+  }
+
+  /// Heading…'s levels, in the same panel.
+  private func showHeadings() {
+    actionsModel.actions = (1...3).map { level in
+      NotesAction(
+        title: "Heading \(level)", symbol: "textformat.size", keys: [], modifiers: [],
+        run: { [weak self] in self?.editor?.toggleLines(.heading(level)) })
+    }
+    actionsModel.placeholder = "Heading…"
+    actionsModel.filter = ""
+  }
+
+  /// The note's text view, to format.
+  private var editor: NoteTextView? {
+    func find(in view: NSView) -> NoteTextView? {
+      if let editor = view as? NoteTextView { return editor }
+      return view.subviews.lazy.compactMap(find).first
+    }
+    return window.contentView.flatMap(find)
+  }
+
   /// ⌘K opens the actions; the others run theirs.
   private func runShortcut(_ event: NSEvent) -> Bool {
     let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
@@ -189,7 +256,9 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
       showActions()
       return true
     }
-    guard let action = actions.first(where: { $0.matches(event) }) else { return false }
+    guard let action = (actions + formats).first(where: { $0.matches(event) }) else {
+      return false
+    }
     if action.isEnabled { action.run() } else { NSSound.beep() }
     return true
   }
@@ -197,7 +266,20 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   /// Raycast Notes' ⌘K panel, below the buttons and over the note.
   private func showActions() {
     actionsModel.actions = actions
+    actionsModel.placeholder = "Search for actions…"
     actionsModel.filter = ""
+    openPanel()
+  }
+
+  /// The T button's Format as…, in the same panel.
+  private func showFormats() {
+    actionsModel.actions = formats
+    actionsModel.placeholder = "Format as…"
+    actionsModel.filter = ""
+    openPanel()
+  }
+
+  private func openPanel() {
     let content = actionsContent.sizeThatFits(
       in: NSSize(width: NotesActionsView.width, height: .greatestFiniteMagnitude))
     let frame = window.frame
@@ -216,7 +298,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   }
 
   private func run(_ action: NotesAction) {
-    closeActions()
+    if !action.keepsPanelOpen { closeActions() }
     action.run()
   }
 
@@ -504,9 +586,6 @@ final class NotesPanel: NSPanel {
     if flags == .command, let selector = key.flatMap({ editing[$0] }) {
       return NSApp.sendAction(selector, to: nil, from: self)
     }
-    if let editor = firstResponder as? NoteTextView, editor.performFormatShortcut(event) {
-      return true
-    }
     if key == "z", flags == .command || flags == [.command, .shift] {
       return NSApp.sendAction(
         flags.contains(.shift) ? Selector(("redo:")) : Selector(("undo:")), to: nil, from: self)
@@ -524,6 +603,7 @@ private struct NotesView: View {
   let onReload: () -> Void
   let onSaveAsNew: () -> Void
   let onActions: () -> Void
+  let onFormat: () -> Void
   let onTextHeight: (CGFloat) -> Void
   let onHover: (Bool) -> Void
 
@@ -575,11 +655,16 @@ private struct NotesView: View {
         HStack {
           Spacer()
           // Raycast Notes' Format button, a serif T.
-          Text("T")
-            .font(.custom("New York", size: 17))
-            .frame(width: 32, height: 32)
-            .glassEffect(.regular.interactive(), in: Circle())
-            .opacity(model.isHovered ? 1 : 0)
+          Button(action: onFormat) {
+            Text("T")
+              .font(.custom("New York", size: 17))
+              .frame(width: 32, height: 32)
+              .contentShape(Circle())
+          }
+          .buttonStyle(.plain)
+          .help("Format… (⇧⌘,)")
+          .glassEffect(.regular.interactive(), in: Circle())
+          .opacity(model.isHovered ? 1 : 0)
         }
         .padding(.trailing, 8)
       }
@@ -736,6 +821,9 @@ private struct MarkdownEditor: NSViewRepresentable {
     var noteURL: URL?
     var scrollerObserver: NSObjectProtocol?
     var findBarObservation: NSKeyValueObservation?
+    /// Text is going in, so the caret that follows it may stay before a style's closing marks:
+    /// what's typed after ⌘B with nothing selected stays bold.
+    private var isTyping = false
 
     isolated deinit {
       if let scrollerObserver { NotificationCenter.default.removeObserver(scrollerObserver) }
@@ -781,6 +869,13 @@ private struct MarkdownEditor: NSViewRepresentable {
       let text = textView.string
       let hidden = MarkdownEditing.hidden(in: MarkdownSpan.spans(in: text))
       guard new.length > 0 else {
+        if isTyping,
+          MarkdownSpan.spans(in: text).contains(where: {
+            $0.marks.count == 2 && $0.marks[1].location == new.location
+          })
+        {
+          return new
+        }
         let location = MarkdownEditing.caret(
           new.location, from: old.location + old.length, in: text, hidden: hidden)
         return NSRange(location: location, length: 0)
@@ -800,6 +895,11 @@ private struct MarkdownEditor: NSViewRepresentable {
     func textView(
       _ textView: NSTextView, shouldChangeTextIn range: NSRange, replacementString: String?
     ) -> Bool {
+      if !isReplacing, replacementString != nil {
+        isTyping = true
+        // Over once this edit and the caret move after it are done.
+        DispatchQueue.main.async { [weak self] in self?.isTyping = false }
+      }
       guard !isReplacing, let replacementString, let textView = textView as? NoteTextView,
         !textView.isTidying, !textView.hasMarkedText(),
         let tidy = MarkdownEditing.tidy(
@@ -903,6 +1003,7 @@ private struct MarkdownEditor: NSViewRepresentable {
     case .italic:
       return [.font: NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)]
     case .strike: return [.strikethroughStyle: NSUnderlineStyle.single.rawValue]
+    case .underline: return [.underlineStyle: NSUnderlineStyle.single.rawValue]
     case .code, .codeBlock:
       return [
         .font: NSFont.monospacedSystemFont(ofSize: font.pointSize - 1, weight: .regular),
@@ -925,33 +1026,37 @@ private struct MarkdownEditor: NSViewRepresentable {
   }
 }
 
-/// The note's text view: Raycast Notes' placeholders, its format shortcuts, and deletes that
+/// The note's text view: Raycast Notes' placeholders, its Format as… edits, and deletes that
 /// treat hidden marks as one with their text.
 final class NoteTextView: NSTextView {
-  /// ⌘B bold, ⌘I italic, ⇧⌘X strikethrough and ⌘E code, on the selected words; true when the
-  /// keys were one of them.
-  func performFormatShortcut(_ event: NSEvent) -> Bool {
-    let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
-    let key = event.charactersIgnoringModifiers?.lowercased()
-    let format: (MarkdownSpan.Style, String)? =
-      switch (flags, key) {
-      case (.command, "b"): (.bold, "**")
-      case (.command, "i"): (.italic, "*")
-      case (.command, "e"): (.code, "`")
-      case ([.command, .shift], "x"): (.strike, "~~")
-      default: nil
-      }
-    guard let format else { return false }
+  /// Bold, Italic and the other inline formats on the selected words, or, with nothing
+  /// selected, on what's typed next. A link's caret lands between its `()` for the URL.
+  func toggleInline(_ style: MarkdownSpan.Style, open: String, close: String) {
     guard !hasMarkedText(),
       let edit = MarkdownEditing.toggle(
-        format.0, mark: format.1, selection: selectedRange(), in: string,
+        style, open: open, close: close, selection: selectedRange(), in: string,
         spans: MarkdownSpan.spans(in: string))
-    else {
-      NSSound.beep()
-      return true
-    }
+    else { return NSSound.beep() }
+    let addsLink = style == .link && edit.replacement.hasSuffix("]()")
+    replace(
+      edit.range, with: edit.replacement,
+      selecting: addsLink
+        ? NSRange(
+          location: edit.range.location + (edit.replacement as NSString).length - 1, length: 0)
+        : edit.selection)
+  }
+
+  /// A heading, quote or list on the lines the selection touches.
+  func toggleLines(_ format: MarkdownEditing.LineFormat) {
+    guard !hasMarkedText() else { return }
+    let edit = MarkdownEditing.toggleLines(format, selection: selectedRange(), in: string)
     replace(edit.range, with: edit.replacement, selecting: edit.selection)
-    return true
+  }
+
+  func toggleCodeBlock() {
+    guard !hasMarkedText() else { return }
+    let edit = MarkdownEditing.toggleCodeBlock(selection: selectedRange(), in: string)
+    replace(edit.range, with: edit.replacement, selecting: edit.selection)
   }
 
   /// Carries out what a delete key was found to do; true when the key is dealt with.

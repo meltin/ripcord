@@ -61,7 +61,8 @@ import Testing
 
   func toggleBold(_ text: String, _ selection: NSRange) -> (text: String, selection: NSRange)? {
     MarkdownEditing.toggle(
-      .bold, mark: "**", selection: selection, in: text, spans: MarkdownSpan.spans(in: text)
+      .bold, open: "**", close: "**", selection: selection, in: text,
+      spans: MarkdownSpan.spans(in: text)
     ).map {
       ((text as NSString).replacingCharacters(in: $0.range, with: $0.replacement), $0.selection)
     }
@@ -76,7 +77,10 @@ import Testing
     let plain = bold.flatMap { toggleBold($0.text, $0.selection) }
     #expect(plain?.text == text)
     #expect(plain?.selection == NSRange(location: 4, length: 5))
-    #expect(toggleBold(text, NSRange(location: 3, length: 0)) == nil)
+    // Nothing selected: an empty pair with the caret between, for what's typed next.
+    let empty = toggleBold(text, NSRange(location: 3, length: 0))
+    #expect(empty?.text == "say**** hello now")
+    #expect(empty?.selection == NSRange(location: 5, length: 0))
   }
 }
 
@@ -116,8 +120,58 @@ import Testing
     let text = "a **b** c"
     // ⇧← from after the bold can take in its closing marks; ⌘B then unbolds b.
     let toggle = MarkdownEditing.toggle(
-      .bold, mark: "**", selection: NSRange(location: 4, length: 3), in: text,
+      .bold, open: "**", close: "**", selection: NSRange(location: 4, length: 3), in: text,
       spans: MarkdownSpan.spans(in: text))
     #expect(toggle?.replacement == "b")
+  }
+}
+
+@Suite struct MarkdownLineFormatTests {
+  func apply(_ edit: (range: NSRange, replacement: String, selection: NSRange), to text: String)
+    -> String
+  {
+    (text as NSString).replacingCharacters(in: edit.range, with: edit.replacement)
+  }
+
+  func lines(_ format: MarkdownEditing.LineFormat, _ text: String, _ selection: NSRange) -> String {
+    apply(MarkdownEditing.toggleLines(format, selection: selection, in: text), to: text)
+  }
+
+  @Test func togglesAListOnTheLinesSelected() {
+    let text = "milk\neggs\ntea"
+    #expect(lines(.bullet, text, NSRange(location: 0, length: 9)) == "- milk\n- eggs\ntea")
+    #expect(lines(.bullet, "- milk\n- eggs", NSRange(location: 0, length: 13)) == "milk\neggs")
+    #expect(lines(.ordered, text, NSRange(location: 0, length: 13)) == "1. milk\n2. eggs\n3. tea")
+    #expect(lines(.task, "milk", NSRange(location: 2, length: 0)) == "- [ ] milk")
+  }
+
+  @Test func swapsOneLineMarkForAnother() {
+    #expect(lines(.quote, "- milk", NSRange(location: 3, length: 0)) == "> milk")
+    #expect(lines(.heading(2), "# Plan", NSRange(location: 3, length: 0)) == "## Plan")
+    #expect(lines(.heading(1), "# Plan", NSRange(location: 3, length: 0)) == "Plan")
+  }
+
+  @Test func keepsTheCaretInTheText() {
+    let edit = MarkdownEditing.toggleLines(
+      .bullet, selection: NSRange(location: 2, length: 0), in: "milk")
+    #expect(edit.selection == NSRange(location: 4, length: 0))
+    // On an empty line the mark goes in for what's typed next.
+    #expect(lines(.bullet, "a\n\nb", NSRange(location: 2, length: 0)) == "a\n- \nb")
+  }
+
+  @Test func wrapsAndUnwrapsACodeBlock() {
+    let text = "x\nlet a = 1\ny"
+    let wrap = MarkdownEditing.toggleCodeBlock(selection: NSRange(location: 3, length: 0), in: text)
+    let wrapped = apply(wrap, to: text)
+    #expect(wrapped == "x\n```\nlet a = 1\n```\ny")
+    let unwrap = MarkdownEditing.toggleCodeBlock(selection: wrap.selection, in: wrapped)
+    #expect(apply(unwrap, to: wrapped) == text)
+  }
+
+  @Test func readsUnderlineAsHiddenMarks() {
+    let spans = MarkdownSpan.spans(in: "a <u>b</u>")
+    #expect(
+      spans.contains { $0.style == .underline && $0.range == NSRange(location: 5, length: 1) })
+    #expect(MarkdownEditing.hidden(in: spans).count == 2)
   }
 }

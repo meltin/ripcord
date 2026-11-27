@@ -9,9 +9,16 @@ struct NotesAction {
   /// The keys, as `charactersIgnoringModifiers` gives them; the first is the one shown.
   let keys: [String]
   let modifiers: NSEvent.ModifierFlags
+  /// Matched by where the key is rather than what it types, for keys Shift changes: ⇧⌘7 types
+  /// & on a US keyboard and ' on a Japanese one.
+  var keyCode: Int?
   var isEnabled = true
   var isDestructive = false
   var startsSection = false
+  /// A titled section starting here, as Format as… groups Inline, Block and List.
+  var section: String?
+  /// Leaves the panel open, as Heading… does to list the levels.
+  var keepsPanelOpen = false
   let run: @MainActor () -> Void
 
   /// As Raycast shows it, modifiers first: ⇧⌘/.
@@ -25,6 +32,7 @@ struct NotesAction {
 
   func matches(_ event: NSEvent) -> Bool {
     let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+    if let keyCode { return flags == modifiers && Int(event.keyCode) == keyCode }
     guard let key = event.charactersIgnoringModifiers?.lowercased() else { return false }
     // ⌘+ is typed as ⌘= on most layouts; either works, as in Raycast.
     let pressed = flags.subtracting(key == "+" ? .shift : [])
@@ -37,6 +45,8 @@ struct NotesAction {
 @Observable
 final class NotesActionsModel {
   var actions: [NotesAction] = []
+  /// "Search for actions…", or Format as… for the formats.
+  var placeholder = "Search for actions…"
   var filter = "" {
     didSet { selection = shown.firstIndex(where: \.isEnabled) ?? 0 }
   }
@@ -69,7 +79,7 @@ struct NotesActionsView: View {
   var body: some View {
     VStack(spacing: 0) {
       SearchField(
-        text: model.filter, placeholder: "Search for actions…", fontSize: 14,
+        text: model.filter, placeholder: model.placeholder, fontSize: 14,
         onChange: { model.filter = $0 },
         onCommand: { command in
           switch command {
@@ -110,8 +120,15 @@ struct NotesActionsView: View {
   private func items(_ rows: [NotesAction]) -> some View {
     VStack(alignment: .leading, spacing: 2) {
       ForEach(Array(rows.enumerated()), id: \.offset) { index, action in
-        if action.startsSection, index > 0, model.filter.isEmpty {
+        if action.startsSection || action.section != nil, index > 0, model.filter.isEmpty {
           Divider().opacity(0.5).padding(.vertical, 4)
+        }
+        if let section = action.section, model.filter.isEmpty {
+          Text(section)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
         }
         Button {
           onRun(action)
