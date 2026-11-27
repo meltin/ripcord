@@ -697,6 +697,10 @@ private enum SettingText {
   static let emojiSkinTone = SettingsSearch.Item(
     title: "Emoji Skin Tone",
     detail: "The skin tone of the emoji that have them, as ⌘K sets it too.")
+  static let disableInlineEmoji = SettingsSearch.Item(
+    title: "Disable Inline Emoji Picker",
+    detail:
+      "When enabled, typing : in Ripcord's text fields no longer opens the inline emoji picker.")
   static let windowGap = SettingsSearch.Item(
     title: "Window Gap", detail: "Gap between windows")
   static let screenGap = SettingsSearch.Item(
@@ -732,7 +736,10 @@ extension SettingsPage {
       case .dummyText: [SettingText.dummyTextLanguage]
       case .windowManagement: [SettingText.windowGap, SettingText.screenGap, SettingText.cycling]
       case .emoji:
-        [SettingText.emojiColumns, SettingText.emojiPrimaryAction, SettingText.emojiSkinTone]
+        [
+          SettingText.emojiColumns, SettingText.emojiPrimaryAction, SettingText.emojiSkinTone,
+          SettingText.disableInlineEmoji,
+        ]
       case .cleanKeyboard:
         [SettingText.cleanDuration, SettingText.lockFunctionKeys, SettingText.lockMouseClicks]
       case .coffee:
@@ -2615,6 +2622,17 @@ private struct EmojiSettingsCard: View {
         .pickerStyle(.segmented)
         .labelsHidden()
         .fixedSize()
+      }
+      Divider()
+      SettingRow(
+        title: SettingText.disableInlineEmoji.title,
+        description: SettingText.disableInlineEmoji.detail
+      ) {
+        Toggle(
+          SettingText.disableInlineEmoji.title, isOn: $model.config.emoji.disableInlinePicker
+        )
+        .labelsHidden()
+        .toggleStyle(.switch)
       }
     }
   }

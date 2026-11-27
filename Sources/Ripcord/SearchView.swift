@@ -1126,14 +1126,17 @@ private let placeholderPattern = try? NSRegularExpression(
 /// characters, which stay as they are.
 final class PlaceholderHighlighter: NSObject, NSTextStorageDelegate {
   private weak var storage: NSTextStorage?
+  /// `:` and a word in the text box offer emoji, as Raycast's text fields do.
+  @MainActor private let emojiPicker = InlineEmojiPicker()
 
   /// SwiftUI's TextEditor leaves its text storage's delegate unset, so this takes it.
   @MainActor func attach() {
     guard storage == nil,
       let panel = launcherPanel(),
-      let content = panel.contentView, let storage = snippetTextView(in: content)?.textStorage,
-      storage.delegate == nil
+      let content = panel.contentView, let textView = snippetTextView(in: content),
+      let storage = textView.textStorage, storage.delegate == nil
     else { return }
+    emojiPicker.attach(to: textView)
     self.storage = storage
     storage.delegate = self
     // One edit, so the delegate call it sets off colors once and doesn't recurse.
