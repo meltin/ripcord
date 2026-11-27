@@ -545,7 +545,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .emoji:
       "Search emoji and symbols by their English or Japanese names, and paste or copy one."
     case .bookmarks:
-      "Your bookmarks, kept in ~/.config/ripcord/bookmarks.md as Markdown links under # headings."
+      "Your bookmarks, kept in a Markdown file as links under # headings."
     case .notes:
       "Notes in a floating window, each kept as a Markdown file in ~/.config/ripcord/notes."
     case .dummyText:
@@ -740,6 +740,9 @@ private enum SettingText {
   static let quitOthersExcluded = SettingsSearch.Item(
     title: "Excluded Applications",
     detail: "These applications will remain open when quitting all but the frontmost one.")
+  static let bookmarksFile = SettingsSearch.Item(
+    title: "Bookmarks File",
+    detail: "Where Search Bookmarks reads and Add Bookmark writes.")
   static let windowGap = SettingsSearch.Item(
     title: "Window Gap", detail: "Gap between windows")
   static let screenGap = SettingsSearch.Item(
@@ -772,6 +775,7 @@ extension SettingsPage {
       case .colorPicker: [SettingText.colorFormat, SettingText.showColorName]
       case .httpStatusCodes: [SettingText.httpStatusPicture]
       case .quicklinks: [SettingText.passSelectedText, SettingText.quicklinkDeleteWarning]
+      case .bookmarks: [SettingText.bookmarksFile]
       case .systemActions:
         [
           SettingText.warnBeforeEmptyingTrash, SettingText.warnBeforeQuittingAll,
@@ -927,6 +931,12 @@ struct SettingsView: View {
               }
             }
             CommandsList(model: model, page: .colorPicker)
+          }
+        case .bookmarks:
+          PageScroll(model: model) {
+            PageHeader(page: .bookmarks)
+            BookmarksFileCard(path: $model.config.bookmarksFile)
+            CommandsList(model: model, page: .bookmarks)
           }
         case .systemActions:
           PageScroll(model: model) {
@@ -2723,6 +2733,44 @@ private struct GapRow: View {
       .labelsHidden()
       .fixedSize()
     }
+  }
+}
+
+/// Settings › Bookmarks' file, as Raycast's MarkMarks has the user pick one. Its bookmarks stay
+/// where they are when another is picked; nothing is moved or written over.
+private struct BookmarksFileCard: View {
+  @Binding var path: String?
+
+  var body: some View {
+    Card {
+      SettingRow(
+        title: SettingText.bookmarksFile.title, description: SettingText.bookmarksFile.detail
+      ) {
+        HStack(spacing: 8) {
+          Text(BookmarkFileLocation.path(for: BookmarkFileLocation.url(for: path)))
+            .lineLimit(1).truncationMode(.middle)
+            .foregroundStyle(.secondary)
+            .layoutPriority(1)
+            .help(BookmarkFileLocation.url(for: path).path)
+          if path != nil {
+            Button("Reset") { path = nil }
+              .help("Back to \(BookmarkFileLocation.defaultPath)")
+              .fixedSize()
+          }
+          Button("Choose…", action: choose).fixedSize()
+        }
+      }
+    }
+  }
+
+  private func choose() {
+    NSApp.activate()
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.init(filenameExtension: "md") ?? .plainText]
+    panel.directoryURL = BookmarkFileLocation.url(for: path).deletingLastPathComponent()
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    let chosen = BookmarkFileLocation.path(for: url)
+    path = chosen == BookmarkFileLocation.defaultPath ? nil : chosen
   }
 }
 

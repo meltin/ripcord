@@ -446,3 +446,22 @@ extension Search {
       keyword: nil, kind: .bookmark, action: menu[0].action, menu: menu)
   }
 }
+
+/// Where bookmarks.md lives: Raycast's MarkMarks has the user pick its file. Unset, Ripcord's
+/// own under ~/.config.
+public enum BookmarkFileLocation {
+  public static let defaultPath = "~/.config/ripcord/bookmarks.md"
+
+  /// `path`, `~` expanded; the default for nil or blank.
+  public static func url(for path: String?, home: String = NSHomeDirectory()) -> URL {
+    let trimmed = path?.trimmingCharacters(in: .whitespaces) ?? ""
+    let chosen = trimmed.isEmpty ? defaultPath : trimmed
+    let expanded = chosen == "~" || chosen.hasPrefix("~/") ? home + chosen.dropFirst() : chosen
+    return URL(fileURLWithPath: expanded)
+  }
+
+  /// `url` as Settings shows it and config.json keeps it, with `~` for the home folder.
+  public static func path(for url: URL, home: String = NSHomeDirectory()) -> String {
+    url.path.hasPrefix(home + "/") ? "~" + url.path.dropFirst(home.count) : url.path
+  }
+}

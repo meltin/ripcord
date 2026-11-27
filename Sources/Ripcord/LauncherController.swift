@@ -500,7 +500,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private var notes: [Note] = []
   /// Hands the notes window what it's asked to do.
   var onNotes: (NotesRequest) -> Void = { _ in }
-  static let bookmarksURL = URL.homeDirectory.appending(path: ".config/ripcord/bookmarks.md")
+  /// Search Bookmarks' file, as Settings › Bookmarks sets it.
+  static var bookmarksURL = BookmarkFileLocation.url(for: nil)
+  var bookmarksFile: String? {
+    didSet { Self.bookmarksURL = BookmarkFileLocation.url(for: bookmarksFile) }
+  }
   /// What Pick Color copies, and Color History lists first.
   var colorFormat = ColorFormat.hex {
     didSet { if colorFormat != oldValue, model.mode == .colors { refreshRows() } }
@@ -2341,7 +2345,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
       bookmarks = try Self.readBookmarks()
       return true
     } catch {
-      onError("Ripcord can't read bookmarks.md as UTF-8 text: \(error.localizedDescription)")
+      onError(
+        "Ripcord can't read \(Self.bookmarksURL.lastPathComponent) as UTF-8 text: \(error.localizedDescription)"
+      )
       return false
     }
   }
@@ -2356,8 +2362,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     try Data(file.text.utf8).write(to: target, options: .atomic)
   }
 
-  private static let changedMessage =
-    "bookmarks.md changed since it was read; the list now shows it as it is."
+  private static var changedMessage: String {
+    "\(bookmarksURL.lastPathComponent) changed since it was read; the list now shows it as it is."
+  }
 
   /// Applies `change` to bookmarks.md as it is now, and writes it: one read and one write. The
   /// changed bookmark's row ID, or nil after saying why nothing was written.
@@ -2382,8 +2389,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
       model.bookmarkDraft = rebased(model.bookmarkDraft)
       onError(
         wasEditing && model.bookmarkDraft.original == nil
-          ? "bookmarks.md changed, and the bookmark being edited isn't in it any more. Saving now adds it as a new one."
-          : "bookmarks.md changed since the form opened. Check the group, then save again.")
+          ? "\(Self.bookmarksURL.lastPathComponent) changed, and the bookmark being edited isn't in it any more. Saving now adds it as a new one."
+          : "\(Self.bookmarksURL.lastPathComponent) changed since the form opened. Check the group, then save again."
+      )
     } catch BookmarkFile.EditError.invalid(let message) {
       onError(message)
     } catch {
@@ -2440,7 +2448,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     // Saving would drop what the form can't show, such as a link title or a note after it.
     guard bookmark.isEditable else {
       return onError(
-        "This bookmark's line has text the form doesn't show, which saving would drop; edit it in bookmarks.md instead."
+        "This bookmark's line has text the form doesn't show, which saving would drop; edit it in \(Self.bookmarksURL.lastPathComponent) instead."
       )
     }
     // A new bookmark being typed waits for Add Bookmark.

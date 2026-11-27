@@ -328,4 +328,23 @@ import Testing
       try save(file, "A2", "https://a.example", replacing: a, under: .heading(heading)).file.text
         == "# A\n- [A2](https://a.example)  \n")
   }
+
+  /// Search Bookmarks' file: ~/.config/ripcord/bookmarks.md unless one is picked, `~` kept in
+  /// what's saved.
+  @Test func findsTheBookmarksFile() throws {
+    let home = "/Users/al"
+    #expect(
+      BookmarkFileLocation.url(for: nil, home: home).path
+        == "/Users/al/.config/ripcord/bookmarks.md")
+    #expect(BookmarkFileLocation.url(for: " ", home: home).path.hasSuffix("/ripcord/bookmarks.md"))
+    #expect(
+      BookmarkFileLocation.url(for: "~/Notes/links.md", home: home).path
+        == "/Users/al/Notes/links.md")
+    #expect(BookmarkFileLocation.url(for: "/tmp/links.md", home: home).path == "/tmp/links.md")
+    #expect(
+      BookmarkFileLocation.path(for: URL(fileURLWithPath: "/Users/al/Notes/links.md"), home: home)
+        == "~/Notes/links.md")
+    let config = try JSONDecoder().decode(Config.self, from: Data(#"{"hotkey":"cmd+space"}"#.utf8))
+    #expect(config.bookmarksFile == nil)
+  }
 }
