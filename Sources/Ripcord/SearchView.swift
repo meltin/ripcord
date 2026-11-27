@@ -1259,7 +1259,8 @@ private struct ArgumentFields: View {
     .textFieldStyle(.plain)
     .font(.system(size: 13))
     .padding(.horizontal, 8)
-    .frame(width: 180, height: 26)
+    // Narrower when a command has many, so they stay inside the panel.
+    .frame(minWidth: 90, maxWidth: 180, minHeight: 26, maxHeight: 26)
     .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
     .overlay(ArgumentOutline(isFocused: focus == index))
     .overlay(alignment: .topTrailing) { OptionalBadge(argument: arguments[index]) }
@@ -1352,6 +1353,8 @@ private struct ArgumentDropdown: View {
         Text(title ?? argument.placeholder)
           .foregroundStyle(title == nil ? .tertiary : .primary)
           .lineLimit(1)
+          // A long choice is cut short rather than pushing the fields out of the panel.
+          .frame(maxWidth: 160, alignment: .leading)
         Spacer(minLength: 2)
         Glyph(isOpen ? "chevron.up" : "chevron.down", pointSize: 10)
           .foregroundStyle(.secondary)
@@ -1399,6 +1402,29 @@ private struct ArgumentMenuCard: View {
         Text("No Results").font(.system(size: 13)).foregroundStyle(.secondary)
           .frame(maxWidth: .infinity).frame(height: 34)
       }
+      if choices.count > Self.visibleRows {
+        // Long lists scroll, following the highlight, so the card stays inside the panel.
+        ScrollViewReader { proxy in
+          ScrollView { rows(choices, highlight: highlight) }
+            .thinScroller()
+            .frame(height: CGFloat(Self.visibleRows) * 34)
+            .onChange(of: highlight) { _, now in proxy.scrollTo(now) }
+        }
+      } else {
+        rows(choices, highlight: highlight)
+      }
+    }
+    .padding(6)
+    .frame(width: Self.width)
+    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+  }
+
+  static let width: CGFloat = 200
+  /// Rows before the list scrolls: what fits under the header, over the list.
+  private static let visibleRows = 9
+
+  private func rows(_ choices: [(value: String, title: String)], highlight: Int) -> some View {
+    VStack(spacing: 2) {
       ForEach(Array(choices.enumerated()), id: \.offset) { index, choice in
         Button {
           onCommand(.chooseArgument(index))
@@ -1415,14 +1441,10 @@ private struct ArgumentMenuCard: View {
             .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
+        .id(index)
       }
     }
-    .padding(6)
-    .frame(width: Self.width)
-    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
   }
-
-  static let width: CGFloat = 200
 }
 
 /// A fullOutput Script Command's output, all of it, as a terminal shows it: monospaced and
