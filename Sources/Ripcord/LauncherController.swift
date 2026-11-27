@@ -455,6 +455,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
   var cleanKeyboardDuration = CleanKeyboardSettings.Duration.ask
   var onImportSnippets: () -> Void = {}
   var onImportQuicklinks: () -> Void = {}
+  /// Show Warning Before Deleting Snippets, and Quicklinks, from the settings.
+  var warnsBeforeDeletingSnippets = true
+  var warnsBeforeDeletingQuicklinks = true
   var onExportQuicklinks: () -> Void = {}
   var isVisible: Bool { panel.isVisible }
 
@@ -1833,7 +1836,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       guard quicklinks.indices.contains(index), quicklinks[index].name == name else {
         return NSSound.beep()
       }
-      guard confirmed else {
+      guard confirmed || !warnsBeforeDeletingQuicklinks else {
         // Asked first, as Raycast does: a deleted Quicklink has no undo.
         model.confirmation = Confirmation(
           icon: .command(.searchQuicklinks), title: "Delete “\(name)”?",
@@ -2666,6 +2669,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .duplicate: edit(index, duplicate: true)
     case .delete:
       // Asked first, as Raycast does by default: a deleted snippet has no undo.
+      guard warnsBeforeDeletingSnippets else { return perform(.confirmDelete, on: index) }
       model.menu = nil
       model.confirmation = Confirmation(
         icon: .command(.searchSnippets), title: "Delete “\(snippets[index].name)”?",

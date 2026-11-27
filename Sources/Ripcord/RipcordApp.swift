@@ -380,6 +380,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.items = config.items
       launcher.inputSource = config.inputSource
       launcher.snippets = config.snippets
+      launcher.warnsBeforeDeletingSnippets = config.snippetExpansion.showDeleteWarning
+      launcher.warnsBeforeDeletingQuicklinks = config.quicklinkSettings.showDeleteWarning
       snippetExpander.apply(config)
       launcher.repositorySettings = config.repositories
       launcher.colorFormat = config.colorFormat

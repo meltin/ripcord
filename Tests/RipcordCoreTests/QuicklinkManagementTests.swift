@@ -97,3 +97,17 @@ struct QuicklinkFileTests {
     from: Data(#"{"hotkey":"cmd+space","quicklinkSettings":{"passSelectedText":true}}"#.utf8))
   #expect(on.quicklinkSettings.passSelectedText)
 }
+
+/// Snippets and Quicklinks both ask before deleting unless turned off, as Raycast's do.
+@Test func warnsBeforeDeletingByDefault() throws {
+  let empty = try JSONDecoder().decode(Config.self, from: Data(#"{"hotkey":"cmd+space"}"#.utf8))
+  #expect(empty.snippetExpansion.showDeleteWarning)
+  #expect(empty.quicklinkSettings.showDeleteWarning)
+  let off = try JSONDecoder().decode(
+    Config.self,
+    from: Data(
+      #"{"hotkey":"cmd+space","snippetExpansion":{"showDeleteWarning":false},"quicklinkSettings":{"showDeleteWarning":false}}"#
+        .utf8))
+  #expect(!off.snippetExpansion.showDeleteWarning)
+  #expect(!off.quicklinkSettings.showDeleteWarning)
+}

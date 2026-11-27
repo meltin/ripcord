@@ -23,15 +23,18 @@ public struct SnippetExpansion: Codable, Equatable, Sendable {
   public var expandsWithinWords: Bool
   /// Bundle IDs of apps it never runs in.
   public var disabledApps: [String]
+  /// Delete Snippet asks first, as Raycast's "Show Warning Before Deleting Snippets"; on by default.
+  public var showDeleteWarning: Bool
 
   public init(
     isEnabled: Bool = true, mode: Mode = .immediately, expandsWithinWords: Bool = false,
-    disabledApps: [String] = SnippetExpansion.defaultDisabledApps
+    disabledApps: [String] = SnippetExpansion.defaultDisabledApps, showDeleteWarning: Bool = true
   ) {
     self.isEnabled = isEnabled
     self.mode = mode
     self.expandsWithinWords = expandsWithinWords
     self.disabledApps = disabledApps
+    self.showDeleteWarning = showDeleteWarning
   }
 
   /// Short keys in config.json, as its other settings have.
@@ -40,6 +43,7 @@ public struct SnippetExpansion: Codable, Equatable, Sendable {
     case mode
     case expandsWithinWords = "withinWords"
     case disabledApps
+    case showDeleteWarning
   }
 
   /// Password managers, as Raycast starts with, so a keyword typed there is never replaced.
@@ -54,6 +58,7 @@ public struct SnippetExpansion: Codable, Equatable, Sendable {
     disabledApps =
       try container.decodeIfPresent([String].self, forKey: .disabledApps)
       ?? Self.defaultDisabledApps
+    showDeleteWarning = try container.decodeIfPresent(Bool.self, forKey: .showDeleteWarning) ?? true
   }
 }
 
