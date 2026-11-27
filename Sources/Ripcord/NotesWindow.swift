@@ -1025,6 +1025,15 @@ private struct MarkdownEditor: NSViewRepresentable {
         return textView.apply(
           MarkdownEditing.deleteForward(
             at: selection.location, in: text, spans: spans))
+      case #selector(NSResponder.insertTab(_:)), #selector(NSResponder.insertBacktab(_:)):
+        // Tab nests list items a level, Shift-Tab brings them back; elsewhere Tab is a tab.
+        guard
+          let edit = MarkdownEditing.indentItems(
+            selection: selection, in: text, spans: spans,
+            outdent: selector == #selector(NSResponder.insertBacktab(_:)))
+        else { return false }
+        textView.replace(edit.range, with: edit.replacement, selecting: edit.selection)
+        return true
       case #selector(NSResponder.moveDown(_:)) where selection.length == 0:
         // Out of a code block that ends the note, onto a line made for it.
         guard

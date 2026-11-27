@@ -193,6 +193,26 @@ import Testing
     #expect(newline("plain", at: 5) == nil)
   }
 
+  @Test func nestsListItemsWithTab() {
+    func indent(_ text: String, _ selection: NSRange, outdent: Bool = false) -> String? {
+      MarkdownEditing.indentItems(
+        selection: selection, in: text, spans: MarkdownSpan.spans(in: text), outdent: outdent
+      ).map { (text as NSString).replacingCharacters(in: $0.range, with: $0.replacement) }
+    }
+    #expect(indent("- a\n- b", NSRange(location: 6, length: 0)) == "- a\n  - b")
+    #expect(
+      indent("- a\n  - [ ] b", NSRange(location: 10, length: 0), outdent: true) == "- a\n- [ ] b")
+    // Both items selected move together; a plain line among them stays.
+    #expect(
+      indent("1. a\nplain\n2. b", NSRange(location: 0, length: 14)) == "  1. a\nplain\n  2. b")
+    // Not an item: Tab is left to the text view.
+    #expect(indent("plain", NSRange(location: 2, length: 0)) == nil)
+    let edit = MarkdownEditing.indentItems(
+      selection: NSRange(location: 3, length: 0), in: "- a",
+      spans: MarkdownSpan.spans(in: "- a"), outdent: false)
+    #expect(edit?.selection == NSRange(location: 5, length: 0))
+  }
+
   @Test func takesDashEmptyBracketsAsATask() {
     let edit = MarkdownEditing.taskShortcut(at: 5, in: "- [] ")
     #expect(

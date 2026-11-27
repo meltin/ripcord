@@ -64,6 +64,51 @@ public enum MarkdownEditing {
     return (NSRange(location: caret, length: 0), insert, caret + (insert as NSString).length)
   }
 
+  /// Tab and Shift-Tab on list items: the lines `selection` touches that are bullets, numbered
+  /// or task items move a level in (two spaces) or out. Nil when none of them is an item, so
+  /// Tab does what it otherwise does.
+  public static func indentItems(
+    selection: NSRange, in text: String, spans: [MarkdownSpan], outdent: Bool
+  ) -> (range: NSRange, replacement: String, selection: NSRange)? {
+    let string = text as NSString
+    let range = string.lineRange(for: selection)
+    let items = spans.filter {
+      switch $0.style {
+      case .bullet, .ordered, .task: NSLocationInRange($0.range.location, range)
+      default: false
+      }
+    }
+    .map(\.range.location)
+    guard !items.isEmpty else { return nil }
+    var replacement = ""
+    var shifts: [(at: Int, by: Int)] = []
+    var location = range.location
+    while location < NSMaxRange(range) {
+      let line = string.lineRange(for: NSRange(location: location, length: 0))
+      var text = string.substring(with: line)
+      if items.contains(location) {
+        if outdent {
+          let lead = text.prefix { $0 == " " }.count
+          let cut = text.hasPrefix("\t") ? 1 : min(lead, 2)
+          text.removeFirst(cut)
+          shifts.append((location, -cut))
+        } else {
+          text = "  " + text
+          shifts.append((location, 2))
+        }
+      }
+      replacement += text
+      location = NSMaxRange(line)
+    }
+    // The selection moves with its own line's text.
+    func moved(_ point: Int) -> Int {
+      shifts.filter { $0.at <= point }.reduce(point) { max($0 + $1.by, $1.at) }
+    }
+    let start = moved(selection.location)
+    let end = moved(NSMaxRange(selection))
+    return (range, replacement, NSRange(location: start, length: max(0, end - start)))
+  }
+
   /// `- [] ` typed at a line's start, as Raycast takes it, written as Markdown's `- [ ] ` so
   /// the file reads as a task anywhere. Nil when the caret isn't just after one.
   public static func taskShortcut(at caret: Int, in text: String)
