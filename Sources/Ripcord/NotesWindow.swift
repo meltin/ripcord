@@ -775,7 +775,8 @@ private struct NotesView: View {
         DeletedToast(onUndo: onUndoDelete, isHovered: $model.isToastHovered)
           .id(toast.id)
           .padding(.top, Self.headerHeight - 6)
-          .transition(.move(edge: .top).combined(with: .opacity))
+          // Fades in where it sits, rather than sliding in from the edge.
+          .transition(.opacity.combined(with: .scale(scale: 0.96)))
       }
     }
     .onHover(perform: onHover)
