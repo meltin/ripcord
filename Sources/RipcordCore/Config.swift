@@ -34,6 +34,8 @@ public struct Config: Codable, Equatable, Sendable {
   /// Window Gap and Screen Gap.
   public var windowGap: Int
   public var screenGap: Int
+  /// What Caffeinate keeps awake, and whether it starts with Ripcord.
+  public var coffee: CoffeeSettings
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
@@ -44,7 +46,7 @@ public struct Config: Codable, Equatable, Sendable {
     dummyTextLanguage: DummyText.Language = .japanese,
     clipboardHistory: ClipboardSettings = ClipboardSettings(),
     backdrop: String = Backdrop.off, cycleHalves: Bool = true, lidAwakeLowBattery: Int = 10,
-    windowGap: Int = 0, screenGap: Int = 0
+    windowGap: Int = 0, screenGap: Int = 0, coffee: CoffeeSettings = CoffeeSettings()
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
@@ -64,6 +66,7 @@ public struct Config: Codable, Equatable, Sendable {
     self.lidAwakeLowBattery = lidAwakeLowBattery
     self.windowGap = windowGap
     self.screenGap = screenGap
+    self.coffee = coffee
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -98,6 +101,7 @@ public struct Config: Codable, Equatable, Sendable {
       try container.decodeIfPresent(Int.self, forKey: .lidAwakeLowBattery) ?? 10
     windowGap = try container.decodeIfPresent(Int.self, forKey: .windowGap) ?? 0
     screenGap = try container.decodeIfPresent(Int.self, forKey: .screenGap) ?? 0
+    coffee = try container.decodeIfPresent(CoffeeSettings.self, forKey: .coffee) ?? CoffeeSettings()
   }
 
   public static let `default` = Config(
