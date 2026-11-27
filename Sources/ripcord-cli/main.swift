@@ -17,6 +17,9 @@ case .success(let parsed): request = parsed
 case .failure: fail(Control.usage, code: 64)
 }
 
+// An app that closes the connection early is reported below, not left to kill the command.
+signal(SIGPIPE, SIG_IGN)
+
 let path = Control.socketPath
 let socketFD = socket(AF_UNIX, SOCK_STREAM, 0)
 guard socketFD >= 0 else { fail("ripcord: couldn't open a socket.", code: 2) }
@@ -39,7 +42,7 @@ guard connected == 0 else { fail("ripcord: Ripcord isn't running.", code: 2) }
 
 let handle = FileHandle(fileDescriptor: socketFD, closeOnDealloc: true)
 do {
-  handle.write(try JSONEncoder().encode(request) + Data("\n".utf8))
+  try handle.write(contentsOf: try JSONEncoder().encode(request) + Data("\n".utf8))
 } catch {
   fail("ripcord: \(error.localizedDescription)", code: 2)
 }

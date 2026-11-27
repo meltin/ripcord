@@ -4,6 +4,8 @@ import RipcordControl
 /// The socket the `ripcord` command talks to: owner-only, in this user's temporary folder, and
 /// answering only this user's processes. Each connection is one JSON request line and one
 /// response line, handled on its own thread so a pick waiting for a choice holds no one up.
+/// A client keeps its end open until the answer comes: closing it, even only for writing, reads
+/// as having gone away, and what it asked is cancelled.
 final class ControlServer: @unchecked Sendable {
   private let path: String
   private let handle: @Sendable (ControlRequest) async -> ControlResponse
@@ -31,6 +33,9 @@ final class ControlServer: @unchecked Sendable {
   }
 
   func start() throws {
+    // A command gone before its answer is written mustn't take the app down: the write fails
+    // instead. The socket's own SO_NOSIGPIPE didn't stop the signal here.
+    signal(SIGPIPE, SIG_IGN)
     var address = sockaddr_un()
     address.sun_family = sa_family_t(AF_UNIX)
     let bytes = Array(path.utf8)
@@ -107,6 +112,8 @@ final class ControlServer: @unchecked Sendable {
       // A pick's lines, at most, and some room: anything bigger is turned away.
       if line.count > 16 << 20 { return }
     }
+    // Nothing asked, as when another Ripcord checks this one is alive: nothing to answer.
+    guard !line.isEmpty else { return }
     let response: ControlResponse
     if let request = try? JSONDecoder().decode(ControlRequest.self, from: line) {
       let answer = Answer()
