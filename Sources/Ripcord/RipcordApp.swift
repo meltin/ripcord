@@ -341,6 +341,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.cycleHalves = config.cycleHalves
       launcher.setWindowGaps(window: config.windowGap, screen: config.screenGap)
       lidAwake.lowBattery = config.lidAwakeLowBattery
+      caffeinator.settings = config.coffee
+      // Start Caffeination When Ripcord Starts: only as it starts, not on every save.
+      if !hasAppliedConfig, config.coffee.startOnLaunch { caffeinator.caffeinate(for: nil) }
+      hasAppliedConfig = true
       applyLaunchAtLogin(config.launchAtLogin)
       // Saving mid-recording must not bring back the hotkeys the recorder turned off.
       if !isRecording { applyHotkeys(config) }
@@ -467,6 +471,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private let caffeinator = Caffeinator()
+  private var hasAppliedConfig = false
   private let sleepTimer = SleepTimer()
   private let lidAwake = LidAwake()
   private let stopLidAwakeItem = NSMenuItem(

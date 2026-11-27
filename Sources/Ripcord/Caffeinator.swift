@@ -1,11 +1,21 @@
 import AppKit
 import IOKit.pwr_mgt
+import RipcordCore
 
-/// Coffee: keeps the Mac and its display awake with a power assertion, for a time or until
-/// Decaffeinate, as `caffeinate -d` does.
+/// Coffee: keeps the Mac awake with power assertions, for a time or until Decaffeinate, as
+/// `caffeinate` does: the display, the system and the disk, as Settings › Coffee says.
 @MainActor
 final class Caffeinator {
-  private var assertion = IOPMAssertionID(0)
+  private var assertions: [IOPMAssertionID] = []
+  /// What it keeps awake; changed while on, it holds the new set at once.
+  var settings = CoffeeSettings() {
+    didSet {
+      guard isActive, settings != oldValue else { return }
+      release()
+      // Never on while holding nothing.
+      if !hold() { decaffeinate() }
+    }
+  }
   private var timer: Timer?
   private(set) var isActive = false
   /// When a timed Caffeinate ends; nil while it runs until Decaffeinate.
@@ -22,10 +32,7 @@ final class Caffeinator {
   @discardableResult
   func caffeinate(for seconds: TimeInterval?) -> Bool {
     if !isActive {
-      let created = IOPMAssertionCreateWithName(
-        kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
-        IOPMAssertionLevel(kIOPMAssertionLevelOn), "Ripcord Coffee" as CFString, &assertion)
-      guard created == kIOReturnSuccess else { return false }
+      guard hold() else { return false }
       isActive = true
     }
     endsAt = seconds.map { Date.now.addingTimeInterval($0) }
@@ -70,8 +77,29 @@ final class Caffeinator {
     whileApp = nil
   }
 
+  /// Takes the assertions the settings ask for; false, holding none, when macOS refused one.
+  private func hold() -> Bool {
+    for type in settings.assertionTypes {
+      var id = IOPMAssertionID(0)
+      let created = IOPMAssertionCreateWithName(
+        type as CFString, IOPMAssertionLevel(kIOPMAssertionLevelOn), "Ripcord Coffee" as CFString,
+        &id)
+      guard created == kIOReturnSuccess else {
+        release()
+        return false
+      }
+      assertions.append(id)
+    }
+    return true
+  }
+
+  private func release() {
+    for assertion in assertions { IOPMAssertionRelease(assertion) }
+    assertions = []
+  }
+
   func decaffeinate() {
-    if isActive { IOPMAssertionRelease(assertion) }
+    release()
     isActive = false
     endsAt = nil
     stopWaiting()

@@ -108,4 +108,23 @@ import Testing
       Coffee.status(isActive: true, remaining: nil, whileApp: "Xcode")
         == "Caffeinated while Xcode is running")
   }
+
+  /// Raycast's Coffee defaults: display, system and disk on; AC power and launch off.
+  @Test func coffeeSettingsDefaultAsRaycasts() throws {
+    let config = try JSONDecoder().decode(Config.self, from: Data(#"{"hotkey":"cmd+space"}"#.utf8))
+    #expect(config.coffee == CoffeeSettings())
+    #expect(
+      config.coffee.assertionTypes == [
+        "PreventUserIdleDisplaySleep", "PreventUserIdleSystemSleep", "PreventDiskIdle",
+      ])
+    let some = try JSONDecoder().decode(
+      CoffeeSettings.self, from: Data(#"{"preventDisplay":false,"preventSleepOnAC":true}"#.utf8))
+    #expect(
+      some.assertionTypes == [
+        "PreventUserIdleSystemSleep", "PreventDiskIdle", "PreventSystemSleep",
+      ])
+    #expect(!some.startOnLaunch)
+    let none = CoffeeSettings(preventDisplay: false, preventSystem: false, preventDisk: false)
+    #expect(none.assertionTypes == ["PreventUserIdleSystemSleep"])
+  }
 }

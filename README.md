@@ -53,7 +53,8 @@
   As Raycast's Coffee: Toggle Caffeinate; Caffeinate for ... takes hours, minutes and seconds in
   its fields; Caffeinate Until a time of day, as 5pm or 17:30; Caffeinate While keeps it awake
   until the app picked, or the one you were in, quits; Caffeinate Status says which, and until
-  when
+  when. Settings › Coffee picks what's kept awake (the display, the system and the disk by
+  default, and the system on AC power with the lid closed if asked) and can start it with Ripcord
 - Sleep Timer: type a time after it, as in `sleep timer 30m`, then pick Sleep or Turn Off Display;
   a moon with the time left shows in the menu bar until it fires or Stop Sleep Timer
 - Lid Awake: keeps the Mac from sleeping, with the lid closed and on battery too, until turned off
@@ -207,6 +208,8 @@ the settings window opens. The settings window writes every change back to it.
   "clipboardHistory": { "keepFor": "unlimited", "maxEntries": 300 },
   "backdrop": "off",
   "cycleHalves": true,
+  "coffee": { "preventDisplay": true, "preventSystem": true, "preventDisk": true,
+    "preventSleepOnAC": false, "startOnLaunch": false },
   "windowGap": 0,
   "screenGap": 0,
   "lidAwakeLowBattery": 10,

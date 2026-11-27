@@ -122,3 +122,50 @@ public enum Coffee {
     ]
   }
 }
+
+/// Coffee's settings, as Raycast's Coffee has them: what Caffeinate keeps awake, and whether
+/// it starts with Ripcord.
+public struct CoffeeSettings: Codable, Equatable, Sendable {
+  public var preventDisplay: Bool
+  public var preventSystem: Bool
+  public var preventDisk: Bool
+  /// The system kept awake on AC power even with the lid closed, as `caffeinate -s`.
+  public var preventSleepOnAC: Bool
+  public var startOnLaunch: Bool
+
+  public init(
+    preventDisplay: Bool = true, preventSystem: Bool = true, preventDisk: Bool = true,
+    preventSleepOnAC: Bool = false, startOnLaunch: Bool = false
+  ) {
+    self.preventDisplay = preventDisplay
+    self.preventSystem = preventSystem
+    self.preventDisk = preventDisk
+    self.preventSleepOnAC = preventSleepOnAC
+    self.startOnLaunch = startOnLaunch
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let read = { (key: CodingKeys, fallback: Bool) in
+      try container.decodeIfPresent(Bool.self, forKey: key) ?? fallback
+    }
+    self.init(
+      preventDisplay: try read(.preventDisplay, true),
+      preventSystem: try read(.preventSystem, true),
+      preventDisk: try read(.preventDisk, true),
+      preventSleepOnAC: try read(.preventSleepOnAC, false),
+      startOnLaunch: try read(.startOnLaunch, false))
+  }
+
+  /// The power assertions Caffeinate holds, by IOKit's names. With none picked, idle system
+  /// sleep is held off, as `caffeinate` with no flags does, which Raycast's Coffee then runs.
+  public var assertionTypes: [String] {
+    let types = [
+      preventDisplay ? "PreventUserIdleDisplaySleep" : nil,
+      preventSystem ? "PreventUserIdleSystemSleep" : nil,
+      preventDisk ? "PreventDiskIdle" : nil,
+      preventSleepOnAC ? "PreventSystemSleep" : nil,
+    ].compactMap { $0 }
+    return types.isEmpty ? ["PreventUserIdleSystemSleep"] : types
+  }
+}

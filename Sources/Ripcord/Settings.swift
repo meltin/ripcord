@@ -655,6 +655,18 @@ private enum SettingText {
     title: "Turn Off at Low Battery",
     detail:
       "On battery, Lid Awake turns itself off at this charge, so a closed Mac doesn't run flat.")
+  static let preventDisplay = SettingsSearch.Item(
+    title: "Prevent Display Sleep", detail: "Prevent the display from sleeping")
+  static let preventSystem = SettingsSearch.Item(
+    title: "Prevent System Sleep", detail: "Prevent the system from sleeping")
+  static let preventDisk = SettingsSearch.Item(
+    title: "Prevent Disk Sleep", detail: "Prevent the disk from sleeping")
+  static let preventSleepOnAC = SettingsSearch.Item(
+    title: "Prevent System Sleep on AC Power",
+    detail: "Keep the system awake while on AC power, for example with the lid closed.")
+  static let coffeeOnLaunch = SettingsSearch.Item(
+    title: "Start Caffeination When Ripcord Starts",
+    detail: "Keep the Mac awake, until Decaffeinate, from the next time Ripcord starts.")
   static let windowGap = SettingsSearch.Item(
     title: "Window Gap", detail: "Gap between windows")
   static let screenGap = SettingsSearch.Item(
@@ -689,6 +701,11 @@ extension SettingsPage {
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
       case .dummyText: [SettingText.dummyTextLanguage]
       case .windowManagement: [SettingText.windowGap, SettingText.screenGap, SettingText.cycling]
+      case .coffee:
+        [
+          SettingText.preventDisplay, SettingText.preventSystem, SettingText.preventDisk,
+          SettingText.preventSleepOnAC, SettingText.coffeeOnLaunch,
+        ]
       case .lidAwake: [SettingText.lidAwakePermission, SettingText.lidAwakeLowBattery]
       case .clipboardHistory:
         [
@@ -834,6 +851,30 @@ struct SettingsView: View {
             PageHeader(page: .lidAwake)
             LidAwakeSettings(model: model)
             CommandsList(model: model, page: .lidAwake)
+          }
+        case .coffee:
+          PageScroll(model: model) {
+            PageHeader(page: .coffee)
+            Card {
+              let rows: [(SettingsSearch.Item, WritableKeyPath<CoffeeSettings, Bool>)] = [
+                (SettingText.preventDisplay, \.preventDisplay),
+                (SettingText.preventSystem, \.preventSystem),
+                (SettingText.preventDisk, \.preventDisk),
+                (SettingText.preventSleepOnAC, \.preventSleepOnAC),
+                (SettingText.coffeeOnLaunch, \.startOnLaunch),
+              ]
+              ForEach(rows.indices, id: \.self) { index in
+                if index > 0 { Divider() }
+                SettingRow(title: rows[index].0.title, description: rows[index].0.detail) {
+                  Toggle(
+                    rows[index].0.title, isOn: $model.config.coffee[dynamicMember: rows[index].1]
+                  )
+                  .labelsHidden()
+                  .toggleStyle(.switch)
+                }
+              }
+            }
+            CommandsList(model: model, page: .coffee)
           }
         case .windowManagement:
           PageScroll(model: model) {
