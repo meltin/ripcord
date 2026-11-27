@@ -24,6 +24,9 @@ final class SettingsModel {
   var updater: Updater?
   /// What's typed in the sidebar's "Search settings...".
   var sidebarQuery = ""
+  /// Bumped as the window opens, so the search field takes the keys every time, not only the
+  /// first, when it's first put in the window.
+  var sidebarFocusRequest = 0
   /// The one row recording a hotkey; starting another row stops it.
   private(set) var recordingTarget: HotkeyTarget?
   private(set) var recorderMessage: (target: HotkeyTarget, text: String)?
@@ -281,6 +284,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
           x: (area.midX - size.width / 2).rounded(), y: (area.midY - size.height / 2).rounded()))
     }
     isSettingsOpen = true
+    model.sidebarFocusRequest += 1
     NSApp.setActivationPolicy(.regular)
     if escMonitor == nil {
       escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -376,6 +380,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
       welcomeWindow = nil
     } else {
       isSettingsOpen = false
+      // Opened again, it lists the pages rather than an old search.
+      model.sidebarQuery = ""
       if let escMonitor { NSEvent.removeMonitor(escMonitor) }
       escMonitor = nil
     }
@@ -566,6 +572,8 @@ extension SettingsPage {
       case .colorPicker: [SettingText.colorFormat]
       case .scripts: [SettingText.scriptFolders]
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
+      // Its rows are the permissions, read from where they're drawn.
+      case .permissions: Permission.allCases.map { .init(title: $0.title, detail: $0.purpose) }
       default: []
       }
     let keys = commandKeys ?? []
@@ -763,6 +771,7 @@ private struct Sidebar: View {
       Glyph("magnifyingglass", pointSize: 13).foregroundStyle(.secondary)
       SearchField(
         text: model.sidebarQuery, placeholder: "Search settings...", fontSize: 13,
+        focusRequest: model.sidebarFocusRequest,
         onChange: {
           model.sidebarQuery = $0
           selection = 0
@@ -784,9 +793,11 @@ private struct Sidebar: View {
         .buttonStyle(.plain)
       }
     }
-    .padding(.horizontal, 10)
-    .frame(height: 30)
-    .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.06)))
+    .padding(.horizontal, 12)
+    .frame(height: 32)
+    // A bordered capsule, as Raycast's settings draw theirs.
+    .background(Capsule().fill(Color.primary.opacity(0.05)))
+    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.1)))
   }
 
   /// The pages found, each with "Settings" and "Commands" under it for what matched.

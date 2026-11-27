@@ -1950,6 +1950,8 @@ struct SearchField: NSViewRepresentable {
   var takesTab = false
   /// Remounted with text, the caret lands at its end instead of selecting it all.
   var caretAtEnd = false
+  /// A change takes the focus back to the field, as when a reused window opens again.
+  var focusRequest = 0
   let onChange: (String) -> Void
   let onCommand: (SearchCommand) -> Void
   /// When the field stops being edited, as when another control is clicked.
@@ -1972,6 +1974,11 @@ struct SearchField: NSViewRepresentable {
   func updateNSView(_ field: FocusingTextField, context: Context) {
     context.coordinator.parent = self
     field.onFocus = onFocus
+    if context.coordinator.focusRequest != focusRequest {
+      context.coordinator.focusRequest = focusRequest
+      // Once the window it's in is key again.
+      DispatchQueue.main.async { field.window?.makeFirstResponder(field) }
+    }
     if field.placeholderString != placeholder { field.placeholderString = placeholder }
     let isComposing = (field.currentEditor() as? NSTextView)?.hasMarkedText() ?? false
     if !isComposing, field.stringValue != text { field.stringValue = text }
@@ -1981,6 +1988,7 @@ struct SearchField: NSViewRepresentable {
 
   final class Coordinator: NSObject, NSTextFieldDelegate {
     var parent: SearchField
+    var focusRequest = 0
 
     init(parent: SearchField) { self.parent = parent }
 
