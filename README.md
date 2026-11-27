@@ -260,8 +260,9 @@ It talks to the running app, which has to be open:
 - `ripcord config get [KEY]` prints the config file, or one top-level key's value as JSON (its
   default when the file leaves it out).
 - `ripcord config set KEY JSON` sets a top-level key, as in
-  `ripcord config set colorFormat '"rgb"'`. A key the config doesn't have, or a value it can't
-  take, is refused and the file is left alone.
+  `ripcord config set colorFormat '"rgb"'`. Give a key's whole value, as `config get KEY` prints
+  it; `null` clears one that can be left out, such as `inputSource`. A key the config doesn't
+  have, or a value it can't take, is refused and the file is left alone.
 
 It exits with 0 when done, 1 when a pick was left without one, 2 on an error (Ripcord isn't
 running, or the value was refused) and 64 for arguments it doesn't take.

@@ -242,6 +242,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       return ControlResponse()
     case .configGet(let key):
       do {
+        // Written with the defaults first if it's missing, as at launch.
+        _ = try Config.load(from: configURL)
         return ControlResponse(output: try Config.get(key, from: Data(contentsOf: configURL)))
       } catch {
         return ControlResponse(error: "ripcord: \(error.localizedDescription)")

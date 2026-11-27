@@ -10,14 +10,22 @@ struct ConfigEditingTests {
   @Test func getsTheWholeFileOrOneKey() throws {
     #expect(try Config.get(nil, from: file) == String(decoding: file, as: UTF8.self))
     #expect(try Config.get("hotkey", from: file) == #""cmd+space""#)
-    // Left out of the file: the default Ripcord uses.
+    // Left out of the file: the default Ripcord uses, or null for one without.
     #expect(try Config.get("launchAtLogin", from: file) == "false")
+    #expect(try Config.get("inputSource", from: file) == "null")
     #expect(throws: Config.EditError.self) { try Config.get("nope", from: file) }
   }
 
   @Test func setsAKeyToAJSONValue() throws {
     #expect(try Config.setting("colorFormat", to: #""rgb""#, in: file).colorFormat == .rgb)
     #expect(try Config.setting("launchAtLogin", to: "true", in: file).launchAtLogin)
+    let abc = #""com.apple.keylayout.ABC""#
+    #expect(try Config.setting("inputSource", to: abc, in: file).inputSource != nil)
+    #expect(try Config.setting("inputSource", to: "null", in: file).inputSource == nil)
+  }
+
+  @Test func knowsEveryKeyEvenOnesLeftOutByDefault() {
+    #expect(Config.keys.isSuperset(of: ["inputSource", "hotkey", "backdrop", "snippets"]))
   }
 
   @Test func refusesUnknownKeysBadJSONAndValuesThatWouldChange() {

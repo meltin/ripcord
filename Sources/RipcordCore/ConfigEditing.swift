@@ -8,12 +8,9 @@ extension Config {
     public var errorDescription: String? { message }
   }
 
-  /// The keys a config file can have, as Ripcord writes them.
+  /// The keys a config file can have: its properties' names, those left out by default too.
   public static var keys: Set<String> {
-    guard let data = try? JSONEncoder().encode(Config.default),
-      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else { return [] }
-    return Set(object.keys)
+    Set(Mirror(reflecting: Config.default).children.compactMap(\.label))
   }
 
   /// The whole file's text, or one top-level key's value as JSON: the one Ripcord uses, its
@@ -23,9 +20,10 @@ extension Config {
     guard keys.contains(key) else { throw EditError(message: "“\(key)” isn't a config key.") }
     guard let config = try? JSONDecoder().decode(Config.self, from: data),
       let object = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(config))
-        as? [String: Any],
-      let value = object[key]
+        as? [String: Any]
     else { throw EditError(message: "The config file can't be read.") }
+    // A key with no value, as `inputSource` until one is picked, is null.
+    let value = object[key] ?? NSNull()
     let encoded = try JSONSerialization.data(
       withJSONObject: value, options: [.fragmentsAllowed, .prettyPrinted, .sortedKeys])
     return String(decoding: encoded, as: UTF8.self)
@@ -44,21 +42,19 @@ extension Config {
       throw EditError(message: "The config file isn't a JSON object.")
     }
     object[key] = value
-    let config: Config
-    do {
-      config = try JSONDecoder().decode(
+    let refused = EditError(
+      message: "“\(key)” can't be \(json). Give its whole value, as config get \(key) prints it.")
+    guard
+      let config = try? JSONDecoder().decode(
         Config.self, from: JSONSerialization.data(withJSONObject: object))
-    } catch {
-      throw EditError(message: "“\(key)” can't be \(json).")
-    }
-    // A value read leniently (an unknown color format reads as hex) mustn't be saved as
-    // something else: it has to come back as given.
+    else { throw refused }
+    // A value read leniently (an unknown color format reads as hex, a missing field as its
+    // default) mustn't be saved as something else: it has to come back as given. Null clears a
+    // key that can be left out.
     guard let written = try? JSONEncoder().encode(config),
       let back = try? JSONSerialization.jsonObject(with: written) as? [String: Any],
-      let backValue = back[key],
-      NSDictionary(dictionary: [key: backValue])
-        .isEqual(to: [key: value])
-    else { throw EditError(message: "“\(key)” can't be \(json).") }
+      NSDictionary(dictionary: [key: back[key] ?? NSNull()]).isEqual(to: [key: value])
+    else { throw refused }
     return config
   }
 }
