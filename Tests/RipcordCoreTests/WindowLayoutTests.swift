@@ -107,4 +107,23 @@ import Testing
       #expect(layout.frame(for: window, in: screen) == frame, "\(layout.title)")
     }
   }
+
+  /// As Raycast's commands moved and resized the same window on the same screen.
+  @Test func stepsAndMovesMatchRaycast() {
+    let screen = CGRect(x: 0, y: 34, width: 1512, height: 948)
+    let window = CGRect(x: 300, y: 200, width: 600, height: 500)
+    let expected: [(WindowLayout, CGRect)] = [
+      (.makeLarger, CGRect(x: 284, y: 184, width: 632, height: 532)),
+      (.makeSmaller, CGRect(x: 316, y: 216, width: 568, height: 468)),
+      (.moveTop, CGRect(x: 456, y: 34, width: 600, height: 500)),
+      (.moveBottom, CGRect(x: 456, y: 482, width: 600, height: 500)),
+      (.moveLeft, CGRect(x: 0, y: 258, width: 600, height: 500)),
+      (.moveRight, CGRect(x: 912, y: 258, width: 600, height: 500)),
+    ]
+    for (layout, frame) in expected {
+      #expect(layout.frame(for: window, in: screen) == frame, "\(layout.title)")
+    }
+    // A window as large as the screen stays so.
+    #expect(WindowLayout.makeLarger.frame(for: screen, in: screen) == screen)
+  }
 }

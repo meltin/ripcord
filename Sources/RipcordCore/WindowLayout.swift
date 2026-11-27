@@ -35,6 +35,14 @@ public enum WindowLayout: String, CaseIterable, Sendable {
   case maximizeHeight = "maximize-height"
   case maximizeWidth = "maximize-width"
   case reasonableSize = "reasonable-size"
+  case makeLarger = "make-larger"
+  case makeSmaller = "make-smaller"
+  case moveTop = "move-top"
+  case moveBottom = "move-bottom"
+  case moveLeft = "move-left"
+  case moveRight = "move-right"
+  case minimize = "minimize"
+  case toggleFullscreen = "toggle-fullscreen"
   case maximize = "maximize"
   case almostMaximize = "almost-maximize"
   case center = "center"
@@ -74,6 +82,14 @@ public enum WindowLayout: String, CaseIterable, Sendable {
     case .maximizeHeight: "Maximize Height"
     case .maximizeWidth: "Maximize Width"
     case .reasonableSize: "Reasonable Size"
+    case .makeLarger: "Make Larger"
+    case .makeSmaller: "Make Smaller"
+    case .moveTop: "Move Top"
+    case .moveBottom: "Move Bottom"
+    case .moveLeft: "Move Left"
+    case .moveRight: "Move Right"
+    case .minimize: "Minimize"
+    case .toggleFullscreen: "Toggle Fullscreen"
     case .maximize: "Maximize"
     case .almostMaximize: "Almost Maximize"
     case .center: "Center"
@@ -142,6 +158,28 @@ public enum WindowLayout: String, CaseIterable, Sendable {
       return CGRect(
         x: x + ((w - size.width) / 2).rounded(.down), y: y + ((h - size.height) / 2).rounded(.down),
         width: size.width, height: size.height)
+    case .makeLarger, .makeSmaller:
+      // 32 points each way, about the window's center, kept on the screen, as Raycast steps.
+      let step: CGFloat = self == .makeLarger ? 32 : -32
+      let size = CGSize(
+        width: min(max(window.width + step, 1), w), height: min(max(window.height + step, 1), h))
+      return Self.onScreen(
+        CGRect(
+          x: window.midX - size.width / 2, y: window.midY - size.height / 2, width: size.width,
+          height: size.height), visible)
+    case .moveTop, .moveBottom, .moveLeft, .moveRight:
+      // Against that edge and centered the other way, its size kept, as Raycast moves them.
+      let size = CGSize(width: min(window.width, w), height: min(window.height, h))
+      let centeredX = x + (w - size.width) / 2
+      let centeredY = y + (h - size.height) / 2
+      let origin: CGPoint =
+        switch self {
+        case .moveTop: CGPoint(x: centeredX, y: y)
+        case .moveBottom: CGPoint(x: centeredX, y: visible.maxY - size.height)
+        case .moveLeft: CGPoint(x: x, y: centeredY)
+        default: CGPoint(x: visible.maxX - size.width, y: centeredY)
+        }
+      return CGRect(origin: origin, size: size).rounded
     case .maximize: return visible.rounded
     case .almostMaximize: return part(0.05, 0.05, 0.9, 0.9)
     case .center:
@@ -152,9 +190,18 @@ public enum WindowLayout: String, CaseIterable, Sendable {
         height: size.height
       )
       .rounded
-    case .nextDisplay, .previousDisplay, .restore:
+    case .nextDisplay, .previousDisplay, .restore, .minimize, .toggleFullscreen:
       return nil
     }
+  }
+
+  /// `frame` moved, not resized, until it's inside `visible`, when it fits.
+  static func onScreen(_ frame: CGRect, _ visible: CGRect) -> CGRect {
+    CGRect(
+      x: min(max(frame.minX, visible.minX), visible.maxX - frame.width),
+      y: min(max(frame.minY, visible.minY), visible.maxY - frame.height),
+      width: frame.width, height: frame.height
+    ).rounded
   }
 
   /// `window` carried from one screen's visible area to another's, keeping its place and size

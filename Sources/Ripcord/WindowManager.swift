@@ -32,6 +32,17 @@ final class WindowManager {
       let frame = frame(of: window)
     else { return noWindow }
 
+    // Not a frame: the window's own state.
+    if layout == .minimize || layout == .toggleFullscreen {
+      let name = layout == .minimize ? kAXMinimizedAttribute : "AXFullScreen"
+      let current: Bool = attribute(window, name) ?? false
+      let value = layout == .minimize || !current ? kCFBooleanTrue : kCFBooleanFalse
+      if AXUIElementSetAttributeValue(window, name as CFString, value as CFTypeRef) != .success {
+        NSSound.beep()
+      }
+      return nil
+    }
+
     let screens = visibleFrames()
     guard !screens.isEmpty else { return nil }
     let center = CGPoint(x: frame.midX, y: frame.midY)
