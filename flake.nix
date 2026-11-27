@@ -40,8 +40,9 @@
 
         installPhase = ''
           runHook preInstall
-          mkdir -p $out/Applications
+          mkdir -p $out/Applications $out/bin
           cp -R build/Ripcord.app $out/Applications/
+          ln -s $out/Applications/Ripcord.app/Contents/MacOS/ripcord-cli $out/bin/ripcord
           runHook postInstall
         '';
 
