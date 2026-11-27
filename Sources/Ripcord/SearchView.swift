@@ -513,6 +513,15 @@ extension WindowLayout {
     case .bottomRightQuarter: "rectangle.inset.bottomright.filled"
     case .firstThird, .centerThird, .lastThird: "rectangle.split.3x1"
     case .firstTwoThirds, .lastTwoThirds: "rectangle.split.2x1"
+    case .firstFourth, .secondFourth, .thirdFourth, .lastFourth, .firstThreeFourths,
+      .lastThreeFourths:
+      "rectangle.split.3x1"
+    case .topThird, .topTwoThirds: "rectangle.tophalf.filled"
+    case .bottomThird, .bottomTwoThirds: "rectangle.bottomhalf.filled"
+    case .middleThird, .centerHalf, .centerTwoThirds, .centerThreeFourths:
+      "rectangle.center.inset.filled"
+    case .maximizeHeight, .maximizeWidth: "arrow.up.left.and.arrow.down.right"
+    case .reasonableSize: "rectangle.inset.filled"
     case .maximize: "arrow.up.left.and.arrow.down.right"
     case .almostMaximize: "rectangle.inset.filled"
     case .center: "rectangle.center.inset.filled"
