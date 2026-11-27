@@ -17,17 +17,27 @@ import Testing
         == CGRect(x: 720, y: 25, width: 720, height: 875))
     #expect(
       WindowLayout.topHalf.frame(for: window, in: screen)
-        == CGRect(x: 0, y: 25, width: 1440, height: 438))
+        == CGRect(x: 0, y: 25, width: 1440, height: 437))
     #expect(
       WindowLayout.bottomRightQuarter.frame(for: window, in: screen)?.origin
         == CGPoint(x: 720, y: 463))
   }
 
-  @Test func neighborsMeetAndStayOnTheScreen() {
+  /// On an odd height a half's 437.5 points are rounded down for both, leaving a point between
+  /// them, as Raycast's top and bottom halves do on a screen 1121 points high.
+  @Test func neighborsNeverOverlapAndStayOnTheScreen() {
     let top = WindowLayout.topHalf.frame(for: window, in: screen)
     let bottom = WindowLayout.bottomHalf.frame(for: window, in: screen)
-    #expect(top?.maxY == bottom?.minY)
+    #expect(top?.maxY == 462)
+    #expect(bottom?.minY == 463)
     #expect(bottom?.maxY == screen.maxY)
+    let tall = CGRect(x: 0, y: 31, width: 2048, height: 1121)
+    #expect(
+      WindowLayout.topHalf.frame(for: window, in: tall)
+        == CGRect(x: 0, y: 31, width: 2048, height: 560))
+    #expect(
+      WindowLayout.bottomHalf.frame(for: window, in: tall)
+        == CGRect(x: 0, y: 592, width: 2048, height: 560))
   }
 
   @Test func thirdsRunAlongTheLongSide() {
@@ -125,6 +135,70 @@ import Testing
     }
     // A window as large as the screen stays so.
     #expect(WindowLayout.makeLarger.frame(for: screen, in: screen) == screen)
+  }
+
+  /// As Raycast's Window Gap (32) and Screen Gap (16) placed a window on a 2048 × 1152 screen.
+  @Test func gapsMatchRaycast() {
+    let screen = CGRect(x: 0, y: 31, width: 2048, height: 1121)
+    let window = CGRect(x: 300, y: 200, width: 600, height: 500)
+    let cases: [(CGFloat, CGFloat, WindowLayout, CGRect)] = [
+      (32, 0, .leftHalf, CGRect(x: 0, y: 31, width: 1008, height: 1121)),
+      (32, 0, .rightHalf, CGRect(x: 1040, y: 31, width: 1008, height: 1121)),
+      (32, 0, .topHalf, CGRect(x: 0, y: 31, width: 2048, height: 544)),
+      (32, 0, .bottomHalf, CGRect(x: 0, y: 608, width: 2048, height: 544)),
+      (32, 0, .maximize, screen),
+      (0, 16, .leftHalf, CGRect(x: 16, y: 47, width: 1008, height: 1089)),
+      (0, 16, .rightHalf, CGRect(x: 1024, y: 47, width: 1008, height: 1089)),
+      (0, 16, .topHalf, CGRect(x: 16, y: 47, width: 2016, height: 544)),
+      (0, 16, .bottomHalf, CGRect(x: 16, y: 592, width: 2016, height: 544)),
+      (0, 16, .maximize, CGRect(x: 16, y: 47, width: 2016, height: 1089)),
+      (32, 16, .leftHalf, CGRect(x: 16, y: 47, width: 992, height: 1089)),
+      (32, 16, .rightHalf, CGRect(x: 1040, y: 47, width: 992, height: 1089)),
+      (32, 16, .topHalf, CGRect(x: 16, y: 47, width: 2016, height: 528)),
+      (32, 16, .bottomHalf, CGRect(x: 16, y: 608, width: 2016, height: 528)),
+      (32, 16, .maximize, CGRect(x: 16, y: 47, width: 2016, height: 1089)),
+    ]
+    for (windowGap, screenGap, layout, frame) in cases {
+      let placed = layout.frame(
+        for: window, in: screen, windowGap: windowGap, screenGap: screenGap)
+      #expect(placed == frame, "\(layout.title) \(windowGap)/\(screenGap)")
+    }
+    // Used again, a half with gaps goes on to its ⅔.
+    let half = WindowLayout.leftHalf.frame(
+      for: window, in: screen, cycling: true, windowGap: 32, screenGap: 16)
+    let twoThirds = WindowLayout.leftHalf.frame(
+      for: half ?? .zero, in: screen, cycling: true, windowGap: 32, screenGap: 16)
+    #expect(half?.width == 992)
+    #expect(twoThirds == CGRect(x: 16, y: 47, width: 1328, height: 1089))
+    // A gap too large for the screen leaves nowhere to go.
+    #expect(WindowLayout.leftHalf.frame(for: window, in: screen, screenGap: 2000) == nil)
+  }
+
+  /// As Raycast's halves cycled ½ → ⅔ → ⅓ on a 2048 × 1121 screen, where the thirds aren't
+  /// whole points: sizes rounded down, the right and bottom ones ending on the screen's edge.
+  @Test func cycleStepsRoundAsRaycast() {
+    let screen = CGRect(x: 0, y: 31, width: 2048, height: 1121)
+    func steps(_ layout: WindowLayout) -> [CGRect] {
+      var window = CGRect(x: 300, y: 200, width: 600, height: 500)
+      return (0..<3).map { _ in
+        window = layout.frame(for: window, in: screen, cycling: true) ?? .zero
+        return window
+      }
+    }
+    #expect(
+      steps(.leftHalf) == [
+        CGRect(x: 0, y: 31, width: 1024, height: 1121),
+        CGRect(x: 0, y: 31, width: 1365, height: 1121),
+        CGRect(x: 0, y: 31, width: 682, height: 1121),
+      ])
+    #expect(
+      steps(.rightHalf) == [
+        CGRect(x: 1024, y: 31, width: 1024, height: 1121),
+        CGRect(x: 683, y: 31, width: 1365, height: 1121),
+        CGRect(x: 1366, y: 31, width: 682, height: 1121),
+      ])
+    #expect(steps(.topHalf).map(\.height) == [560, 747, 373])
+    #expect(steps(.bottomHalf).map(\.minY) == [592, 405, 779])
   }
 
   @Test func halvesCycleAsRaycastsSettingDoes() {

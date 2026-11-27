@@ -200,6 +200,8 @@ the settings window opens. The settings window writes every change back to it.
   "clipboardHistory": { "keepFor": "unlimited", "maxEntries": 300 },
   "backdrop": "off",
   "cycleHalves": true,
+  "windowGap": 0,
+  "screenGap": 0,
   "lidAwakeLowBattery": 10,
   "snippets": [
     { "name": "Address", "keyword": "addr", "text": "1 Infinite Loop\nCupertino", "icon": "house",
@@ -235,7 +237,10 @@ bundle ID) and Ripcord's commands; a Quicklink keeps its own `hotkey` and `disab
 `afterDelimiterKeeping` or `afterDelimiterDiscarding`, and `disabledApps` lists bundle IDs.
 
 `cycleHalves` (on by default) makes a half used again on the same window go ½ → ⅔ → ⅓ and back
-to ½, as Raycast's Cycling setting; Settings › Window Management turns it off.
+to ½, as Raycast's Cycling setting; Settings › Window Management turns it off. `windowGap` and
+`screenGap` (0 by default) are Raycast's Window Gap and Screen Gap, in points: the layouts keep
+`screenGap` from the screen's edges, and halves, quarters, thirds and fourths keep `windowGap`
+between each other. Settings › Window Management picks them from Raycast's sizes (8 to 128).
 
 `backdrop` animates a Metal shader behind the panel's text: `off` (the default), `glow`, `matrix`,
 or the name of a `.metal` file in `~/.config/ripcord/shaders`. Pick it under Settings › General,

@@ -535,6 +535,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
     get { windows.cycleHalves }
     set { windows.cycleHalves = newValue }
   }
+  /// config.json's windowGap and screenGap.
+  func setWindowGaps(window: Int, screen: Int) {
+    windows.windowGap = CGFloat(window)
+    windows.screenGap = CGFloat(screen)
+  }
   /// The panel was opened by a hotkey just to ask a System Action's question.
   private var openedForQuestion = false
 
