@@ -18,6 +18,9 @@ final class ClipboardMonitor {
 
   init(directory: URL, pasteboard: NSPasteboard = .general) {
     history = ClipboardHistory(directory: directory)
+    // Nothing trimmed until the settings are read: a config that fails to load would otherwise
+    // cut a history kept longer than the default down to it on the next copy.
+    history.settings = ClipboardSettings(keepFor: .unlimited, maxEntries: .max)
     self.pasteboard = pasteboard
     // What was copied before launch isn't recorded, as it wasn't seen being copied.
     changeCount = pasteboard.changeCount

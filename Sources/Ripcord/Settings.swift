@@ -575,9 +575,14 @@ private enum SettingText {
     title: "Disabled Applications", detail: "Apps where keywords are never expanded.")
   static let keepHistoryFor = SettingsSearch.Item(
     title: "Keep History For",
-    detail: "How long an entry stays after it was last copied; pinned ones stay always.")
+    detail:
+      "How long an entry stays after it was last copied; pinned ones stay always. Shortened, older entries go at once."
+  )
   static let maxEntries = SettingsSearch.Item(
-    title: "Maximum Entries", detail: "The most entries kept, newest first, besides pinned ones.")
+    title: "Maximum Entries",
+    detail:
+      "The most entries kept, newest first, besides pinned ones. Lowered, the oldest go at once."
+  )
   static let clearHistory = SettingsSearch.Item(
     title: "Clear History", detail: "Delete every entry but the pinned ones.")
   static let dummyTextLanguage = SettingsSearch.Item(
