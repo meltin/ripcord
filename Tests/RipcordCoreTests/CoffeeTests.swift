@@ -67,4 +67,45 @@ import Testing
         $0.id == "caffeinate-for"
       })
   }
+
+  @Test func caffeinateForAddsItsFields() {
+    #expect(Coffee.duration(hours: "1", minutes: "30", seconds: "") == 5400)
+    #expect(Coffee.duration(hours: "", minutes: "", seconds: "45") == 45)
+    #expect(Coffee.duration(hours: "", minutes: "", seconds: "") == nil)
+    #expect(Coffee.duration(hours: "1.5", minutes: "", seconds: "") == nil)
+    #expect(Coffee.duration(hours: "-1", minutes: "", seconds: "") == nil)
+    #expect(Coffee.duration(hours: "999", minutes: "", seconds: "") == nil)
+  }
+
+  @Test func caffeinateUntilReadsATimeOfDay() throws {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = try #require(TimeZone(identifier: "Asia/Tokyo"))
+    // 14:00 in Tokyo.
+    let now = try #require(
+      calendar.date(from: DateComponents(year: 2026, month: 11, day: 28, hour: 14)))
+    #expect(Coffee.until("5pm", now: now, calendar: calendar) == 3.0 * 3600)
+    #expect(Coffee.until("5:30 PM", now: now, calendar: calendar) == 3.5 * 3600)
+    #expect(Coffee.until("17:30", now: now, calendar: calendar) == 3.5 * 3600)
+    #expect(Coffee.until("12am", now: now, calendar: calendar) == 10.0 * 3600)
+    // A bare hour is the next of its two: 9 at 14:00 is 21:00; with a leading 0, 9 tomorrow.
+    #expect(Coffee.until("9", now: now, calendar: calendar) == 7.0 * 3600)
+    #expect(Coffee.until("09", now: now, calendar: calendar) == 19.0 * 3600)
+    #expect(Coffee.until("5", now: now, calendar: calendar) == 3.0 * 3600)
+    for text in ["", "25:00", "5:75", "noon", "5 o'clock"] {
+      #expect(Coffee.until(text, now: now, calendar: calendar) == nil, "\(text)")
+    }
+  }
+
+  @Test func statusSaysWhatKeepsTheMacAwake() {
+    #expect(Coffee.status(isActive: false, remaining: nil, whileApp: nil) == "Not caffeinated")
+    #expect(
+      Coffee.status(isActive: true, remaining: nil, whileApp: nil)
+        == "Caffeinated until Decaffeinate")
+    #expect(
+      Coffee.status(isActive: true, remaining: 4000, whileApp: nil)
+        == "Caffeinated for 1h 6m more")
+    #expect(
+      Coffee.status(isActive: true, remaining: nil, whileApp: "Xcode")
+        == "Caffeinated while Xcode is running")
+  }
 }

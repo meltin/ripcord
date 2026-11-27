@@ -52,4 +52,73 @@ public enum Coffee {
     ].compactMap { $0 }
     return parts.isEmpty ? "0s" : parts.joined(separator: " ")
   }
+
+  /// Seconds for Caffeinate For's hours, minutes and seconds fields, an empty one counting as 0;
+  /// nil for anything but whole numbers, for no time at all, or for more than `longest`.
+  public static func duration(hours: String, minutes: String, seconds: String) -> TimeInterval? {
+    var total: TimeInterval = 0
+    for (text, unit) in [(hours, 3600.0), (minutes, 60.0), (seconds, 1.0)] {
+      let trimmed = text.trimmingCharacters(in: .whitespaces)
+      if trimmed.isEmpty { continue }
+      guard let value = UInt(trimmed) else { return nil }
+      total += Double(value) * unit
+    }
+    return total > 0 && total <= longest ? total : nil
+  }
+
+  /// Seconds from `now` to a time of day typed as `5pm`, `5:30 pm`, `17:30` or `5`, read as
+  /// Raycast's Caffeinate Until reads it: with am or pm, past 12 or with a leading 0 it's that
+  /// time today or tomorrow; a bare `5` is whichever of 5:00 and 17:00 comes next. Nil for
+  /// anything else.
+  public static func until(_ text: String, now: Date, calendar: Calendar = .current)
+    -> TimeInterval?
+  {
+    guard
+      let match = text.trimmingCharacters(in: .whitespaces).lowercased()
+        .wholeMatch(of: /(\d{1,2})(?::(\d\d))? *(am|pm)?/),
+      var hour = Int(match.1), let minute = Int(match.2 ?? "0")
+    else { return nil }
+    if match.3 == "pm", hour < 12 { hour += 12 }
+    if match.3 == "am", hour == 12 { hour = 0 }
+    guard hour <= 24, minute <= 59,
+      var target = calendar.date(
+        byAdding: DateComponents(hour: hour, minute: minute), to: calendar.startOfDay(for: now))
+    else { return nil }
+    let step = match.3 != nil || hour > 12 || match.1.hasPrefix("0") ? 24 : 12
+    while target <= now {
+      guard let next = calendar.date(byAdding: .hour, value: step, to: target) else { return nil }
+      target = next
+    }
+    return target.timeIntervalSince(now)
+  }
+
+  /// What Caffeinate Status says: whether the Mac is kept awake, and until when.
+  public static func status(
+    isActive: Bool, remaining: TimeInterval?, whileApp: String?
+  ) -> String {
+    guard isActive else { return "Not caffeinated" }
+    if let whileApp { return "Caffeinated while \(whileApp) is running" }
+    if let remaining { return "Caffeinated for \(format(remaining, seconds: false)) more" }
+    return "Caffeinated until Decaffeinate"
+  }
+
+  /// The argument fields of Coffee's commands that take them, as Raycast's Coffee has them.
+  /// `runningApps` fill Caffeinate While's menu.
+  public static func arguments(runningApps: [(title: String, value: String)])
+    -> [BuiltinCommand: [ScriptCommand.Argument]]
+  {
+    [
+      .caffeinateFor: ["Hours", "Minutes", "Seconds"].map {
+        ScriptCommand.Argument(type: .text, placeholder: $0, optional: true)
+      },
+      .caffeinateUntil: [
+        ScriptCommand.Argument(type: .text, placeholder: "Time (e.g. 5pm)", optional: true)
+      ],
+      .caffeinateWhile: [
+        ScriptCommand.Argument(
+          type: .dropdown, placeholder: "Select App",
+          data: runningApps.map { .init(title: $0.title, value: $0.value) })
+      ],
+    ]
+  }
 }

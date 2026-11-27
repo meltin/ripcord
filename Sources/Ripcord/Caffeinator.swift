@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import IOKit.pwr_mgt
 
 /// Coffee: keeps the Mac and its display awake with a power assertion, for a time or until
@@ -10,6 +10,9 @@ final class Caffeinator {
   private(set) var isActive = false
   /// When a timed Caffeinate ends; nil while it runs until Decaffeinate.
   private(set) var endsAt: Date?
+  /// The app Caffeinate While waits on, by name; nil otherwise.
+  private(set) var whileApp: String?
+  private var whileObserver: NSObjectProtocol?
   /// After every change, and each second while timed, for the menu bar.
   var onChange: () -> Void = {}
 
@@ -26,6 +29,7 @@ final class Caffeinator {
       isActive = true
     }
     endsAt = seconds.map { Date.now.addingTimeInterval($0) }
+    stopWaiting()
     timer?.invalidate()
     timer = nil
     if endsAt != nil {
@@ -40,10 +44,37 @@ final class Caffeinator {
     return true
   }
 
+  /// Caffeinate While: kept awake until every copy of the app `bundleID` has quit. False when
+  /// it isn't running or macOS refused.
+  @discardableResult
+  func caffeinate(whileRunning bundleID: String) -> Bool {
+    guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first,
+      caffeinate(for: nil)
+    else { return false }
+    whileApp = app.localizedName ?? bundleID
+    whileObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        let left = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        if left.allSatisfy(\.isTerminated) { self?.decaffeinate() }
+      }
+    }
+    onChange()
+    return true
+  }
+
+  private func stopWaiting() {
+    whileObserver.map(NSWorkspace.shared.notificationCenter.removeObserver)
+    whileObserver = nil
+    whileApp = nil
+  }
+
   func decaffeinate() {
     if isActive { IOPMAssertionRelease(assertion) }
     isActive = false
     endsAt = nil
+    stopWaiting()
     timer?.invalidate()
     timer = nil
     onChange()

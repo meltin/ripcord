@@ -723,7 +723,9 @@ extension BuiltinCommand {
     case .clipboardHistory: .clipboardHistory
     case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .snippets
     case .searchRepositories: .repositories
-    case .caffeinate, .decaffeinate: .coffee
+    case .caffeinate, .decaffeinate, .toggleCaffeinate, .caffeinateFor, .caffeinateUntil,
+      .caffeinateWhile, .caffeinateStatus:
+      .coffee
     case .sleepTimer, .stopSleepTimer: .sleepTimer
     case .lidAwake: .lidAwake
     case .pickColor, .colorHistory: .colorPicker

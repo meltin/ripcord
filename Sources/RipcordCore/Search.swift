@@ -4,7 +4,8 @@ import Foundation
 public enum BuiltinCommand: CaseIterable, Sendable {
   case clipboardHistory, searchSnippets, createSnippet, exportSnippets, importSnippets
   case searchRepositories, httpStatusCodes, settings
-  case caffeinate, decaffeinate
+  case caffeinate, decaffeinate, toggleCaffeinate, caffeinateFor, caffeinateUntil
+  case caffeinateWhile, caffeinateStatus
   case sleepTimer, stopSleepTimer
   case lidAwake
   case pickColor, colorHistory
@@ -27,6 +28,12 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .settings: "Ripcord Settings"
     case .caffeinate: "Caffeinate"
     case .decaffeinate: "Decaffeinate"
+    case .toggleCaffeinate: "Toggle Caffeinate"
+    // Raycast's title, dots and all.
+    case .caffeinateFor: "Caffeinate for ..."
+    case .caffeinateUntil: "Caffeinate Until"
+    case .caffeinateWhile: "Caffeinate While"
+    case .caffeinateStatus: "Caffeinate Status"
     case .sleepTimer: "Sleep Timer"
     case .stopSleepTimer: "Stop Sleep Timer"
     case .lidAwake: "Lid Awake"
@@ -49,7 +56,9 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   /// What its row says it belongs to.
   public var group: String {
     switch self {
-    case .caffeinate, .decaffeinate: "Coffee"
+    case .caffeinate, .decaffeinate, .toggleCaffeinate, .caffeinateFor, .caffeinateUntil,
+      .caffeinateWhile, .caffeinateStatus:
+      "Coffee"
     case .sleepTimer, .stopSleepTimer: "Sleep Timer"
     case .lidAwake: "Keep the Mac awake with the lid closed"
     case .pickColor, .colorHistory: "Color Picker"
@@ -78,6 +87,11 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .caffeinate: "command:caffeinate"
     case .lidAwake: "command:lid-awake"
     case .decaffeinate: "command:decaffeinate"
+    case .toggleCaffeinate: "command:toggle-caffeinate"
+    case .caffeinateFor: "command:caffeinate-for"
+    case .caffeinateUntil: "command:caffeinate-until"
+    case .caffeinateWhile: "command:caffeinate-while"
+    case .caffeinateStatus: "command:caffeinate-status"
     case .sleepTimer: "command:sleep-timer"
     case .stopSleepTimer: "command:stop-sleep-timer"
     case .pickColor: "command:pick-color"

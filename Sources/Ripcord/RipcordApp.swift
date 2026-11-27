@@ -104,6 +104,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       guard self?.sleepTimer.isActive == true else { return NSSound.beep() }
       self?.sleepTimer.stop()
     }
+    launcher.onToggleCaffeinate = { [weak self] in
+      guard let self else { return }
+      if caffeinator.isActive { return caffeinator.decaffeinate() }
+      if !caffeinator.caffeinate(for: nil) {
+        showError("macOS didn't let Ripcord keep the Mac awake.")
+      }
+    }
+    launcher.onCaffeinateWhile = { [weak self] bundleID in
+      if self?.caffeinator.caffeinate(whileRunning: bundleID) == false {
+        HUD.show("That app isn't running anymore.", failed: true)
+      }
+    }
+    launcher.onCaffeinateStatus = { [weak self] in
+      guard let caffeinator = self?.caffeinator else { return }
+      HUD.show(
+        Coffee.status(
+          isActive: caffeinator.isActive, remaining: caffeinator.remaining,
+          whileApp: caffeinator.whileApp))
+    }
     launcher.onDecaffeinate = { [weak self] in
       // Nothing to stop: a beep rather than a panel that just closes.
       guard self?.caffeinator.isActive == true else { return NSSound.beep() }
