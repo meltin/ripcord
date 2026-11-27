@@ -13,7 +13,8 @@
   Create Quicklink makes one in the panel (a link with `{query}`, a name and a keyword), and
   Search Quicklinks lists them to open, edit (⌘E) or delete (⌃X, asked first), as Raycast's do.
   Import Quicklinks and Export Quicklinks read and write Raycast's JSON file, its `{argument}`
-  taken as `{query}`; one already here is skipped
+  taken as `{query}`; one already here is skipped. A Quicklink's hotkey fills its `{query}` with
+  the text selected in the app in front, as Raycast's does, read through Accessibility
 - Drafts: Create Snippet or Add Bookmark left with something typed waits under Drafts at the top
   of the empty search, across relaunches; Return opens it again and ⌃X discards it
 - Favorites: ⇧⌘F on an app, command or Quicklink pins it to the top of the empty search, in
@@ -385,6 +386,9 @@ Things Ripcord leaves as they are rather than work around with something macOS d
   such as Raycast Notes, both open, clicking the other one can leave the keys with Ripcord Notes
   ([#73](https://github.com/meltin/ripcord/issues/73)). Clicking any ordinary app moves them as
   usual.
+- Quicklinks: a hotkey's `{query}` takes the selection only from apps that report it through
+  Accessibility; elsewhere it's left empty rather than copied with ⌘C, which would replace what's
+  on the clipboard.
 - System Actions: there's no Dismiss Notifications, as Raycast has. macOS offers no way for an app
   to clear Notification Center; the only route is pressing its buttons through Accessibility, which
   breaks as macOS changes them ([#30](https://github.com/meltin/ripcord/issues/30)).
