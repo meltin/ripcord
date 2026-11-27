@@ -108,10 +108,19 @@ public struct NoteStore: Sendable {
     return read(note.url) ?? Note(url: note.url, text: text, modified: .now, isSaved: true)
   }
 
-  /// Moves the note's file to the Trash, where it can be put back.
-  public func trash(_ note: Note) throws {
-    guard note.isSaved else { return }
-    try FileManager.default.trashItem(at: note.url, resultingItemURL: nil)
+  /// Moves the note's file to the Trash, where it can be put back; where it is in the Trash.
+  @discardableResult
+  public func trash(_ note: Note) throws -> URL? {
+    guard note.isSaved else { return nil }
+    var trashed: NSURL?
+    try FileManager.default.trashItem(at: note.url, resultingItemURL: &trashed)
+    return trashed as URL?
+  }
+
+  /// Puts a note moved to the Trash back where it was, as Undo does; the note as it is then.
+  public func restore(_ trashed: URL, to url: URL) throws -> Note? {
+    try FileManager.default.moveItem(at: trashed, to: url)
+    return read(url)
   }
 }
 

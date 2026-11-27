@@ -3,6 +3,13 @@ import Carbon.HIToolbox
 import RipcordCore
 import SwiftUI
 
+/// A note just moved to the Trash, offered back for a moment.
+struct NotesToast: Equatable {
+  let id = UUID()
+  let original: URL
+  let trashed: URL
+}
+
 /// The note being edited and what's typed in it.
 @MainActor
 @Observable
@@ -15,8 +22,12 @@ final class NotesModel {
   var focusRequest = 0
   /// The pointer is over the window: its buttons show, as Raycast Notes shows them.
   var isHovered = false
+  /// The pointer is on the toast, which then stays.
+  var isToastHovered = false
   /// Zoom In and Zoom Out's scale of the text.
   var zoom: CGFloat = 1
+  /// "Moved to Trash", with Undo, after a note is deleted.
+  var toast: NotesToast?
 
   init(note: Note) {
     self.note = note
@@ -84,6 +95,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
         onReload: { [weak self] in self?.reload() },
         onSaveAsNew: { [weak self] in self?.saveAsNew() },
         onActions: { [weak self] in self?.showActions() },
+        onUndoDelete: { [weak self] in self?.undoDelete() },
         onFormat: { [weak self] in self?.showFormats() },
         onTextHeight: { [weak self] in self?.fit(textHeight: $0) },
         onHover: { [weak self] in self?.hover($0) }))
@@ -377,17 +389,46 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     let note = model.note
     pendingSave?.cancel()
     pendingSave = nil
+    let trashed: URL?
     do {
-      try store.trash(note)
+      trashed = try store.trash(note)
     } catch {
       return NSSound.beep()
     }
-    // The last note gone, the window goes too, rather than showing an empty one.
-    guard let next = store.list().first(where: { $0.url != note.url }) else {
+    showAfterDeleting(note.url, trashed: trashed, focusing: true)
+  }
+
+  /// The most recent note left, with word that the deleted one went to the Trash; the last note
+  /// gone, the window goes too, rather than showing an empty one.
+  private func showAfterDeleting(_ url: URL, trashed: URL?, focusing: Bool) {
+    guard let next = store.list().first(where: { $0.url != url }) else {
       show(store.newNote(), focusing: false)
       return hide()
     }
-    show(next)
+    show(next, focusing: focusing)
+    guard let trashed, window.isVisible else { return }
+    let toast = NotesToast(original: url, trashed: trashed)
+    withAnimation(.snappy) { model.toast = toast }
+    dismissToast(toast, after: 4)
+  }
+
+  /// Gone after a while, unless the pointer is on it then; it's checked again later.
+  private func dismissToast(_ toast: NotesToast, after delay: TimeInterval) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+      guard let self, model.toast == toast else { return }
+      if model.isToastHovered { return dismissToast(toast, after: 1.5) }
+      withAnimation(.snappy) { model.toast = nil }
+    }
+  }
+
+  /// Undo: the note back from the Trash, and open.
+  private func undoDelete() {
+    guard let toast = model.toast else { return }
+    withAnimation(.snappy) { model.toast = nil }
+    guard flushed(), let note = try? store.restore(toast.trashed, to: toast.original) else {
+      return NSSound.beep()
+    }
+    show(note)
   }
 
   func handle(_ request: NotesRequest) {
@@ -407,17 +448,12 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
       // Saved first, so the note read back is what's typed when it's this one.
       guard flushed(), let note = store.read(url) else { return NSSound.beep() }
       show(note)
-    case .deleted(let url):
+    case .deleted(let url, let trashed):
       guard model.note.url == url else { return }
       // Its text is in the Trash now; nothing is left to save. The launcher keeps the keys.
       pendingSave?.cancel()
       pendingSave = nil
-      // The last note gone, the window goes too, rather than showing an empty one.
-      guard let next = store.list().first else {
-        show(store.newNote(), focusing: false)
-        return hide()
-      }
-      show(next, focusing: false)
+      showAfterDeleting(url, trashed: trashed, focusing: false)
     }
   }
 
@@ -665,6 +701,7 @@ private struct NotesView: View {
   let onReload: () -> Void
   let onSaveAsNew: () -> Void
   let onActions: () -> Void
+  let onUndoDelete: () -> Void
   let onFormat: () -> Void
   let onTextHeight: (CGFloat) -> Void
   let onHover: (Bool) -> Void
@@ -733,6 +770,14 @@ private struct NotesView: View {
       .frame(height: Self.footerHeight)
     }
     .background(.regularMaterial)
+    .overlay(alignment: .top) {
+      if let toast = model.toast {
+        DeletedToast(onUndo: onUndoDelete, isHovered: $model.isToastHovered)
+          .id(toast.id)
+          .padding(.top, Self.headerHeight - 6)
+          .transition(.move(edge: .top).combined(with: .opacity))
+      }
+    }
     .onHover(perform: onHover)
   }
 
@@ -749,6 +794,31 @@ private struct NotesView: View {
     .buttonStyle(.plain)
     .foregroundStyle(.primary)
     .help(help)
+  }
+}
+
+/// "Moved to Trash", with Undo: what a delete did and how to take it back, in a small frosted
+/// capsule under the title, as the system's own banners look.
+private struct DeletedToast: View {
+  let onUndo: () -> Void
+  @Binding var isHovered: Bool
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Glyph("trash", pointSize: 13).foregroundStyle(.secondary)
+      Text("Moved to Trash").font(.system(size: 13, weight: .medium))
+      Divider().frame(height: 14)
+      Button("Undo", action: onUndo)
+        .buttonStyle(.plain)
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(Color.accentColor)
+    }
+    .padding(.horizontal, 14)
+    .frame(height: 32)
+    .background(.regularMaterial, in: Capsule())
+    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
+    .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
+    .onHover { isHovered = $0 }
   }
 }
 
