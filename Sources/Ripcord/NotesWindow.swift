@@ -867,13 +867,21 @@ private struct MarkdownEditor: NSViewRepresentable {
       guard !isReplacing, let textView = notification.object as? NoteTextView else { return }
       parent.text = textView.string
       parent.onChange()
-      if !textView.hasMarkedText() { MarkdownEditor.format(textView) }
-      reportHeight(of: textView)
+      if textView.hasMarkedText() {
+        // Not formatted while composing, but redrawn, so a "Heading 1" placeholder doesn't
+        // linger under the text being composed.
+        textView.needsDisplay = true
+      } else {
+        MarkdownEditor.format(textView)
+      }
+      // Typing isn't inside a SwiftUI update, so the window can grow in the same pass as the
+      // text, without a frame where the new line doesn't fit yet.
+      reportHeight(of: textView, now: true)
     }
 
-    /// Laid out first, then passed on after this update, as resizing the window lays it out
-    /// again.
-    func reportHeight(of textView: NSTextView) {
+    /// Laid out first, then passed on: after this update unless `now`, as resizing the window
+    /// during a SwiftUI update lays it out again.
+    func reportHeight(of textView: NSTextView, now: Bool = false) {
       guard let layoutManager = textView.layoutManager, let container = textView.textContainer
       else { return }
       layoutManager.ensureLayout(for: container)
@@ -884,6 +892,7 @@ private struct MarkdownEditor: NSViewRepresentable {
         (layoutManager.usedRect(for: container).height + textView.textContainerInset.height * 2)
         * (scrollView?.magnification ?? 1) + findBar
       let onHeight = parent.onHeight
+      if now { return onHeight(height) }
       DispatchQueue.main.async { onHeight(height) }
     }
 
