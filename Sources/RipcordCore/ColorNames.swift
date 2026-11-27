@@ -215,7 +215,138 @@ extension PickedColor {
     var digits = text.trimmingCharacters(in: .whitespaces)
     if digits.hasPrefix("#") { digits.removeFirst() }
     if digits.count == 3 { digits = digits.map { "\($0)\($0)" }.joined() }
-    guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return nil }
+    guard digits.count == 6, digits.allSatisfy(\.isHexDigit), let value = UInt32(digits, radix: 16)
+    else { return nil }
     self.init(rgb: value)
+  }
+}
+
+extension PickedColor {
+  /// A CSS color as typed or pasted: hex (the # optional), a CSS name, rgb() or rgba(), hsl()
+  /// or hsla(), oklch(), or color(srgb …) or color(display-p3 …), with commas or spaces and
+  /// `none` as 0. Display P3 outside sRGB is clipped to it. Nil for anything else, and for a
+  /// color that isn't opaque, which every format would write as opaque.
+  public init?(css text: String) {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if let named = ColorNames.css.first(where: { $0.name == trimmed }) {
+      self.init(rgb: named.rgb)
+      return
+    }
+    if let color = PickedColor(hex: trimmed) {
+      self = color
+      return
+    }
+    guard let match = trimmed.wholeMatch(of: /([a-z-]+)\((.*)\)/) else { return nil }
+    let halves = String(match.2).split(separator: "/", omittingEmptySubsequences: false)
+    var parts = halves[0].split(whereSeparator: { $0 == "," || $0 == " " }).map(String.init)
+    // Alpha after "/", or as a fourth comma-separated argument; only opaque is taken.
+    let alpha = halves.count > 1 ? halves[1].trimmingCharacters(in: .whitespaces) : nil
+    let isColorFunction = match.1 == "color"
+    let fourth = !isColorFunction && parts.count == 4 ? parts.removeLast() : nil
+    if let given = alpha ?? fourth, !["1", "100%", "1.0"].contains(given) { return nil }
+    func value(_ part: String, percentOf full: Double) -> Double? {
+      if part == "none" { return 0 }
+      return part.hasSuffix("%") ? Double(part.dropLast()).map { $0 / 100 * full } : Double(part)
+    }
+    func hue(_ part: String) -> Double? {
+      guard
+        let degrees = part == "none" ? 0 : Double(part.replacingOccurrences(of: "deg", with: ""))
+      else { return nil }
+      // -120 is 240.
+      return (degrees.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(
+        dividingBy: 360)
+    }
+    switch String(match.1) {
+    case "rgb", "rgba":
+      guard parts.count == 3, let r = value(parts[0], percentOf: 255),
+        let g = value(parts[1], percentOf: 255), let b = value(parts[2], percentOf: 255)
+      else { return nil }
+      self.init(red: r / 255, green: g / 255, blue: b / 255)
+    case "hsl", "hsla":
+      // Saturation and lightness as percentages, with or without the %.
+      guard parts.count == 3, let h = hue(parts[0]),
+        let s = value(parts[1].replacingOccurrences(of: "%", with: ""), percentOf: 1),
+        let l = value(parts[2].replacingOccurrences(of: "%", with: ""), percentOf: 1)
+      else { return nil }
+      let (saturation, lightness) = (s / 100, l / 100)
+      // CSS's hsl() to sRGB.
+      func channel(_ n: Double) -> Double {
+        let k = (n + h / 30).truncatingRemainder(dividingBy: 12)
+        let a = saturation * min(lightness, 1 - lightness)
+        return lightness - a * max(-1, min(k - 3, 9 - k, 1))
+      }
+      self.init(red: channel(0), green: channel(8), blue: channel(4))
+    case "oklch":
+      guard parts.count == 3, let l = value(parts[0], percentOf: 1),
+        let c = value(parts[1], percentOf: 0.4), let h = hue(parts[2])
+      else { return nil }
+      let (a, b) = (c * cos(h * .pi / 180), c * sin(h * .pi / 180))
+      // Björn Ottosson's OKLab back to linear sRGB.
+      let lms = [
+        l + 0.3963377774 * a + 0.2158037573 * b, l - 0.1055613458 * a - 0.0638541728 * b,
+        l - 0.0894841775 * a - 1.2914855480 * b,
+      ].map { $0 * $0 * $0 }
+      self.init(
+        linear: [
+          4.0767416621 * lms[0] - 3.3077115913 * lms[1] + 0.2309699292 * lms[2],
+          -1.2684380046 * lms[0] + 2.6097574011 * lms[1] - 0.3413193965 * lms[2],
+          -0.0041960863 * lms[0] - 0.7034186147 * lms[1] + 1.7076147010 * lms[2],
+        ])
+    case "color":
+      guard parts.count == 4, parts[0] == "display-p3" || parts[0] == "srgb",
+        let r = value(parts[1], percentOf: 1), let g = value(parts[2], percentOf: 1),
+        let b = value(parts[3], percentOf: 1)
+      else { return nil }
+      guard parts[0] == "display-p3" else {
+        self.init(red: r, green: g, blue: b)
+        return
+      }
+      // Display P3 to XYZ to linear sRGB.
+      let p3 = [r, g, b].map { c in c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
+      let x = 0.4865709486482162 * p3[0] + 0.26566769316909306 * p3[1] + 0.1982172852343625 * p3[2]
+      let y = 0.2289745640697488 * p3[0] + 0.6917385218365064 * p3[1] + 0.079286914093745 * p3[2]
+      let z = 0.04511338185890264 * p3[1] + 1.043944368900976 * p3[2]
+      self.init(
+        linear: [
+          3.2409699419045226 * x - 1.537383177570094 * y - 0.4986107602930034 * z,
+          -0.9692436362808796 * x + 1.8759675015077202 * y + 0.04155505740717559 * z,
+          0.05563007969699366 * x - 0.20397695888897652 * y + 1.0569715142428786 * z,
+        ])
+    default:
+      return nil
+    }
+  }
+
+  /// From linear-light sRGB, clipped to sRGB.
+  init(linear: [Double]) {
+    let encoded = linear.map { c in
+      let c = min(max(c, 0), 1)
+      return c <= 0.0031308 ? c * 12.92 : 1.055 * pow(c, 1 / 2.4) - 0.055
+    }
+    self.init(red: encoded[0], green: encoded[1], blue: encoded[2])
+  }
+}
+
+extension Search {
+  /// Convert Color: the color typed in every format, the one copied last first, as Raycast's
+  /// Convert Color lists them; nothing until what's typed is a color.
+  public static func convertColorSections(for query: String, lastFormat: ColorFormat?)
+    -> [SearchSection]
+  {
+    guard let color = PickedColor(css: query) else { return [] }
+    let formats = [lastFormat].compactMap { $0 } + ColorFormat.allCases.filter { $0 != lastFormat }
+    let results = formats.map { format in
+      let converted = format.string(for: color)
+      return SearchResult(
+        // The color's swatch for its icon, as Color History's rows have.
+        id: "color:\(color.hex):convert:\(format.rawValue)", title: format.title,
+        subtitle: converted, keyword: nil, kind: .color, action: .copy(converted),
+        menu: [
+          MenuAction(
+            title: "Copy Converted Color", symbol: "doc.on.doc", shortcut: "↵",
+            action: .copy(converted))
+        ])
+    }
+    return [SearchSection(title: "", results: results)]
   }
 }

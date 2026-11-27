@@ -104,9 +104,11 @@ struct SearchView: View {
         EmptyState(query: model.query, mode: model.mode)
       } else if model.mode == .emoji {
         EmojiGrid(model: model, onCommand: onCommand)
-      } else if [.repositories, .httpStatusCodes, .colors, .colorNames, .bookmarks, .notes, .pick]
-        .contains(
-          model.mode)
+      } else if [
+        .repositories, .httpStatusCodes, .colors, .colorNames, .convertColor, .bookmarks, .notes,
+        .pick,
+      ].contains(
+        model.mode)
       {
         resultList
       } else if model.mode != .root {
@@ -283,6 +285,10 @@ private struct EmptyState: View {
       "Colors you pick with Pick Color show up here."
     case .colors:
       "No color matches “\(query)”."
+    case .convertColor where query.trimmingCharacters(in: .whitespaces).isEmpty:
+      "Type or paste a CSS color, such as #FF6363, rgb(255 99 99), or color(display-p3 1 0 0)."
+    case .convertColor:
+      "“\(query)” isn't a color Ripcord can read."
     case .colorNames:
       "No color name matches “\(query)”. Type a hex, as #00ff00, for the names nearest it."
     case .bookmarks where query.trimmingCharacters(in: .whitespaces).isEmpty:
@@ -602,6 +608,7 @@ extension BuiltinCommand {
     case .pickColor: "eyedropper"
     case .colorHistory: "swatchpalette.fill"
     case .colorNames: "tag"
+    case .convertColor: "arrow.clockwise"
     case .cleanKeyboard: "keyboard"
     case .searchBookmarks: "bookmark.fill"
     case .searchEmoji: "face.smiling"
@@ -625,7 +632,7 @@ extension BuiltinCommand {
       .brown
     case .sleepTimer, .stopSleepTimer: .indigo
     case .lidAwake: .orange
-    case .pickColor, .colorHistory, .colorNames: .pink
+    case .pickColor, .colorHistory, .colorNames, .convertColor: .pink
     case .cleanKeyboard: .cyan
     case .searchBookmarks, .addBookmark: .yellow
     case .searchEmoji: .orange
@@ -2378,6 +2385,7 @@ extension LauncherMode {
     case .httpStatusCodes: "Search HTTP Status Codes…"
     case .colors: "Search Colors…"
     case .colorNames: "Search HEX (#00ff00)"
+    case .convertColor: "Type or paste a color..."
     case .bookmarks: "Search Bookmarks…"
     case .emoji: "Search Emoji & Symbols…"
     case .notes: "Search Notes…"

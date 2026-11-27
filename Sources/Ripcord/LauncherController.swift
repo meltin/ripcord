@@ -102,6 +102,7 @@ enum NotesRequest {
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
   case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, colorNames
+  case convertColor
   case bookmarks
   case bookmarkForm, emoji, scriptOutput, notes
   /// `ripcord pick`: lines handed in, one to choose.
@@ -121,6 +122,7 @@ enum LauncherMode {
     case .httpStatusCodes: .httpStatusCodes
     case .colors: .colorHistory
     case .colorNames: .colorNames
+    case .convertColor: .convertColor
     case .bookmarks: .searchBookmarks
     case .bookmarkForm: .addBookmark
     case .emoji: .searchEmoji
@@ -414,6 +416,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   var onBeforeSleep: () -> Void = {}
   /// Clean Keyboard: block the keyboard for this many seconds.
   var onCleanKeyboard: (TimeInterval) -> Void = { _ in }
+  private static let lastConvertedFormatKey = "lastConvertedColorFormat"
   /// Pick Color's message names the nearest named color too.
   var showColorName = false
   /// What Clean Keyboard runs for with no time typed; Always Ask asks for one.
@@ -748,6 +751,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return Search.colorSections(for: query, history: colors, format: colorFormat)
     }
     if model.mode == .colorNames { return Search.colorNameSections(for: query) }
+    if model.mode == .convertColor {
+      let last = UserDefaults.standard.string(forKey: Self.lastConvertedFormatKey)
+      return Search.convertColorSections(
+        for: query, lastFormat: last.flatMap(ColorFormat.init(rawValue:)))
+    }
     if model.mode == .repositories {
       return Search.repositorySections(
         for: query, repositories: repositories, settings: repositorySettings)
@@ -1616,6 +1624,19 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.httpStatusCodes) { return open(.httpStatusCodes) }
     if action == .run(.colorHistory) { return open(.colors) }
     if action == .run(.colorNames) { return open(.colorNames) }
+    if action == .run(.convertColor) { return open(.convertColor) }
+    // Convert Color: the format copied comes first next time, as Raycast keeps it.
+    // The row whose text it is, clicked or selected.
+    if model.mode == .convertColor, case .copy(let text) = action,
+      let format = model.results.first(where: { $0.action == action })?.id
+        .components(separatedBy: ":convert:").last
+    {
+      UserDefaults.standard.set(format, forKey: Self.lastConvertedFormatKey)
+      hide()
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(text, forType: .string)
+      return HUD.show("Copied color to clipboard")
+    }
     if action == .run(.searchBookmarks) {
       if loadBookmarks() { open(.bookmarks) }
       return
@@ -1897,7 +1918,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onCleanKeyboard(seconds)
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
       .run(.searchRepositories), .run(.httpStatusCodes), .run(.sleepTimer), .run(.colorHistory),
-      .run(.colorNames),
+      .run(.colorNames), .run(.convertColor),
       .run(.cleanKeyboard), .run(.searchBookmarks), .run(.addBookmark), .deleteBookmark,
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,

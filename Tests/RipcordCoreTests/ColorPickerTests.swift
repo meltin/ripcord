@@ -119,4 +119,45 @@ import Testing
     #expect(PickedColor(hex: "0f0")?.hex == "#00FF00")
     #expect(PickedColor(hex: "#12345") == nil)
   }
+
+  /// Convert Color reads CSS colors as Raycast's does, and lists the last format copied first.
+  @Test func convertsCSSColors() throws {
+    for text in [
+      "#FF6363", "ff6363", "rgb(255 99 99)", "rgb(255, 99, 99)", "rgba(255, 99, 99, 1)",
+      "rgb(100% 38.824% 38.824% / 100%)",
+    ] {
+      #expect(PickedColor(css: text)?.hex == "#FF6363", "\(text)")
+    }
+    #expect(PickedColor(css: "tomato")?.hex == "#FF6347")
+    #expect(PickedColor(css: "hsl(0, 100%, 50%)")?.hex == "#FF0000")
+    #expect(PickedColor(css: "hsl(120deg 100% 25%)")?.hex == "#008000")
+    #expect(PickedColor(css: "color(display-p3 1 0 0)")?.hex == "#FF0000")
+    #expect(PickedColor(css: "color(srgb 0 0 1)")?.hex == "#0000FF")
+    #expect(PickedColor(css: "hsl(-120 100% 50%)")?.hex == "#0000FF")
+    #expect(PickedColor(css: "fff")?.hex == "#FFFFFF")
+    // Not opaque: every format would write it as opaque, so it isn't taken.
+    for text in ["", "#12", "notacolor", "rgb(1, 2)", "rgba(255, 99, 99, 0.5)", "rgb(1 2 3 / 50%)"]
+    {
+      #expect(PickedColor(css: text) == nil, "\(text)")
+    }
+    let rows = try #require(
+      Search.convertColorSections(for: "tomato", lastFormat: .oklch).first?.results)
+    #expect(rows.first?.title == "OKLCH")
+    #expect(rows.count == ColorFormat.allCases.count)
+    #expect(rows.contains { $0.title == "HEX" && $0.subtitle == "#FF6347" })
+    #expect(Search.convertColorSections(for: "nope", lastFormat: nil).isEmpty)
+  }
+
+  /// What Convert Color writes, it reads back as the same color, but HSVA and LCH, which no
+  /// CSS reader in Ripcord takes.
+  @Test func readsBackWhatItWrites() {
+    for color in [
+      PickedColor(rgb: 0xFF6347), PickedColor(rgb: 0xFF0000), PickedColor(rgb: 0xFFFFFF),
+    ] {
+      for format in ColorFormat.allCases where ![.hsva, .lch, .swiftUI, .nsColor].contains(format) {
+        let text = format.string(for: color)
+        #expect(PickedColor(css: text)?.hex == color.hex, "\(format.title) \(text)")
+      }
+    }
+  }
 }
