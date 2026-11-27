@@ -65,6 +65,9 @@
   another editor saves show up in the open note, and a note changed outside Ripcord is never saved
   over. Search Notes finds notes by their text, and ⌃X moves one to the Trash, with Undo for a
   few seconds
+- Dummy Text: Generate Dummy Text writes Japanese or English filler text of the length typed in
+  the field beside the search bar, after Raycast's Japanese Lorem Ipsum Generator; Return pastes it
+  into the app you were in and ⌘↵ copies it. Settings › Dummy Text sets the default language
 - Emoji & Symbols: Search Emoji & Symbols shows emoji and symbols (→ ° ⌘ and the like) in a grid by
   category, Frequently Used first; search in English or Japanese (`cat`, `ねこ`), Return pastes,
   ⌘↵ copies, and ⌘K picks a skin tone that's remembered
@@ -233,5 +236,8 @@ The emoji names come from Unicode's [CLDR](https://github.com/unicode-org/cldr-j
 [Unicode License](./Resources/ThirdParty/Unicode-LICENSE.txt).
 The other icons are [Tabler Icons](https://github.com/tabler/tabler-icons), under
 [MIT](./Resources/ThirdParty/Tabler-LICENSE.txt).
+Generate Dummy Text's word lists come from Raycast's
+[Japanese Lorem Ipsum Generator](https://github.com/raycast/extensions/tree/main/extensions/lipsum),
+under [MIT](./Resources/ThirdParty/Lipsum-LICENSE.txt).
 Updates come through [Sparkle](https://github.com/sparkle-project/Sparkle), under
 [its license](./Resources/ThirdParty/Sparkle-LICENSE.txt).
