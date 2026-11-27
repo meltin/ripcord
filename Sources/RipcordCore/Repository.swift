@@ -153,3 +153,40 @@ public enum RepositoryIndex {
     return components.url
   }
 }
+
+/// Raycast's Clone Repo: a repository URL, and the folder to clone it into, one of those
+/// Search Repositories looks in.
+public enum CloneRepo {
+  /// The URL field and the Clone Into menu, its folders as `~/…`.
+  public static func arguments(folders: [URL]) -> [ScriptCommand.Argument] {
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    return [
+      ScriptCommand.Argument(type: .text, placeholder: "Repository URL"),
+      ScriptCommand.Argument(
+        type: .dropdown, placeholder: "Clone Into",
+        data: folders.map {
+          .init(
+            title: $0.path.hasPrefix(home) ? "~" + $0.path.dropFirst(home.count) : $0.path,
+            value: $0.path)
+        }),
+    ]
+  }
+
+  /// `git clone`'s arguments for `url`, nil for nothing typed or for text git would read as
+  /// one of its options.
+  public static func gitArguments(url: String) -> [String]? {
+    let url = url.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !url.isEmpty, !url.hasPrefix("-"), !url.contains(where: \.isWhitespace) else {
+      return nil
+    }
+    return ["clone", "--", url]
+  }
+
+  /// The folder `git clone` makes for `url`: its last part without `.git`.
+  public static func folderName(for url: String) -> String {
+    let last =
+      url.trimmingCharacters(in: .whitespacesAndNewlines)
+      .split(whereSeparator: { $0 == "/" || $0 == ":" }).last.map(String.init) ?? url
+    return last.hasSuffix(".git") ? String(last.dropLast(4)) : last
+  }
+}

@@ -3,7 +3,7 @@ import Foundation
 /// Commands Ripcord runs itself, listed alongside apps.
 public enum BuiltinCommand: CaseIterable, Sendable {
   case clipboardHistory, searchSnippets, createSnippet, exportSnippets, importSnippets
-  case searchRepositories, httpStatusCodes, settings
+  case searchRepositories, cloneRepo, httpStatusCodes, settings
   case caffeinate, decaffeinate, toggleCaffeinate, caffeinateFor, caffeinateUntil
   case caffeinateWhile, caffeinateStatus
   case sleepTimer, stopSleepTimer
@@ -21,6 +21,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .clipboardHistory: "Clipboard History"
     case .searchSnippets: "Search Snippets"
     case .searchRepositories: "Search Repositories"
+    case .cloneRepo: "Clone Repo"
     case .httpStatusCodes: "HTTP Status Codes"
     case .createSnippet: "Create Snippet"
     case .exportSnippets: "Export Snippets"
@@ -68,6 +69,8 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .pickColor, .colorHistory, .colorNames, .convertColor, .favoriteColors, .colorWheel:
       "Color Picker"
     case .cleanKeyboard: "Clean Keyboard"
+    // Raycast's extension's name.
+    case .searchRepositories, .cloneRepo: "Git Repos"
     case .searchBookmarks, .addBookmark: "Bookmarks"
     case .searchEmoji: "Emoji & Symbols"
     case .ripcordNotes, .createNote, .searchNotes: "Notes"
@@ -84,6 +87,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .clipboardHistory: "command:clipboard-history"
     case .searchSnippets: "command:search-snippets"
     case .searchRepositories: "command:search-repositories"
+    case .cloneRepo: "command:clone-repo"
     case .httpStatusCodes: "command:http-status-codes"
     case .createSnippet: "command:create-snippet"
     case .exportSnippets: "command:export-snippets"
