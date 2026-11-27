@@ -439,6 +439,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case windowManagement = "Window Management"
   case coffee = "Coffee"
   case sleepTimer = "Sleep Timer"
+  case lidAwake = "Lid Awake"
   case colorPicker = "Color Picker"
   case cleanKeyboard = "Clean Keyboard"
   case bookmarks = "Bookmarks"
@@ -465,6 +466,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .windowManagement: "rectangle.split.2x1.fill"
     case .coffee: "cup.and.saucer.fill"
     case .sleepTimer: "moon.zzz.fill"
+    case .lidAwake: "sun.max"
     case .colorPicker: "eyedropper"
     case .cleanKeyboard: "keyboard"
     case .bookmarks: "bookmark.fill"
@@ -488,6 +490,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .windowManagement: .indigo
     case .coffee: .brown
     case .sleepTimer: .indigo
+    case .lidAwake: .orange
     case .colorPicker: .pink
     case .cleanKeyboard: .cyan
     case .bookmarks: .yellow
@@ -524,6 +527,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       "Sleep the Mac, or turn its display off, after a time typed after Sleep Timer, as in “sleep timer 30m”."
     case .coffee:
       "Keep the Mac awake, until Decaffeinate or for a time typed after Caffeinate, as in “caffeinate 1h 30m”."
+    case .lidAwake:
+      "Keep the Mac awake with the lid closed, on battery too, until turned off or for a time typed after Lid Awake, as in “lid awake 2h”."
     case .repositories:
       "Find the Git repositories in your folders and open each in the app you pick for its Return."
     case .httpStatusCodes:
@@ -549,7 +554,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   /// The commands a page lists, by settings key; nil for pages built another way.
   var commandKeys: Set<String>? {
     switch self {
-    case .clipboardHistory, .snippets, .repositories, .coffee, .sleepTimer, .httpStatusCodes,
+    case .clipboardHistory, .snippets, .repositories, .coffee, .sleepTimer, .lidAwake,
+      .httpStatusCodes,
       .colorPicker, .cleanKeyboard, .bookmarks, .notes, .emoji, .ripcord, .dummyText:
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
@@ -611,6 +617,15 @@ private enum SettingText {
   )
   static let clearHistory = SettingsSearch.Item(
     title: "Clear History", detail: "Delete every entry but the pinned ones.")
+  static let lidAwakePermission = SettingsSearch.Item(
+    title: "Permission",
+    detail:
+      "Lid Awake runs pmset's disablesleep as root, allowed once with your administrator password for just that."
+  )
+  static let lidAwakeLowBattery = SettingsSearch.Item(
+    title: "Turn Off at Low Battery",
+    detail:
+      "On battery, Lid Awake turns itself off at this charge, so a closed Mac doesn't run flat.")
   static let cycling = SettingsSearch.Item(
     title: "Cycling",
     detail:
@@ -641,6 +656,7 @@ extension SettingsPage {
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
       case .dummyText: [SettingText.dummyTextLanguage]
       case .windowManagement: [SettingText.cycling]
+      case .lidAwake: [SettingText.lidAwakePermission, SettingText.lidAwakeLowBattery]
       case .clipboardHistory:
         [SettingText.keepHistoryFor, SettingText.maxEntries, SettingText.clearHistory]
       case .snippets:
@@ -671,6 +687,7 @@ extension BuiltinCommand {
     case .searchRepositories: .repositories
     case .caffeinate, .decaffeinate: .coffee
     case .sleepTimer, .stopSleepTimer: .sleepTimer
+    case .lidAwake: .lidAwake
     case .pickColor, .colorHistory: .colorPicker
     case .cleanKeyboard: .cleanKeyboard
     case .searchBookmarks, .addBookmark: .bookmarks
@@ -771,6 +788,12 @@ struct SettingsView: View {
               ) { EmptyView() }
               FolderList(folders: $model.config.scriptFolders)
             }
+          }
+        case .lidAwake:
+          PageScroll(model: model) {
+            PageHeader(page: .lidAwake)
+            LidAwakeSettings(model: model)
+            CommandsList(model: model, page: .lidAwake)
           }
         case .windowManagement:
           PageScroll(model: model) {
@@ -2191,5 +2214,51 @@ private struct SettingRow<Control: View>: View {
     }
     .padding(.horizontal, 18)
     .padding(.vertical, 13)
+  }
+}
+
+/// Lid Awake's permission, granted and removed with the administrator password, and the
+/// battery level it turns itself off at.
+private struct LidAwakeSettings: View {
+  @Bindable var model: SettingsModel
+  @State private var allowed = false
+  @State private var working = false
+
+  var body: some View {
+    Card {
+      SettingRow(
+        title: SettingText.lidAwakePermission.title,
+        description: SettingText.lidAwakePermission.detail
+      ) {
+        HStack(spacing: 10) {
+          Text(allowed ? "Allowed" : "Not allowed").foregroundStyle(.secondary)
+          Button(allowed ? "Remove…" : "Allow…") { change(allow: !allowed) }
+            .disabled(working)
+        }
+      }
+      Divider()
+      SettingRow(
+        title: SettingText.lidAwakeLowBattery.title,
+        description: SettingText.lidAwakeLowBattery.detail
+      ) {
+        Picker(SettingText.lidAwakeLowBattery.title, selection: $model.config.lidAwakeLowBattery) {
+          Text("Never").tag(0)
+          ForEach([5, 10, 20, 30], id: \.self) { Text("\($0)%").tag($0) }
+        }
+        .labelsHidden()
+        .fixedSize()
+      }
+    }
+    .task { allowed = await Task.detached { LidAwake.isAllowed }.value }
+  }
+
+  /// Off the main thread: macOS's password prompt waits for the user.
+  private func change(allow: Bool) {
+    working = true
+    Task {
+      _ = await Task.detached { allow ? LidAwake.allow() : LidAwake.disallow() }.value
+      allowed = await Task.detached { LidAwake.isAllowed }.value
+      working = false
+    }
   }
 }

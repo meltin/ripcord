@@ -59,6 +59,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
     }
     launcher.onSleepTimer = { [weak self] in self?.sleepTimer.start(after: $0, displayOnly: $1) }
+    lidAwake.onChange = { [weak self] in
+      guard let self else { return }
+      showTimersInMenuBar()
+      launcher.lidAwakeStatus = lidAwake.status
+    }
+    launcher.onLidAwake = { [weak self] seconds in
+      if let message = self?.lidAwake.start(for: seconds) { self?.showError(message) }
+    }
+    launcher.onToggleLidAwake = { [weak self] in
+      guard let self else { return }
+      if lidAwake.isActive { return lidAwake.stop() }
+      if let message = lidAwake.start(for: nil) { showError(message) }
+    }
+    launcher.onStopLidAwake = { [weak self] in
+      guard self?.lidAwake.isActive == true else { return NSSound.beep() }
+      self?.lidAwake.stop()
+    }
     keyboardCleaner.onChange = { [weak self] in self?.showTimersInMenuBar() }
     launcher.onCleanKeyboard = { [weak self] seconds in
       guard let self else { return }
@@ -122,6 +139,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   /// What's typed in a note is saved before quitting, as its autosave may not have run yet.
   func applicationWillTerminate(_ notification: Notification) {
+    // A closed Mac must sleep again once Ripcord isn't there to turn Lid Awake off.
+    lidAwake.stop()
     notes.flushForQuit()
     control?.stop()
   }
@@ -296,6 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.clipboardSettings = config.clipboardHistory
       launcher.backdrop = config.backdrop
       launcher.cycleHalves = config.cycleHalves
+      lidAwake.lowBattery = config.lidAwakeLowBattery
       applyLaunchAtLogin(config.launchAtLogin)
       // Saving mid-recording must not bring back the hotkeys the recorder turned off.
       if !isRecording { applyHotkeys(config) }
@@ -423,6 +443,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   private let caffeinator = Caffeinator()
   private let sleepTimer = SleepTimer()
+  private let lidAwake = LidAwake()
+  private let stopLidAwakeItem = NSMenuItem(
+    title: "Turn Off Lid Awake", action: #selector(stopLidAwake), keyEquivalent: "")
+
+  @objc private func stopLidAwake() { lidAwake.stop() }
   private let keyboardCleaner = KeyboardCleaner()
   private let stopCleanKeyboardItem = NSMenuItem(
     title: "Stop Clean Keyboard", action: #selector(stopCleanKeyboard), keyEquivalent: "")
@@ -445,11 +470,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     guard let statusItem, let button = statusItem.button else { return }
     decaffeinateItem.isHidden = !caffeinator.isActive
     stopSleepTimerItem.isHidden = !sleepTimer.isActive
+    stopLidAwakeItem.isHidden = !lidAwake.isActive
     stopCleanKeyboardItem.isHidden = !keyboardCleaner.isActive
+    // Lid Awake first: a Mac that won't sleep when closed is the one to know about.
     let shown: (symbol: String, label: String, remaining: TimeInterval?)? =
-      sleepTimer.isActive
-      ? ("moon.zzz.fill", "Sleep timer", sleepTimer.remaining)
-      : caffeinator.isActive ? ("cup.and.saucer.fill", "Caffeinated", caffeinator.remaining) : nil
+      lidAwake.isActive
+      ? ("sun.max", "Lid Awake", lidAwake.remaining)
+      : sleepTimer.isActive
+        ? ("moon.zzz.fill", "Sleep timer", sleepTimer.remaining)
+        : caffeinator.isActive ? ("cup.and.saucer.fill", "Caffeinated", caffeinator.remaining) : nil
     guard let shown else {
       button.image = statusIcon
       button.title = ""
@@ -483,6 +512,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     menu.addItem(decaffeinateItem)
     stopSleepTimerItem.isHidden = true
     menu.addItem(stopSleepTimerItem)
+    stopLidAwakeItem.isHidden = true
+    menu.addItem(stopLidAwakeItem)
     stopCleanKeyboardItem.isHidden = true
     menu.addItem(stopCleanKeyboardItem)
     menu.addItem(withTitle: "Open Ripcord", action: #selector(toggleLauncher), keyEquivalent: "")

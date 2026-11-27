@@ -28,6 +28,8 @@ public struct Config: Codable, Equatable, Sendable {
   public var backdrop: String
   /// Using a half again on the same window goes ½ → ⅔ → ⅓, as Raycast's Cycling setting.
   public var cycleHalves: Bool
+  /// Lid Awake turns itself off when the battery falls to this percent; 0 never does.
+  public var lidAwakeLowBattery: Int
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
@@ -37,7 +39,7 @@ public struct Config: Codable, Equatable, Sendable {
     snippetExpansion: SnippetExpansion = SnippetExpansion(),
     dummyTextLanguage: DummyText.Language = .japanese,
     clipboardHistory: ClipboardSettings = ClipboardSettings(),
-    backdrop: String = Backdrop.off, cycleHalves: Bool = true
+    backdrop: String = Backdrop.off, cycleHalves: Bool = true, lidAwakeLowBattery: Int = 10
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
@@ -54,6 +56,7 @@ public struct Config: Codable, Equatable, Sendable {
     self.clipboardHistory = clipboardHistory
     self.backdrop = backdrop
     self.cycleHalves = cycleHalves
+    self.lidAwakeLowBattery = lidAwakeLowBattery
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -84,6 +87,8 @@ public struct Config: Codable, Equatable, Sendable {
       ?? ClipboardSettings()
     backdrop = try container.decodeIfPresent(String.self, forKey: .backdrop) ?? Backdrop.off
     cycleHalves = try container.decodeIfPresent(Bool.self, forKey: .cycleHalves) ?? true
+    lidAwakeLowBattery =
+      try container.decodeIfPresent(Int.self, forKey: .lidAwakeLowBattery) ?? 10
   }
 
   public static let `default` = Config(

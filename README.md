@@ -49,6 +49,14 @@
   it, as in `caffeinate 1h 30m`, to stop on its own. A cup with the time left shows in the menu bar
 - Sleep Timer: type a time after it, as in `sleep timer 30m`, then pick Sleep or Turn Off Display;
   a moon with the time left shows in the menu bar until it fires or Stop Sleep Timer
+- Lid Awake: keeps the Mac awake with the lid closed, on battery too, until turned off or for a
+  time typed after it, as in `lid awake 2h`; while on, it's pinned at the top of the search with
+  the time left, and its icon is in the menu bar. It turns itself off when its time is up, when
+  the battery falls to the level set in Settings › Lid Awake (10% unless changed), and when
+  Ripcord quits. macOS sleeps a closed Mac on battery unless `pmset -a disablesleep 1` is set,
+  which takes root, so Settings › Lid Awake asks once for an administrator password to add a
+  sudoers rule (`/etc/sudoers.d/ripcord-lid-awake`) allowing exactly `pmset -a disablesleep 0`
+  and `1`; Remove… there takes it out
 - Color Picker: Pick Color copies a color from anywhere on screen in the format set on its
   settings page (HEX, RGB, HSL, SwiftUI or NSColor); Color History lists the colors picked, to copy
   in any format

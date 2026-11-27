@@ -388,6 +388,19 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Sleep Timer: sleep the Mac, or turn its display off, after this many seconds.
   var onSleepTimer: (_ seconds: TimeInterval, _ displayOnly: Bool) -> Void = { _, _ in }
   var onStopSleepTimer: () -> Void = {}
+  /// Lid Awake on for this long, or until turned off; and its toggle and its off.
+  var onLidAwake: (TimeInterval?) -> Void = { _ in }
+  var onToggleLidAwake: () -> Void = {}
+  var onStopLidAwake: () -> Void = {}
+  /// While Lid Awake is on, for the row pinned at the top of the root search.
+  var lidAwakeStatus: LidAwakeStatus? {
+    didSet {
+      guard lidAwakeStatus != oldValue, panel.isVisible, model.mode == .root,
+        model.query.isEmpty
+      else { return }
+      refreshRows(selecting: model.selected?.id)
+    }
+  }
   /// Clean Keyboard: block the keyboard for this many seconds.
   var onCleanKeyboard: (TimeInterval) -> Void = { _ in }
   var onImportSnippets: () -> Void = {}
@@ -738,7 +751,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       }
     return Search.sections(
       for: query, apps: apps, running: running, quicklinks: quicklinks, items: items,
-      favorites: favorites, drafts: draftStore.drafts, scripts: scripts)
+      favorites: favorites, drafts: draftStore.drafts, scripts: scripts, lidAwake: lidAwakeStatus)
   }
 
   private func handle(_ command: SearchCommand) {
@@ -1722,6 +1735,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onSleepTimer(seconds, displayOnly)
     case .run(.stopSleepTimer):
       onStopSleepTimer()
+    case .run(.lidAwake):
+      onToggleLidAwake()
+    case .lidAwake(let seconds):
+      onLidAwake(seconds)
+    case .stopLidAwake:
+      onStopLidAwake()
     case .run(.pickColor):
       pickColor()
     case .cleanKeyboard(let seconds):
