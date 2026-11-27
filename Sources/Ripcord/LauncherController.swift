@@ -2135,6 +2135,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onSleepTimer(seconds, displayOnly)
     case .run(.stopSleepTimer):
       onStopSleepTimer()
+    case .run(.sleepTimer15), .run(.sleepTimer30), .run(.sleepTimer45), .run(.sleepTimer60),
+      .run(.sleepTimer90):
+      if case .run(let command) = action, let minutes = command.sleepTimerMinutes {
+        onSleepTimer(TimeInterval(minutes * 60), false)
+      }
     case .run(.lidAwake):
       onToggleLidAwake()
     case .lidAwake(let seconds):

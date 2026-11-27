@@ -42,4 +42,13 @@ import Testing
     #expect(row?.action == .run(.stopSleepTimer))
     #expect(row?.subtitle == "Sleep Timer")
   }
+
+  /// Raycast's Start 15, 30, 45, 60 and 90 Minute Sleep Timer, each its own command.
+  @Test func hasRaycastsPresets() {
+    let presets = BuiltinCommand.allCases.filter { $0.sleepTimerMinutes != nil }
+    #expect(presets.compactMap(\.sleepTimerMinutes) == [15, 30, 45, 60, 90])
+    #expect(presets.map(\.title).first == "Start 15 Minute Sleep Timer")
+    #expect(Set(presets.map(\.settingsKey)).count == 5)
+    #expect(BuiltinCommand.sleepTimer.sleepTimerMinutes == nil)
+  }
 }
