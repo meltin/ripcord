@@ -107,4 +107,17 @@ import Testing
     #expect(names("Users").isEmpty)
     #expect(names("/Users/al/dev") == ["ripcord"])
   }
+
+  /// Clone Repo hands git the URL after "--", and never text git would read as an option.
+  @Test func clonesOnlyARepositoryURL() {
+    #expect(
+      CloneRepo.gitArguments(url: " https://github.com/o/r.git ") == [
+        "clone", "--", "https://github.com/o/r.git",
+      ])
+    #expect(CloneRepo.gitArguments(url: "") == nil)
+    #expect(CloneRepo.gitArguments(url: "--upload-pack=touch /tmp/x") == nil)
+    #expect(CloneRepo.gitArguments(url: "a b") == nil)
+    #expect(CloneRepo.folderName(for: "https://github.com/o/repo.git") == "repo")
+    #expect(CloneRepo.folderName(for: "git@github.com:o/tool") == "tool")
+  }
 }

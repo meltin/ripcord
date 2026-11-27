@@ -349,6 +349,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
         || repositorySettings.depth != oldValue.depth
       {
         repositories = []
+        // Clone Repo's Clone Into menu lists the folders looked in.
+        model.scriptArguments[BuiltinCommand.cloneRepo.settingsKey] = CloneRepo.arguments(
+          folders: RepositoryIndex.roots(repositorySettings.folders))
         // Kept open behind Settings, the list would otherwise come back empty, or keep a removed
         // folder's repositories until the scan ends.
         if model.mode == .repositories {
@@ -1002,6 +1005,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.scriptArguments[BuiltinCommand.generateDummyText.settingsKey] = DummyText.arguments(
       preferred: dummyTextLanguage)
     refreshCoffeeArguments()
+    model.scriptArguments[BuiltinCommand.cloneRepo.settingsKey] = CloneRepo.arguments(
+      folders: RepositoryIndex.roots(repositorySettings.folders))
     for command in CleanShotCommand.allCases {
       if let arguments = command.arguments {
         model.scriptArguments[command.settingsKey] = arguments
@@ -1049,6 +1054,52 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.argumentValues[key] = nil
     hide()
     run()
+  }
+
+  /// Clone Repo: `git clone` the URL typed into the folder picked, the first of Search
+  /// Repositories' folders when left alone, then list it. With no URL the field opens to type
+  /// one in.
+  private func cloneRepo() {
+    let key = BuiltinCommand.cloneRepo.settingsKey
+    let values = model.argumentValues[key] ?? []
+    let url = values.first ?? ""
+    guard let arguments = CloneRepo.gitArguments(url: url) else {
+      if url.trimmingCharacters(in: .whitespaces).isEmpty {
+        return askForArgument(0, of: .cloneRepo)
+      }
+      return HUD.show("That isn't a repository URL git can clone.", failed: true)
+    }
+    let folders = RepositoryIndex.roots(repositorySettings.folders)
+    let chosen = values.count > 1 && !values[1].isEmpty ? values[1] : folders.first?.path
+    guard let chosen else {
+      return HUD.show("Add a folder under Settings › Git Repositories first.", failed: true)
+    }
+    model.argumentValues[key] = nil
+    hide()
+    HUD.show("Cloning…")
+    let name = CloneRepo.folderName(for: url)
+    Task {
+      let (status, errors) = await Task.detached {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = arguments
+        process.currentDirectoryURL = URL(fileURLWithPath: chosen)
+        let pipe = Pipe()
+        process.standardError = pipe
+        process.standardInput = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return (Int32(-1), "git couldn't be run.") }
+        let errors = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (process.terminationStatus, String(decoding: errors, as: UTF8.self))
+      }.value
+      if status == 0 {
+        HUD.show("Cloned \(name)")
+        scanRepositories()
+      } else {
+        let line = errors.split(separator: "\n").last.map(String.init) ?? "git clone failed."
+        HUD.show(line, failed: true)
+      }
+    }
   }
 
   /// The app you were in: the panel never takes the front.
@@ -1644,6 +1695,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       if !(command.url(argument: chosen).map(NSWorkspace.shared.open) ?? false) { NSSound.beep() }
       return
     }
+    if action == .run(.cloneRepo) { return cloneRepo() }
     // Read before hide(), which clears what's typed in the fields.
     if case .run(let command) = action,
       [.caffeinateFor, .caffeinateUntil, .caffeinateWhile].contains(command)
@@ -1966,6 +2018,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
       .run(.searchRepositories), .run(.httpStatusCodes), .run(.sleepTimer), .run(.colorHistory),
       .run(.colorNames), .run(.convertColor), .run(.favoriteColors), .run(.colorWheel),
+      .run(.cloneRepo),
       .run(.cleanKeyboard), .run(.searchBookmarks), .run(.addBookmark), .deleteBookmark,
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,

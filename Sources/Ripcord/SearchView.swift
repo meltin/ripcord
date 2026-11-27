@@ -603,6 +603,7 @@ extension BuiltinCommand {
     case .clipboardHistory: "list.clipboard.fill"
     case .searchSnippets: "doc.plaintext.fill"
     case .searchRepositories: "arrow.triangle.branch"
+    case .cloneRepo: "square.and.arrow.down"
     case .httpStatusCodes: "network"
     case .createSnippet: "doc.badge.plus"
     case .exportSnippets: "square.and.arrow.up"
@@ -638,7 +639,7 @@ extension BuiltinCommand {
     switch self {
     case .clipboardHistory, .quit: .red
     case .searchSnippets, .createSnippet, .exportSnippets, .importSnippets: .blue
-    case .searchRepositories: .orange
+    case .searchRepositories, .cloneRepo: .orange
     case .caffeinate, .decaffeinate, .toggleCaffeinate, .caffeinateFor, .caffeinateUntil,
       .caffeinateWhile, .caffeinateStatus:
       .brown
