@@ -1019,7 +1019,13 @@ private struct MarkdownEditor: NSViewRepresentable {
       _ textView: NSTextView, shouldChangeTypingAttributes old: [String: Any],
       toAttributes new: [NSAttributedString.Key: Any]
     ) -> [NSAttributedString.Key: Any] {
-      new.shown
+      // At a line's start, plain rather than the line above's indent.
+      let caret = textView.selectedRange().location
+      let string = textView.string as NSString
+      if caret == 0 || (caret <= string.length && string.character(at: caret - 1) == 0x0A) {
+        return MarkdownEditor.base
+      }
+      return new.shown
     }
 
     func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
@@ -1195,12 +1201,23 @@ private struct MarkdownEditor: NSViewRepresentable {
     textView.needsDisplay = true
     // What's typed next looks like the text before the caret: a heading's size even while an
     // input method composes, and plain after a closing `**`.
+    textView.typingAttributes = typingAttributes(for: textView)
+  }
+
+  /// What's typed at the caret looks like: the text before it, but plain at a line's start, so
+  /// an empty line after a list item isn't drawn, caret and all, at the item's indent.
+  fileprivate static func typingAttributes(for textView: NSTextView) -> [NSAttributedString.Key:
+    Any]
+  {
+    guard let storage = textView.textStorage else { return base }
     let caret = textView.selectedRange().location
-    textView.typingAttributes =
-      caret > 0 && caret <= storage.length
-      ? storage.attributes(at: caret - 1, effectiveRange: nil).shown.filter {
-        $0.key != .strikethroughStyle
-      } : base
+    let string = storage.string as NSString
+    guard caret > 0, caret <= storage.length,
+      string.character(at: caret - 1) != 0x0A, string.character(at: caret - 1) != 0x0D
+    else { return base }
+    return storage.attributes(at: caret - 1, effectiveRange: nil).shown.filter {
+      $0.key != .strikethroughStyle
+    }
   }
 
   private static func attributes(for span: MarkdownSpan, in storage: NSTextStorage)
