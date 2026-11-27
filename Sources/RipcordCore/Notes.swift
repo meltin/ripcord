@@ -174,3 +174,18 @@ public struct NotesSettings: Codable, Equatable, Sendable {
         Bool.self, forKey: .moveCheckedTasksToBottom) ?? false)
   }
 }
+
+/// Ripcord Notes' zoom, as ⌘+ and ⌘- and the settings page step it: Raycast Notes' 75% to 200%
+/// in steps of 5%, measured.
+public enum NotesZoom {
+  public static let range: ClosedRange<Double> = 0.75...2
+  /// One step in or out.
+  public static let step = 0.05
+
+  /// `scale` moved `steps` steps, on the nearest step, kept in range. A scale saved by an older
+  /// build, as 1.21, lands on a step.
+  public static func stepped(_ scale: Double, by steps: Int) -> Double {
+    let moved = ((scale / step).rounded() + Double(steps)) * step
+    return min(max((moved * 100).rounded() / 100, range.lowerBound), range.upperBound)
+  }
+}

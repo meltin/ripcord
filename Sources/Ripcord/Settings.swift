@@ -711,6 +711,8 @@ private enum SettingText {
   static let moveCheckedTasks = SettingsSearch.Item(
     title: "Move Checked Tasks to Bottom",
     detail: "When you check off a task, move it below the unchecked tasks in its list.")
+  static let notesZoom = SettingsSearch.Item(
+    title: "Zoom", detail: "Adjust the zoom level in the Notes content.")
   static let windowGap = SettingsSearch.Item(
     title: "Window Gap", detail: "Gap between windows")
   static let screenGap = SettingsSearch.Item(
@@ -742,7 +744,8 @@ extension SettingsPage {
           ]
       case .colorPicker: [SettingText.colorFormat, SettingText.showColorName]
       case .httpStatusCodes: [SettingText.httpStatusPicture]
-      case .notes: [SettingText.escapeLosesFocus, SettingText.moveCheckedTasks]
+      case .notes:
+        [SettingText.escapeLosesFocus, SettingText.moveCheckedTasks, SettingText.notesZoom]
       case .scripts: [SettingText.scriptFolders]
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
       case .dummyText: [SettingText.dummyTextLanguage]
@@ -887,6 +890,8 @@ struct SettingsView: View {
                 .labelsHidden()
                 .toggleStyle(.switch)
               }
+              Divider()
+              NotesZoomRow()
             }
             CommandsList(model: model, page: .notes)
           }
@@ -2638,6 +2643,49 @@ private struct GapRow: View {
       .fixedSize()
     }
   }
+}
+
+/// Raycast Notes' Zoom: reset, out, the scale, in. Kept where the Notes window's ⌘+ and ⌘- keep
+/// it, so either sets the other.
+private struct NotesZoomRow: View {
+  @AppStorage(NotesWindowController.zoomKey) private var zoom = 1.0
+
+  var body: some View {
+    SettingRow(title: SettingText.notesZoom.title, description: SettingText.notesZoom.detail) {
+      HStack(spacing: 6) {
+        Button {
+          zoom = 1
+        } label: {
+          Glyph("arrow.uturn.backward", pointSize: 11)
+        }
+        .disabled(scale == 1)
+        .help("Actual Size")
+        .accessibilityLabel("Actual Size")
+        Button {
+          zoom = NotesZoom.stepped(scale, by: -1)
+        } label: {
+          Glyph("minus", pointSize: 11)
+        }
+        .disabled(scale <= NotesZoom.range.lowerBound)
+        .help("Zoom Out")
+        .accessibilityLabel("Zoom Out")
+        Text("\(Int((scale * 100).rounded()))%")
+          .monospacedDigit()
+          .frame(minWidth: 40)
+        Button {
+          zoom = NotesZoom.stepped(scale, by: 1)
+        } label: {
+          Glyph("plus", pointSize: 11)
+        }
+        .disabled(scale >= NotesZoom.range.upperBound)
+        .help("Zoom In")
+        .accessibilityLabel("Zoom In")
+      }
+    }
+  }
+
+  /// Never set reads as 0.
+  private var scale: Double { zoom > 0 ? zoom : 1 }
 }
 
 /// Search Emoji & Symbols' Column Count, Primary Action and Emoji Skin Tone, as Raycast's.
