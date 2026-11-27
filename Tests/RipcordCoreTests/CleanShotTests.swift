@@ -63,4 +63,24 @@ import Testing
     let section = Search.catalog(apps: [], quicklinks: []).first { $0.title == "CleanShot X" }
     #expect(section?.entries.count == CleanShotCommand.allCases.count)
   }
+
+  /// Raycast's titles, and the Action or Tab field passed on in CleanShot X's URL.
+  @Test func takesRaycastsNamesAndArguments() {
+    #expect(CleanShotCommand.allInOne.title == "All in One")
+    #expect(CleanShotCommand.openFromClipboard.title == "Open from Clipboard")
+    #expect(CleanShotCommand.openSettings.title == "Open Settings")
+    #expect(
+      CleanShotCommand.captureArea.url(argument: "copy")?.absoluteString
+        == "cleanshot://capture-area?action=copy")
+    #expect(CleanShotCommand.captureArea.url?.absoluteString == "cleanshot://capture-area")
+    #expect(
+      CleanShotCommand.openSettings.url(argument: "quickaccess")?.absoluteString
+        == "cleanshot://open-settings?tab=quickaccess")
+    #expect(
+      CleanShotCommand.captureWindow.arguments?.first?.data?.map(\.value)
+        == ["copy", "save", "annotate", "upload", "pin"])
+    #expect(CleanShotCommand.scrollingCapture.arguments == nil)
+    // Settings keys stay, so aliases and hotkeys set before the rename still apply.
+    #expect(CleanShotCommand.allInOne.settingsKey == "cleanshot:all-in-one")
+  }
 }

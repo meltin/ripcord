@@ -117,8 +117,10 @@
 - HTTP Status Codes: look a code up by number or name, grouped by hundred; Return opens its MDN
   page and ⌘K copies the code or its name
 - CleanShot X: Capture Area, Window, Fullscreen and Previous Area, Scrolling Capture, Record
-  Screen, Capture Text, Self-Timer, Pin, Annotate, History and the rest of its URL scheme, listed
-  when CleanShot X is installed
+  Screen, Capture Text (OCR), Self Timer, Pin, Annotate, History and the rest of its URL scheme,
+  named as Raycast's extension names them and listed when CleanShot X is installed; the captures
+  take an Action (Copy, Save, Annotate, Upload or Pin) and Open Settings a tab, in a field beside
+  the search bar
 - Window Management: put the frontmost window in a half, quarter or third, maximize or center
   it, move it to the next or previous display, or restore where it was; give each a hotkey such
   as ⌃⌥← on its settings page

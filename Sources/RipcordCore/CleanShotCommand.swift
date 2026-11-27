@@ -33,28 +33,68 @@ public enum CleanShotCommand: String, CaseIterable, Sendable {
 
   public var title: String {
     switch self {
-    case .allInOne: "All-In-One"
+    // Raycast's CleanShot X extension's titles.
+    case .allInOne: "All in One"
     case .captureArea: "Capture Area"
     case .capturePreviousArea: "Capture Previous Area"
     case .captureFullscreen: "Capture Fullscreen"
     case .captureWindow: "Capture Window"
-    case .selfTimer: "Self-Timer"
+    case .selfTimer: "Self Timer"
     case .scrollingCapture: "Scrolling Capture"
     case .recordScreen: "Record Screen"
-    case .captureText: "Capture Text"
+    case .captureText: "Capture Text (OCR)"
     case .pin: "Pin Screenshot"
-    case .openAnnotate: "Open Annotate"
-    case .openFromClipboard: "Annotate Clipboard Image"
+    case .openAnnotate: "Annotate"
+    case .openFromClipboard: "Open from Clipboard"
     case .openHistory: "Open History"
     case .restoreRecentlyClosed: "Restore Recently Closed"
     case .toggleDesktopIcons: "Toggle Desktop Icons"
     case .hideDesktopIcons: "Hide Desktop Icons"
     case .showDesktopIcons: "Show Desktop Icons"
-    case .openSettings: "CleanShot Settings"
+    case .openSettings: "Open Settings"
     }
   }
 
   public var settingsKey: String { "cleanshot:\(rawValue)" }
 
-  public var url: URL? { URL(string: "cleanshot://\(rawValue)") }
+  public var url: URL? { url(argument: "") }
+
+  /// Its argument field beside the search bar, as Raycast's extension has it: what to do with a
+  /// capture, or the settings tab to open. Left alone, CleanShot X does as it's set to.
+  public var arguments: [ScriptCommand.Argument]? {
+    switch self {
+    case .captureArea, .capturePreviousArea, .captureFullscreen, .captureWindow, .selfTimer:
+      [
+        ScriptCommand.Argument(
+          type: .dropdown, placeholder: "Action", optional: true,
+          data: [
+            ("Copy", "copy"), ("Save", "save"), ("Annotate", "annotate"),
+            ("Upload", "upload"), ("Pin", "pin"),
+          ].map { .init(title: $0.0, value: $0.1) })
+      ]
+    case .openSettings:
+      [
+        ScriptCommand.Argument(
+          type: .dropdown, placeholder: "Tab", optional: true,
+          data: [
+            ("General", "general"), ("Wallpaper", "wallpaper"), ("Shortcuts", "shortcuts"),
+            ("Quick Access", "quickaccess"), ("Recording", "recording"),
+            ("Screenshots", "screenshots"), ("Annotate", "annotate"), ("Cloud", "cloud"),
+            ("Advanced", "advanced"), ("About", "about"),
+          ].map { .init(title: $0.0, value: $0.1) })
+      ]
+    default: nil
+    }
+  }
+
+  /// The URL with `argument` as its action or tab; empty, without one.
+  public func url(argument: String) -> URL? {
+    var components = URLComponents(string: "cleanshot://\(rawValue)")
+    if !argument.isEmpty {
+      components?.queryItems = [
+        URLQueryItem(name: self == .openSettings ? "tab" : "action", value: argument)
+      ]
+    }
+    return components?.url
+  }
 }

@@ -220,6 +220,7 @@ final class LauncherModel {
   var argumentScript: String? {
     switch selected?.action {
     case .runScript(let path)?: scriptArguments[path]?.isEmpty == false ? path : nil
+    case .cleanShot(let command)?: command.arguments == nil ? nil : command.settingsKey
     case .run(let command)?: scriptArguments[command.settingsKey] != nil ? command.settingsKey : nil
     default: nil
     }
@@ -986,6 +987,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.scriptArguments[BuiltinCommand.generateDummyText.settingsKey] = DummyText.arguments(
       preferred: dummyTextLanguage)
     refreshCoffeeArguments()
+    for command in CleanShotCommand.allCases {
+      if let arguments = command.arguments {
+        model.scriptArguments[command.settingsKey] = arguments
+      }
+    }
   }
 
   /// Generate Dummy Text's language when its menu is left alone, first in that menu.
@@ -1615,6 +1621,14 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.generateDummyText) || action == .copyDummyText {
       return generateDummyText(copyOnly: action == .copyDummyText)
     }
+    // CleanShot X with what its field holds, read before hide() clears it.
+    if case .cleanShot(let command) = action {
+      let chosen = model.argumentValues[command.settingsKey]?.first ?? ""
+      hide()
+      // After hide(), so a capture doesn't include the panel.
+      if !(command.url(argument: chosen).map(NSWorkspace.shared.open) ?? false) { NSSound.beep() }
+      return
+    }
     // Read before hide(), which clears what's typed in the fields.
     if case .run(let command) = action,
       [.caffeinateFor, .caffeinateUntil, .caffeinateWhile].contains(command)
@@ -1889,9 +1903,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
         Bundle.main.bundleIdentifier ?? "", forType: .init("org.nspasteboard.source"))
     case .reveal(let url):
       NSWorkspace.shared.activateFileViewerSelecting([url])
-    case .cleanShot(let command):
-      // After hide(), so a capture doesn't include the panel.
-      if !(command.url.map(NSWorkspace.shared.open) ?? false) { NSSound.beep() }
+    case .cleanShot:
+      break  // Run with its field, above.
     case .run(.settings), .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey,
       .deleteAlias:
       break  // Opened before hide(), above.
