@@ -6,6 +6,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case searchRepositories, httpStatusCodes, settings
   case caffeinate, decaffeinate
   case sleepTimer, stopSleepTimer
+  case lidAwake
   case pickColor, colorHistory
   case cleanKeyboard
   case searchBookmarks, addBookmark
@@ -28,6 +29,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .decaffeinate: "Decaffeinate"
     case .sleepTimer: "Sleep Timer"
     case .stopSleepTimer: "Stop Sleep Timer"
+    case .lidAwake: "Lid Awake"
     case .pickColor: "Pick Color"
     case .colorHistory: "Color History"
     case .cleanKeyboard: "Clean Keyboard"
@@ -49,6 +51,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     switch self {
     case .caffeinate, .decaffeinate: "Coffee"
     case .sleepTimer, .stopSleepTimer: "Sleep Timer"
+    case .lidAwake: "Keep the Mac awake with the lid closed"
     case .pickColor, .colorHistory: "Color Picker"
     case .cleanKeyboard: "Clean Keyboard"
     case .searchBookmarks, .addBookmark: "Bookmarks"
@@ -73,6 +76,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .importSnippets: "command:import-snippets"
     case .settings: "command:settings"
     case .caffeinate: "command:caffeinate"
+    case .lidAwake: "command:lid-awake"
     case .decaffeinate: "command:decaffeinate"
     case .sleepTimer: "command:sleep-timer"
     case .stopSleepTimer: "command:stop-sleep-timer"
@@ -192,6 +196,10 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case caffeinate(TimeInterval?)
     /// Sleeps the Mac, or only turns its display off, after this many seconds.
     case sleepTimer(TimeInterval, displayOnly: Bool)
+    /// Keeps the Mac awake with its lid closed for this many seconds; nil until turned off.
+    case lidAwake(TimeInterval?)
+    /// Lets the Mac sleep with its lid closed again.
+    case stopLidAwake
     /// Removes the picked color with this hex from Color History.
     case deleteColor(String)
     /// Blocks the keyboard for this many seconds, to wipe it.
@@ -396,7 +404,8 @@ public enum Search {
   public static func sections(
     for query: String, apps: [AppEntry], running: [AppEntry], quicklinks: [Quicklink],
     items: [String: ItemSettings] = [:], favorites: [String] = [],
-    drafts: SavedDrafts = SavedDrafts(), scripts: [ScriptCommand] = []
+    drafts: SavedDrafts = SavedDrafts(), scripts: [ScriptCommand] = [],
+    lidAwake: LidAwakeStatus? = nil
   ) -> [SearchSection] {
     let links = quicklinks.filter(\.isEnabled)
     let trimmed = query.trimmingCharacters(in: .whitespaces)
@@ -433,7 +442,8 @@ public enum Search {
     }
     let decorate = { (result: SearchResult) in withFavoriteActions(result, favorites: shown) }
     // Ripcord's own commands live in the footer's root menu; typing still finds them.
-    return [draftSection(drafts)].compactMap { $0 }
+    // On, Lid Awake stays at the top with the way to turn it off.
+    return [lidAwakeSection(lidAwake), draftSection(drafts)].compactMap { $0 }
       + [
         SearchSection(title: "Favorites", results: favored.map(decorate)),
         // Capped so Quicklinks stay in view.
@@ -562,6 +572,13 @@ public enum Search {
         ]
       } ?? []
 
+    let lidAwakeFor = typedDuration(after: .lidAwake, in: trimmed, items: items).map {
+      SearchResult(
+        id: "lid-awake-for", title: "Lid Awake for \(Coffee.format($0))",
+        subtitle: BuiltinCommand.lidAwake.group, keyword: nil, kind: .command,
+        action: .lidAwake($0))
+    }
+
     let everything = candidates(apps: apps, quicklinks: links, items: items, scripts: scripts)
     let shown = shownFavorites(favorites, among: Set(everything.compactMap(\.result.itemKey)))
     let ranked =
@@ -610,7 +627,8 @@ public enum Search {
         title: "Clean Keyboard for \(Coffee.format(seconds))", subtitle: "Clean Keyboard",
         keyword: nil, kind: .command, action: .cleanKeyboard(seconds))
     }
-    let timed: [SearchResult] = [caffeinateFor].compactMap { $0 } + sleepIn + cleanFor
+    let timed: [SearchResult] =
+      [caffeinateFor, lidAwakeFor].compactMap { $0 } + sleepIn + cleanFor
     return [calculation].compactMap { $0 } + expanded + timed
       + ranked
   }

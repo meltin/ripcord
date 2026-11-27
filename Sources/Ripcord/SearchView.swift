@@ -430,6 +430,8 @@ private struct ResultIcon: View {
       tile(BuiltinCommand.caffeinate.symbol, BuiltinCommand.caffeinate.color)
     case .sleepTimer(_, let displayOnly):
       tile(displayOnly ? "display" : BuiltinCommand.sleepTimer.symbol, .indigo)
+    case .lidAwake, .stopLidAwake:
+      tile(BuiltinCommand.lidAwake.symbol, BuiltinCommand.lidAwake.color)
     case .system(let action, _):
       tile(action.symbol, .gray)
     case .window(let layout):
@@ -585,6 +587,7 @@ extension BuiltinCommand {
     case .decaffeinate: "cup.and.saucer"
     case .sleepTimer: "moon.zzz.fill"
     case .stopSleepTimer: "moon.zzz"
+    case .lidAwake: "sun.max"
     case .pickColor: "eyedropper"
     case .colorHistory: "swatchpalette.fill"
     case .cleanKeyboard: "keyboard"
@@ -607,6 +610,7 @@ extension BuiltinCommand {
     case .searchRepositories: .orange
     case .caffeinate, .decaffeinate: .brown
     case .sleepTimer, .stopSleepTimer: .indigo
+    case .lidAwake: .orange
     case .pickColor, .colorHistory: .pink
     case .cleanKeyboard: .cyan
     case .searchBookmarks, .addBookmark: .yellow
