@@ -241,7 +241,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       if !launcher.isVisible { applyConfig() }
       launcher.open(query: query)
       return ControlResponse()
-    case .pick, .configGet, .configSet:
+    case .configGet(let key):
+      do {
+        return ControlResponse(output: try Config.get(key, from: Data(contentsOf: configURL)))
+      } catch {
+        return ControlResponse(error: "ripcord: \(error.localizedDescription)")
+      }
+    case .configSet(let key, let json):
+      // Through the settings window's model, as its own edits go, so an open window shows the
+      // change and can't write back what was there before.
+      let model = settings.model
+      model.load()
+      if let failure = model.loadError { return ControlResponse(error: "ripcord: \(failure)") }
+      do {
+        model.config = try Config.setting(key, to: json, in: Data(contentsOf: configURL))
+      } catch {
+        return ControlResponse(error: "ripcord: \(error.localizedDescription)")
+      }
+      model.saveIfChanged()
+      return model.loadError.map { ControlResponse(error: "ripcord: \($0)") } ?? ControlResponse()
+    case .pick:
       return ControlResponse(error: "ripcord: not yet.")
     }
   }
