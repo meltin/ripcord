@@ -18,12 +18,15 @@ public struct Config: Codable, Equatable, Sendable {
   public var favorites: [String]
   /// Folders holding Raycast Script Commands, `~` allowed.
   public var scriptFolders: [String]
+  /// Typing a snippet's keyword in any app replaces it with the snippet.
+  public var snippetExpansion: SnippetExpansion
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
     items: [String: ItemSettings] = [:], inputSource: String? = nil, snippets: [Snippet] = [],
     repositories: RepositorySettings = RepositorySettings(), colorFormat: ColorFormat = .hex,
-    favorites: [String] = [], scriptFolders: [String] = []
+    favorites: [String] = [], scriptFolders: [String] = [],
+    snippetExpansion: SnippetExpansion = SnippetExpansion()
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
@@ -35,6 +38,7 @@ public struct Config: Codable, Equatable, Sendable {
     self.colorFormat = colorFormat
     self.favorites = favorites
     self.scriptFolders = scriptFolders
+    self.snippetExpansion = snippetExpansion
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -54,6 +58,9 @@ public struct Config: Codable, Equatable, Sendable {
     colorFormat = (try? container.decodeIfPresent(ColorFormat.self, forKey: .colorFormat)) ?? .hex
     favorites = try container.decodeIfPresent([String].self, forKey: .favorites) ?? []
     scriptFolders = try container.decodeIfPresent([String].self, forKey: .scriptFolders) ?? []
+    snippetExpansion =
+      try container.decodeIfPresent(SnippetExpansion.self, forKey: .snippetExpansion)
+      ?? SnippetExpansion()
   }
 
   public static let `default` = Config(

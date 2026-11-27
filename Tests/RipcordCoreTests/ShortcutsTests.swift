@@ -29,7 +29,8 @@ import Testing
     try config.save(to: url)
     let text = try String(contentsOf: url, encoding: .utf8)
     #expect(!text.contains("com.example.app"))
-    #expect(!text.contains("disabled"))
+    // The item's own key; snippet expansion's "disabledApps" is another setting.
+    #expect(!text.contains("\"disabled\""))
   }
 
   @Test func readsFilesWrittenBeforeShortcutsExisted() throws {

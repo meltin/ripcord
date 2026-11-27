@@ -20,7 +20,7 @@ enum Permission: CaseIterable, Identifiable {
   var purpose: String {
     switch self {
     case .accessibility:
-      "Pasting, the music and volume keys, and Window Management."
+      "Pasting, snippet keywords, the music and volume keys, and Window Management."
     case .finder: "Empty Trash."
     case .systemEvents: "Toggle System Appearance."
     case .loginWindow: "Log Out, Restart and Shut Down."
