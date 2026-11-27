@@ -23,7 +23,9 @@
   Actions, Window Management): give any app, Quicklink or command an alias, a hotkey that runs it
   from anywhere, or turn it off so it never shows up in search
 - Clipboard History: copied text and images, including a copied image file such as a CleanShot X
-  capture, with a preview and details of the selected one. Return pastes into the app you were in,
+  capture, and other copied files with their Finder icons, with a preview and details of the
+  selected one (a file's kind, size and path). Return pastes into the app you were in (files paste
+  as files, into Finder too),
   ⇧⌘P pins an item to the top and ⌃X deletes it. Copies a password manager marks as concealed are
   never recorded, and switching the command off on its settings page stops recording
 - Snippets: Create Snippet saves text with a name, keyword, icon and tags from the panel, and
@@ -197,7 +199,8 @@ the settings window opens. The settings window writes every change back to it.
 `hotkey` is `cmd`, `option` or `ctrl` (plus `shift` if you like), then `space`, `return`, an
 arrow (`left`, `right`, `up`, `down`), a letter or a digit.
 Clipboard History keeps its last 300 unpinned items (plus every pinned one) in
-`~/Library/Application Support/Ripcord/Clipboard`, as plain text and image files; an image over
+`~/Library/Application Support/Ripcord/Clipboard`, as plain text and image files; copied files
+are kept by path, not copied, so one moved or deleted since can't be pasted. An image over
 32 MB or a text over 1 MB isn't kept. Delete the folder to clear it.
 
 `items` holds the aliases, hotkeys and on/off switches set on the settings pages, for apps (by
