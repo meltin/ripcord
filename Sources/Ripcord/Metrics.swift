@@ -37,6 +37,71 @@ enum Metrics {
   static let cardRowPadding: CGFloat = 10
   static let cardRowRadius: CGFloat = 8
 
+  // Text in the panel, by what it is. Two roles at the same size stay two names, so one can
+  // change without the other.
+  /// A row's title.
+  static let rowTitleFontSize: CGFloat = 14
+  /// A row's subtitle after its title.
+  static let rowSubtitleFontSize: CGFloat = 14
+  /// A row's kind on the right (Command, Application).
+  static let rowKindFontSize: CGFloat = 13
+  /// A repository's path on the right of its row.
+  static let rowPathFontSize: CGFloat = 13
+  /// A snippet's keyword in its row.
+  static let rowKeywordFontSize: CGFloat = 13
+  /// A snippet's tags in its row.
+  static let rowTagFontSize: CGFloat = 12
+  /// A list's section header, and the emoji grid's.
+  static let sectionFontSize: CGFloat = 12
+  /// An emoji a Script Command uses as its icon.
+  static let iconEmojiFontSize: CGFloat = 17
+  /// An emoji in the emoji grid.
+  static let emojiTileFontSize: CGFloat = 34
+  /// No Results' title.
+  static let emptyTitleFontSize: CGFloat = 15
+  /// No Results' line under the title.
+  static let emptyMessageFontSize: CGFloat = 13
+  /// A message over the footer, as after a failed paste.
+  static let toastFontSize: CGFloat = 13
+  /// The footer's action names.
+  static let footerFontSize: CGFloat = 12
+  /// A key in a keycap.
+  static let keycapFontSize: CGFloat = 10
+  /// The ↵ drawn in a keycap.
+  static let keycapGlyphFontSize: CGFloat = 9
+  /// Clipboard History's and Search Snippets' preview of the text.
+  static let previewFontSize: CGFloat = 12
+  /// The Information heading under a preview.
+  static let infoTitleFontSize: CGFloat = 12
+  /// The Information rows under a preview.
+  static let infoFontSize: CGFloat = 12
+  /// A fullOutput Script Command's title over its output.
+  static let outputTitleFontSize: CGFloat = 13
+  /// A fullOutput Script Command's output.
+  static let outputFontSize: CGFloat = 12
+  /// The ? on an argument that can be left empty.
+  static let optionalBadgeFontSize: CGFloat = 8
+  /// A confirmation's title, as before Empty Trash.
+  static let confirmationTitleFontSize: CGFloat = 15
+  /// A confirmation's message.
+  static let confirmationMessageFontSize: CGFloat = 13
+  /// A confirmation's buttons.
+  static let confirmationButtonFontSize: CGFloat = 13
+  /// Set Hotkey…'s caption and its problem line.
+  static let cardCaptionFontSize: CGFloat = 12
+  /// A key held in Set Hotkey….
+  static let cardKeyFontSize: CGFloat = 11
+  /// Set Alias…'s and Set Hotkey…'s footer: the row and the hints.
+  static let cardFooterFontSize: CGFloat = 12
+  /// A form's fields, and its menus.
+  static let formFontSize: CGFloat = 14
+  /// Create Snippet's text box.
+  static let formTextBoxFontSize: CGFloat = 13
+  /// A form field's label, and the Placeholders heading.
+  static let formLabelFontSize: CGFloat = 12
+  /// A placeholder chip under Create Snippet's text box.
+  static let placeholderChipFontSize: CGFloat = 11
+
   /// A form's fields (Create Snippet, Add Bookmark).
   static let formFieldHeight: CGFloat = 36
   static let formFieldRadius: CGFloat = 12
