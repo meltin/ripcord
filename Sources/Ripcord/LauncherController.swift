@@ -459,7 +459,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
         }
         return true
       }
-      if model.isEditingArgument, !model.mode.isForm {
+      // Only with nothing over the fields: an open ⌘K menu or card takes Esc first.
+      if model.isEditingArgument, !model.mode.isForm, model.menu == nil,
+        model.configureEditor == nil, model.confirmation == nil
+      {
         focusArgument(nil)
         return true
       }
@@ -677,8 +680,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.sections = sections(for: query)
     model.selection = 0
     model.menu = nil
-    model.argumentDropdown = nil
     model.argumentMenu = nil
+    // New rows from elsewhere (`ripcord open`) while a dropdown had the keys: they go back to the
+    // search field, as no field would take them.
+    if model.argumentDropdown != nil { focusArgument(nil) }
     // A question belongs to the rows it was asked over; once they change it goes too.
     model.confirmation = nil
   }
@@ -1185,9 +1190,20 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// Keys for the focused argument dropdown, and its open list, as Raycast's take them.
   private func typeIntoArgumentDropdown(_ event: NSEvent) -> Bool {
-    guard let index = model.argumentDropdown, model.menu == nil, model.configureEditor == nil,
-      argumentFields.indices.contains(index)
-    else { return false }
+    guard let index = model.argumentDropdown, argumentFields.indices.contains(index) else {
+      return false
+    }
+    // Over the dropdown, an open ⌘K menu or Set Alias… card takes the arrows and Return, which
+    // no field is there to pass on.
+    if model.menu != nil || model.configureEditor != nil {
+      switch Int(event.keyCode) {
+      case kVK_UpArrow: handle(.up)
+      case kVK_DownArrow: handle(.down)
+      case kVK_Return, kVK_ANSI_KeypadEnter: handle(.submit)
+      default: return false
+      }
+      return true
+    }
     // ⌘ and ⌃ keys stay shortcuts, as ⌘↵ for Generate Dummy Text's copy.
     guard event.modifierFlags.isDisjoint(with: [.command, .control]) else { return false }
     let key = Int(event.keyCode)
