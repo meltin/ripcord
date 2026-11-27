@@ -126,4 +126,26 @@ import Testing
     // A window as large as the screen stays so.
     #expect(WindowLayout.makeLarger.frame(for: screen, in: screen) == screen)
   }
+
+  @Test func halvesCycleAsRaycastsSettingDoes() {
+    let screen = CGRect(x: 0, y: 34, width: 1512, height: 948)
+    var window = CGRect(x: 300, y: 200, width: 600, height: 500)
+    var widths: [CGFloat] = []
+    for _ in 0..<4 {
+      window = WindowLayout.leftHalf.frame(for: window, in: screen, cycling: true) ?? .zero
+      #expect(window.minX == 0)
+      widths.append(window.width)
+    }
+    #expect(widths == [756, 1008, 504, 756])
+    var heights: [CGFloat] = []
+    for _ in 0..<3 {
+      window = WindowLayout.bottomHalf.frame(for: window, in: screen, cycling: true) ?? .zero
+      #expect(window.maxY == screen.maxY)
+      heights.append(window.height)
+    }
+    #expect(heights == [474, 632, 316])
+    // Off, a half is always a half.
+    let half = WindowLayout.rightHalf.frame(for: screen, in: screen)
+    #expect(WindowLayout.rightHalf.frame(for: half ?? .zero, in: screen, cycling: false) == half)
+  }
 }

@@ -8,6 +8,9 @@ final class WindowManager {
   /// so a run of layouts still restores the frame from before them; a few windows' worth.
   private var history: [(window: AXUIElement, original: CGRect, placed: CGRect)] = []
 
+  /// Halves go ½ → ⅔ → ⅓ when used again on the same window.
+  var cycleHalves = true
+
   /// Nil when done, or a message to show.
   func apply(_ layout: WindowLayout, to app: NSRunningApplication?) -> String? {
     let permission = AccessibilityPermission.check()
@@ -66,7 +69,9 @@ final class WindowManager {
         to: screens[(index + step) % screens.count].visible
       )
     default:
-      guard let placed = layout.frame(for: frame, in: screens[index].visible) else { return nil }
+      guard
+        let placed = layout.frame(for: frame, in: screens[index].visible, cycling: cycleHalves)
+      else { return nil }
       target = placed
     }
 

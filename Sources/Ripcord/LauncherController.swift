@@ -512,6 +512,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private var leftOpen: (mode: LauncherMode, at: Date)?
   private static let popToRootAfter: TimeInterval = 90
   private let windows = WindowManager()
+  /// Halves go ½ → ⅔ → ⅓ when used again, as config.json's cycleHalves says.
+  var cycleHalves: Bool {
+    get { windows.cycleHalves }
+    set { windows.cycleHalves = newValue }
+  }
   /// The panel was opened by a hotkey just to ask a System Action's question.
   private var openedForQuestion = false
 

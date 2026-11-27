@@ -295,6 +295,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.dummyTextLanguage = config.dummyTextLanguage
       launcher.clipboardSettings = config.clipboardHistory
       launcher.backdrop = config.backdrop
+      launcher.cycleHalves = config.cycleHalves
       applyLaunchAtLogin(config.launchAtLogin)
       // Saving mid-recording must not bring back the hotkeys the recorder turned off.
       if !isRecording { applyHotkeys(config) }

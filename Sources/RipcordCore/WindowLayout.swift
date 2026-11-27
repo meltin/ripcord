@@ -195,6 +195,40 @@ public enum WindowLayout: String, CaseIterable, Sendable {
     }
   }
 
+  /// Where a half puts `window` when halves cycle: ½, or the next of ½ → ⅔ → ⅓ → ½ when the
+  /// window is already at one of them on that side, as Raycast's Cycle ½, ⅔, and ⅓ does.
+  public func frame(for window: CGRect, in visible: CGRect, cycling: Bool) -> CGRect? {
+    guard cycling, let steps = cycleSteps(in: visible) else {
+      return frame(for: window, in: visible)
+    }
+    // A point or two of slack: some apps round a window's size their own way.
+    func near(_ a: CGRect, _ b: CGRect) -> Bool {
+      abs(a.minX - b.minX) <= 2 && abs(a.minY - b.minY) <= 2 && abs(a.width - b.width) <= 2
+        && abs(a.height - b.height) <= 2
+    }
+    guard let index = steps.firstIndex(where: { near($0, window) }) else { return steps[0] }
+    return steps[(index + 1) % steps.count]
+  }
+
+  /// A half's ½, ⅔ and ⅓ on its side; nil for the other layouts.
+  private func cycleSteps(in visible: CGRect) -> [CGRect]? {
+    let fractions: [CGFloat] = [1.0 / 2, 2.0 / 3, 1.0 / 3]
+    func rect(_ fx: CGFloat, _ fy: CGFloat, _ fw: CGFloat, _ fh: CGFloat) -> CGRect {
+      let left = (visible.minX + visible.width * fx).rounded()
+      let top = (visible.minY + visible.height * fy).rounded()
+      let right = (visible.minX + visible.width * (fx + fw)).rounded()
+      let bottom = (visible.minY + visible.height * (fy + fh)).rounded()
+      return CGRect(x: left, y: top, width: right - left, height: bottom - top)
+    }
+    switch self {
+    case .leftHalf: return fractions.map { rect(0, 0, $0, 1) }
+    case .rightHalf: return fractions.map { rect(1 - $0, 0, $0, 1) }
+    case .topHalf: return fractions.map { rect(0, 0, 1, $0) }
+    case .bottomHalf: return fractions.map { rect(0, 1 - $0, 1, $0) }
+    default: return nil
+    }
+  }
+
   /// `frame` moved, not resized, until it's inside `visible`, when it fits.
   static func onScreen(_ frame: CGRect, _ visible: CGRect) -> CGRect {
     CGRect(
