@@ -563,12 +563,13 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     switch self {
     case .clipboardHistory, .snippets, .repositories, .coffee, .sleepTimer, .lidAwake,
       .httpStatusCodes,
-      .colorPicker, .cleanKeyboard, .bookmarks, .notes, .emoji, .ripcord, .dummyText, .quicklinks:
+      .colorPicker, .cleanKeyboard, .bookmarks, .notes, .emoji, .ripcord, .dummyText, .quicklinks,
+      .scripts:
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
     case .cleanShot: Set(CleanShotCommand.allCases.map(\.settingsKey))
-    case .general, .permissions, .applications, .scripts: nil
+    case .general, .permissions, .applications: nil
     }
   }
 }
@@ -821,6 +822,7 @@ extension BuiltinCommand {
     case .ripcordNotes, .createNote, .searchNotes: .notes
     case .generateDummyText: .dummyText
     case .searchEmoji: .emoji
+    case .searchScriptCommands: .scripts
     case .httpStatusCodes: .httpStatusCodes
     case .settings, .resetWindowPosition, .checkForUpdates, .quit: .ripcord
     }
@@ -1000,6 +1002,7 @@ struct SettingsView: View {
               ) { EmptyView() }
               FolderList(folders: $model.config.scriptFolders)
             }
+            CommandsList(model: model, page: .scripts)
           }
         case .lidAwake:
           PageScroll(model: model) {

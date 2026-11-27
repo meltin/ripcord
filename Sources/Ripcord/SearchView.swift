@@ -120,7 +120,7 @@ struct SearchView: View {
       } else if [
         .repositories, .removeRepos, .httpStatusCodes, .colors, .colorNames, .convertColor,
         .favoriteColors,
-        .bookmarks, .notes, .pick, .quicklinks,
+        .bookmarks, .notes, .pick, .quicklinks, .scriptCommands,
       ].contains(
         model.mode)
       {
@@ -285,6 +285,10 @@ private struct EmptyState: View {
       "No snippet contains “\(query)”."
     case .snippetForm, .bookmarkForm, .quicklinkForm, .scriptOutput:
       ""
+    case .scriptCommands where query.trimmingCharacters(in: .whitespaces).isEmpty:
+      "Script Commands in the folders set under Settings › Script Commands show up here."
+    case .scriptCommands:
+      "No Script Command matches “\(query)”."
     case .quicklinks where query.trimmingCharacters(in: .whitespaces).isEmpty:
       "Make a link you open often, with a {query} for what's typed, with Create Quicklink."
     case .quicklinks:
@@ -654,6 +658,7 @@ extension BuiltinCommand {
     case .exportQuicklinks: "square.and.arrow.up"
     case .importQuicklinks: "square.and.arrow.down"
     case .searchEmoji: "face.smiling"
+    case .searchScriptCommands: "terminal"
     case .ripcordNotes, .searchNotes: "note.text"
     case .generateDummyText: "textformat"
     case .createNote: "doc.badge.plus"
@@ -679,6 +684,7 @@ extension BuiltinCommand {
     case .searchBookmarks, .addBookmark: .yellow
     case .createQuicklink, .searchQuicklinks, .importQuicklinks, .exportQuicklinks: .blue
     case .searchEmoji: .orange
+    case .searchScriptCommands: .gray
     case .ripcordNotes, .createNote, .searchNotes: .orange
     case .generateDummyText: .purple
     case .httpStatusCodes: .teal
@@ -2535,6 +2541,7 @@ extension LauncherMode {
     case .notes: "Search Notes…"
     case .snippetForm, .bookmarkForm, .quicklinkForm: ""
     case .quicklinks: "Search Quicklinks…"
+    case .scriptCommands: "Search Script Commands…"
     case .scriptOutput: "Script Output"
     case .pick: "Pick a Line…"
     }

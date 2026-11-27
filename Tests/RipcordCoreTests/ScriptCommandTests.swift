@@ -132,4 +132,28 @@ import Testing
     #expect(ScriptCommand.lastLine(of: "one\ntwo\n\n") == "two")
     #expect(ScriptCommand.lastLine(of: "  \n") == nil)
   }
+
+  /// Search Script Commands lists them alone, by name, found by name or package; switched-off
+  /// ones stay out.
+  @Test func listsTheScriptCommandsAlone() throws {
+    func make(_ title: String, _ file: String, package: String) throws -> ScriptCommand {
+      try #require(
+        ScriptCommand.parse(
+          "#!/bin/bash\n# @raycast.schemaVersion 1\n# @raycast.title \(title)\n# @raycast.mode silent\n# @raycast.packageName \(package)",
+          url: URL(fileURLWithPath: "/tmp/Tools/\(file).sh")))
+    }
+    let scripts = [
+      try make("Say Hello", "hello", package: "Greetings"),
+      try make("Open Docs", "docs", package: "Dev"),
+      try make("Off", "off", package: "Dev"),
+    ]
+    let items = ["script:/tmp/Tools/off.sh": ItemSettings(disabled: true)]
+    func titles(_ query: String) -> [String] {
+      Search.scriptCommandSections(for: query, scripts: scripts, items: items)
+        .flatMap(\.results).map(\.title)
+    }
+    #expect(titles("") == ["Open Docs", "Say Hello"])
+    #expect(titles("hello") == ["Say Hello"])
+    #expect(titles("dev") == ["Open Docs"])
+  }
 }

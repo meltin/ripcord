@@ -13,6 +13,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case searchBookmarks, addBookmark
   case createQuicklink, searchQuicklinks, importQuicklinks, exportQuicklinks
   case searchEmoji
+  case searchScriptCommands
   case ripcordNotes, createNote, searchNotes
   case generateDummyText
   case resetWindowPosition, checkForUpdates, quit
@@ -54,6 +55,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .exportQuicklinks: "Export Quicklinks"
     case .addBookmark: "Add Bookmark"
     case .searchEmoji: "Search Emoji & Symbols"
+    case .searchScriptCommands: "Search Script Commands"
     case .ripcordNotes: "Ripcord Notes"
     case .createNote: "Create Note"
     case .searchNotes: "Search Notes"
@@ -80,6 +82,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .searchBookmarks, .addBookmark: "Bookmarks"
     case .createQuicklink, .searchQuicklinks, .importQuicklinks, .exportQuicklinks: "Quicklinks"
     case .searchEmoji: "Emoji & Symbols"
+    case .searchScriptCommands: "Script Commands"
     case .ripcordNotes, .createNote, .searchNotes: "Notes"
     // So "lorem" or "jp" finds the command too; Raycast's extension is "Japanese Lorem Ipsum
     // Generator", shortened here.
@@ -125,6 +128,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .exportQuicklinks: "command:export-quicklinks"
     case .addBookmark: "command:add-bookmark"
     case .searchEmoji: "command:search-emoji"
+    case .searchScriptCommands: "command:search-script-commands"
     case .ripcordNotes: "command:ripcord-notes"
     case .createNote: "command:create-note"
     case .searchNotes: "command:search-notes"
@@ -747,6 +751,28 @@ public enum Search {
     }
     return appCandidates + linkCandidates + commandCandidates + systemCandidates
       + windowCandidates + cleanShotCandidates + scriptCandidates
+  }
+
+  /// Search Script Commands' list: the Script Commands alone, by name with nothing typed, best
+  /// match first otherwise, each run as from the root search.
+  public static func scriptCommandSections(
+    for query: String, scripts: [ScriptCommand], items: [String: ItemSettings]
+  ) -> [SearchSection] {
+    let trimmed = query.trimmingCharacters(in: .whitespaces)
+    let rows = candidates(apps: [], quicklinks: [], items: items, scripts: scripts)
+      .filter { $0.result.kind == .script }
+    let results =
+      trimmed.isEmpty
+      ? rows.map(\.result).sorted {
+        $0.title.localizedStandardCompare($1.title) == .orderedAscending
+      }
+      : rows.compactMap { row -> (score: Int, result: SearchResult)? in
+        let names = row.names + [row.alias, row.result.subtitle].compactMap { $0 }
+        return names.compactMap { Fuzzy.score(trimmed, in: $0) }.max().map { ($0, row.result) }
+      }
+      .sorted { ($0.score, $1.result.title) > ($1.score, $0.result.title) }
+      .map(\.result)
+    return results.isEmpty ? [] : [SearchSection(title: "Script Commands", results: results)]
   }
 
   /// The longest Clean Keyboard typed after its title: no keyboard for more than five minutes.
