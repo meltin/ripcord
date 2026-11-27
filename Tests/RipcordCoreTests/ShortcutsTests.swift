@@ -189,6 +189,7 @@ import Testing
     #expect(BuiltinCommand.settings.settingsKey == "command:settings")
     #expect(BuiltinCommand.resetWindowPosition.settingsKey == "command:reset-window-position")
     #expect(BuiltinCommand.checkForUpdates.settingsKey == "command:check-for-updates")
+    #expect(BuiltinCommand.generateDummyText.settingsKey == "command:generate-dummy-text")
     #expect(BuiltinCommand.quit.settingsKey == "command:quit")
   }
 

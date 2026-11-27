@@ -37,6 +37,8 @@ cp Resources/ThirdParty/Tabler-LICENSE.txt "$app/Contents/Resources/"
 # Search Emoji & Symbols' list, made by scripts/make-emoji-data.py.
 cp -R Resources/Emoji "$app/Contents/Resources/"
 cp Resources/ThirdParty/Unicode-LICENSE.txt "$app/Contents/Resources/"
+# Generate Dummy Text's word lists, from Raycast's lipsum extension.
+cp Resources/ThirdParty/Lipsum-LICENSE.txt "$app/Contents/Resources/"
 # Sparkle, for updates in the app. ditto keeps the framework's symbolic links. Its XPC services
 # are only for sandboxed apps, which Ripcord isn't.
 framework="$app/Contents/Frameworks/Sparkle.framework"

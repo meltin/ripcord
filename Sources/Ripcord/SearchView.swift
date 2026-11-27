@@ -352,6 +352,8 @@ private struct ResultIcon: View {
         .padding(-3)
     case .copy:
       tile("plus.forwardslash.minus", .orange)
+    case .copyDummyText:
+      tile("textformat", .purple)
     case .open:
       tile("link", .blue)
     case .run(let command):
@@ -498,6 +500,7 @@ extension BuiltinCommand {
     case .searchBookmarks: "bookmark.fill"
     case .searchEmoji: "face.smiling"
     case .ripcordNotes, .searchNotes: "note.text"
+    case .generateDummyText: "textformat"
     case .createNote: "doc.badge.plus"
     case .addBookmark: "bookmark.circle.fill"
     case .resetWindowPosition: "macwindow"
@@ -518,6 +521,7 @@ extension BuiltinCommand {
     case .searchBookmarks, .addBookmark: .yellow
     case .searchEmoji: .orange
     case .ripcordNotes, .createNote, .searchNotes: .orange
+    case .generateDummyText: .purple
     case .httpStatusCodes: .teal
     case .settings, .resetWindowPosition, .checkForUpdates: .gray
     }

@@ -179,11 +179,14 @@ final class LauncherModel {
   var argumentFocusRequest: Int?
   /// An argument field has had the focus since the search field last took it.
   var isEditingArgument = false
-  /// The selected row's script path, when it takes arguments.
+  /// The selected row's key in `scriptArguments` when it takes arguments: a script's path, or
+  /// Generate Dummy Text's settings key.
   var argumentScript: String? {
-    guard case .runScript(let path) = selected?.action, scriptArguments[path]?.isEmpty == false
-    else { return nil }
-    return path
+    switch selected?.action {
+    case .runScript(let path)?: scriptArguments[path]?.isEmpty == false ? path : nil
+    case .run(.generateDummyText)?: BuiltinCommand.generateDummyText.settingsKey
+    default: nil
+    }
   }
   /// A new bookmark's draft, kept while an edit has the form.
   var addDraft: BookmarkDraft?
@@ -828,6 +831,30 @@ final class LauncherController: NSObject, NSWindowDelegate {
     // A folder listed twice gives its scripts twice.
     model.scriptArguments = Dictionary(
       scripts.map { ($0.url.path, $0.arguments) }, uniquingKeysWith: { first, _ in first })
+    model.scriptArguments[BuiltinCommand.generateDummyText.settingsKey] = DummyText.arguments(
+      preferred: dummyTextLanguage)
+  }
+
+  /// Generate Dummy Text's language when its menu is left alone, first in that menu.
+  var dummyTextLanguage = DummyText.Language.japanese {
+    didSet {
+      model.scriptArguments[BuiltinCommand.generateDummyText.settingsKey] = DummyText.arguments(
+        preferred: dummyTextLanguage)
+    }
+  }
+
+  /// Generate Dummy Text: the length and language from the fields beside the search bar, pasted
+  /// into the app you were in, or copied. Run from a hotkey, the fields' defaults.
+  private func generateDummyText(copyOnly: Bool) {
+    let key = BuiltinCommand.generateDummyText.settingsKey
+    let values = model.argumentValues[key] ?? []
+    // Typed for this run, as a script's fields empty once it runs.
+    model.argumentValues[key] = nil
+    let length = DummyText.length(from: values.first ?? "")
+    let language =
+      values.count > 1
+      ? DummyText.Language(rawValue: values[1]) ?? dummyTextLanguage : dummyTextLanguage
+    paste(DummyText.generate(language, length: length), copyOnly: copyOnly)
   }
 
   /// Asks before running a script that wants it, on the card System Actions ask on; its
@@ -1155,6 +1182,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
   func perform(_ action: SearchResult.Action) {
     // Like Raycast, the panel stays open and glides home, so the reset is visible at once.
     if action == .run(.resetWindowPosition) { return resetPosition() }
+    if action == .run(.generateDummyText) || action == .copyDummyText {
+      return generateDummyText(copyOnly: action == .copyDummyText)
+    }
     if action == .run(.clipboardHistory) { return open(.clipboard) }
     if action == .run(.searchSnippets) { return open(.snippets) }
     if action == .run(.httpStatusCodes) { return open(.httpStatusCodes) }
@@ -1433,6 +1463,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       break  // Handled above, without hiding the panel.
     case .run(.checkForUpdates):
       onCheckForUpdates()
+    case .run(.generateDummyText), .copyDummyText:
+      break  // Handled above, where it reads the fields before hide() empties them.
     case .run(.quit):
       NSApp.terminate(nil)
     }

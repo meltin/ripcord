@@ -420,6 +420,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case cleanKeyboard = "Clean Keyboard"
   case bookmarks = "Bookmarks"
   case notes = "Notes"
+  case dummyText = "Dummy Text"
   case scripts = "Script Commands"
   case emoji = "Emoji & Symbols"
   case cleanShot = "CleanShot X"
@@ -445,6 +446,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .cleanKeyboard: "keyboard"
     case .bookmarks: "bookmark.fill"
     case .notes: "note.text"
+    case .dummyText: "textformat"
     case .emoji: "face.smiling"
     case .scripts: "terminal"
     case .cleanShot: "camera.viewfinder"
@@ -467,6 +469,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .cleanKeyboard: .cyan
     case .bookmarks: .yellow
     case .notes: .orange
+    case .dummyText: .purple
     case .emoji: .orange
     case .scripts: .gray
     case .cleanShot: .purple
@@ -510,6 +513,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       "Your bookmarks, kept in ~/.config/ripcord/bookmarks.md as Markdown links under # headings."
     case .notes:
       "Notes in a floating window, each kept as a Markdown file in ~/.config/ripcord/notes."
+    case .dummyText:
+      "Japanese or English filler text of the length you type, pasted or copied."
     case .cleanKeyboard:
       "Turn the keyboard off for a while to wipe it, as in “clean keyboard 30s”; ⌃⌥⌘↩ turns it back on early."
     case .colorPicker:
@@ -522,7 +527,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   var commandKeys: Set<String>? {
     switch self {
     case .clipboardHistory, .snippets, .repositories, .coffee, .sleepTimer, .httpStatusCodes,
-      .colorPicker, .cleanKeyboard, .bookmarks, .notes, .emoji, .ripcord:
+      .colorPicker, .cleanKeyboard, .bookmarks, .notes, .emoji, .ripcord, .dummyText:
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
@@ -566,6 +571,9 @@ private enum SettingText {
     detail: "Off, a keyword expands only as a word of its own, not at the end of a longer one.")
   static let disabledApps = SettingsSearch.Item(
     title: "Disabled Applications", detail: "Apps where keywords are never expanded.")
+  static let dummyTextLanguage = SettingsSearch.Item(
+    title: "Default Language",
+    detail: "What Generate Dummy Text writes in when its menu is left alone.")
   static let openWith = SettingsSearch.Item(
     title: "Open With",
     detail: "The app each Return opens a repository in; ↵ without one shows it in Finder.")
@@ -583,6 +591,7 @@ extension SettingsPage {
       case .colorPicker: [SettingText.colorFormat]
       case .scripts: [SettingText.scriptFolders]
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
+      case .dummyText: [SettingText.dummyTextLanguage]
       case .snippets:
         [
           SettingText.snippetExpansion, SettingText.expansionMode, SettingText.expandWithinWords,
@@ -615,6 +624,7 @@ extension BuiltinCommand {
     case .cleanKeyboard: .cleanKeyboard
     case .searchBookmarks, .addBookmark: .bookmarks
     case .ripcordNotes, .createNote, .searchNotes: .notes
+    case .generateDummyText: .dummyText
     case .searchEmoji: .emoji
     case .httpStatusCodes: .httpStatusCodes
     case .settings, .resetWindowPosition, .checkForUpdates, .quit: .ripcord
@@ -668,6 +678,25 @@ struct SettingsView: View {
             PageHeader(page: .snippets)
             SnippetExpansionSettings(expansion: $model.config.snippetExpansion)
             CommandsList(model: model, page: .snippets)
+          }
+        case .dummyText:
+          PageScroll(model: model) {
+            PageHeader(page: .dummyText)
+            Card {
+              SettingRow(
+                title: SettingText.dummyTextLanguage.title,
+                description: SettingText.dummyTextLanguage.detail
+              ) {
+                Picker(
+                  SettingText.dummyTextLanguage.title, selection: $model.config.dummyTextLanguage
+                ) {
+                  ForEach(DummyText.Language.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .labelsHidden()
+                .fixedSize()
+              }
+            }
+            CommandsList(model: model, page: .dummyText)
           }
         case .repositories:
           PageScroll(model: model) {

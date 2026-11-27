@@ -20,13 +20,16 @@ public struct Config: Codable, Equatable, Sendable {
   public var scriptFolders: [String]
   /// Typing a snippet's keyword in any app replaces it with the snippet.
   public var snippetExpansion: SnippetExpansion
+  /// Generate Dummy Text's language when its menu is left alone.
+  public var dummyTextLanguage: DummyText.Language
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
     items: [String: ItemSettings] = [:], inputSource: String? = nil, snippets: [Snippet] = [],
     repositories: RepositorySettings = RepositorySettings(), colorFormat: ColorFormat = .hex,
     favorites: [String] = [], scriptFolders: [String] = [],
-    snippetExpansion: SnippetExpansion = SnippetExpansion()
+    snippetExpansion: SnippetExpansion = SnippetExpansion(),
+    dummyTextLanguage: DummyText.Language = .japanese
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
@@ -39,6 +42,7 @@ public struct Config: Codable, Equatable, Sendable {
     self.favorites = favorites
     self.scriptFolders = scriptFolders
     self.snippetExpansion = snippetExpansion
+    self.dummyTextLanguage = dummyTextLanguage
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -61,6 +65,9 @@ public struct Config: Codable, Equatable, Sendable {
     snippetExpansion =
       try container.decodeIfPresent(SnippetExpansion.self, forKey: .snippetExpansion)
       ?? SnippetExpansion()
+    dummyTextLanguage =
+      (try? container.decodeIfPresent(DummyText.Language.self, forKey: .dummyTextLanguage))
+      ?? .japanese
   }
 
   public static let `default` = Config(
