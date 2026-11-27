@@ -12,6 +12,7 @@ import Testing
     #expect(Note.title(of: "  plain first line  \nmore") == "plain first line")
     #expect(Note.title(of: "") == "Untitled")
     #expect(Note.title(of: "#\n") == "Untitled")
+    #expect(Note.title(of: "# **Big** ~~plan~~\nmore") == "Big plan")
   }
 
   @Test func writesANewNoteOnlyOnceSomethingIsTyped() throws {
@@ -76,5 +77,15 @@ import Testing
     #expect(found?.map(\.title) == ["Trip"])
     #expect(found?.first?.subtitle == "book the train")
     #expect(Search.noteSections(for: "nothing", notes: notes).isEmpty)
+  }
+
+  @Test func restoresANoteToWhereItWas() throws {
+    // Undo's move back, from a stand-in for the Trash so the test leaves the real one alone.
+    let saved = try store.save("# Kept", over: store.newNote())
+    let away = folder.appending(path: "away.md")
+    try FileManager.default.moveItem(at: saved.url, to: away)
+    let back = try store.restore(away, to: saved.url)
+    #expect(back?.title == "Kept")
+    #expect(!FileManager.default.fileExists(atPath: away.path))
   }
 }

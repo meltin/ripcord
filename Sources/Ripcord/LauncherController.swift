@@ -93,8 +93,9 @@ enum NotesRequest {
   case toggle
   case create
   case open(URL)
-  /// Search Notes moved this note to the Trash: the window lets go of it.
-  case deleted(URL)
+  /// Search Notes moved this note to the Trash: the window lets go of it. `trashed` is where it
+  /// went there, for Undo.
+  case deleted(URL, trashed: URL?)
 }
 
 /// What the panel lists: apps and commands, or one command's own list.
@@ -1329,8 +1330,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       let id = model.selected?.id
       model.menu = nil
       do {
-        if let note = noteStore.read(url) { try noteStore.trash(note) }
-        onNotes(.deleted(url))
+        let trashed = try noteStore.read(url).flatMap { try noteStore.trash($0) }
+        onNotes(.deleted(url, trashed: trashed))
       } catch {
         onError(error.localizedDescription)
       }
