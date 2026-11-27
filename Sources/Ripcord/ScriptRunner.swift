@@ -154,7 +154,7 @@ private struct HUDView: View {
   var body: some View {
     HStack(spacing: 8) {
       if failed { Glyph("exclamationmark.triangle.fill", pointSize: 13).foregroundStyle(.red) }
-      Text(text).lineLimit(2).font(.system(size: 14, weight: .medium))
+      Text(text).lineLimit(2).font(.system(size: Metrics.scriptHUDFontSize, weight: .medium))
     }
     .padding(.horizontal, 16)
     .frame(minHeight: 40)

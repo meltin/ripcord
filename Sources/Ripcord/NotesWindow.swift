@@ -720,7 +720,7 @@ private struct NotesView: View {
     VStack(spacing: 0) {
       ZStack {
         Text(Note.title(of: model.text))
-          .font(.system(size: 13))
+          .font(.system(size: Metrics.notesTitleFontSize))
           .foregroundStyle(model.isHovered ? .secondary : .tertiary)
           .lineLimit(1)
           // Clear of the traffic lights and the buttons.
@@ -742,7 +742,8 @@ private struct NotesView: View {
       .frame(height: Self.headerHeight)
       if let problem = model.problem {
         HStack(spacing: 8) {
-          Text(problem).font(.system(size: 12)).frame(maxWidth: .infinity, alignment: .leading)
+          Text(problem).font(.system(size: Metrics.notesProblemFontSize)).frame(
+            maxWidth: .infinity, alignment: .leading)
           Button("Reload", action: onReload)
           Button("Save as New Note", action: onSaveAsNew)
         }
@@ -755,14 +756,14 @@ private struct NotesView: View {
         zoom: model.zoom, onChange: onTextChange, onHeight: onTextHeight)
       ZStack {
         Text("\(Self.shownCount(of: model.text)) characters")
-          .font(.system(size: 13))
+          .font(.system(size: Metrics.notesCountFontSize))
           .foregroundStyle(.tertiary)
         HStack {
           Spacer()
           // Raycast Notes' Format button, a serif T.
           Button(action: onFormat) {
             Text("T")
-              .font(.system(size: 17, design: .serif))
+              .font(.system(size: Metrics.notesFormatButtonFontSize, design: .serif))
               .frame(width: 32, height: 32)
               .contentShape(Circle())
           }
@@ -813,11 +814,11 @@ private struct DeletedToast: View {
   var body: some View {
     HStack(spacing: 8) {
       Glyph("trash", pointSize: 13).foregroundStyle(.secondary)
-      Text("Moved to Trash").font(.system(size: 13, weight: .medium))
+      Text("Moved to Trash").font(.system(size: Metrics.notesToastFontSize, weight: .medium))
       Divider().frame(height: 14)
       Button("Undo", action: onUndo)
         .buttonStyle(.plain)
-        .font(.system(size: 13, weight: .semibold))
+        .font(.system(size: Metrics.notesToastButtonFontSize, weight: .semibold))
         .foregroundStyle(Color.accentColor)
     }
     .padding(.horizontal, 14)
