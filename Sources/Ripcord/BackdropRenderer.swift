@@ -59,7 +59,7 @@ final class BackdropRenderer: NSObject, MTKViewDelegate {
       } catch {
         result = .failure(error)
       }
-      await MainActor.run { [weak self] in self?.finish(result) }
+      await MainActor.run { [weak self] in self?.finish(result, for: body) }
     }
   }
 
@@ -69,7 +69,9 @@ final class BackdropRenderer: NSObject, MTKViewDelegate {
     report(message)
   }
 
-  private func finish(_ result: Result<MTLRenderPipelineState, Error>) {
+  private func finish(_ result: Result<MTLRenderPipelineState, Error>, for body: String) {
+    // One asked for before another, finishing after it, is no longer the one chosen.
+    guard body == compiled else { return }
     switch result {
     case .success(let state):
       pipeline = state

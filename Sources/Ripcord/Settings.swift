@@ -578,7 +578,7 @@ private enum SettingText {
   static let backdrop = SettingsSearch.Item(
     title: "Backdrop",
     detail:
-      "A Metal shader animated behind the panel's text. Add your own as .metal files to the shaders folder."
+      "A Metal shader animated behind the panel's text. Open Folder shows where your own .metal files go."
   )
   static let keepHistoryFor = SettingsSearch.Item(
     title: "Keep History For",
@@ -1569,11 +1569,12 @@ private struct BackdropRow: View {
       detail: model.backdropError.map { "Not drawing: \($0)" }
     ) {
       HStack(spacing: 8) {
-        Button("Open Shaders Folder") {
+        Button("Open Folder") {
           let folder = LauncherController.shadersFolder
           try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
           NSWorkspace.shared.open(folder)
         }
+        .fixedSize()
         Picker(SettingText.backdrop.title, selection: $model.config.backdrop) {
           ForEach(choices, id: \.self) { Text(Self.title(of: $0)).tag($0) }
         }

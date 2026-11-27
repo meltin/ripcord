@@ -1989,7 +1989,13 @@ final class LauncherController: NSObject, NSWindowDelegate {
       renderer.onError = { [weak self] message in
         guard let self else { return }
         // Metal calls the source "program_source"; the file's name says which one.
-        onBackdropError(message?.replacingOccurrences(of: "program_source", with: backdrop))
+        // The first few lines: a shader with many errors would fill the page.
+        onBackdropError(
+          message.map {
+            $0.replacingOccurrences(of: "program_source", with: backdrop)
+              .split(separator: "\n", omittingEmptySubsequences: false).prefix(3)
+              .joined(separator: "\n")
+          })
       }
       model.backdrop = renderer
     }
