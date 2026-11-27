@@ -63,6 +63,10 @@ struct MCPTests {
       call("set_config", #"{"key":"inputSource","value":null}"#)
         == .configSet(key: "inputSource", json: "null"))
     #expect(call("set_config", #"{"key":"inputSource"}"#) == nil)
+    // A bad argument is the tool's error, for the model to see and fix.
+    let missing = answer(
+      #"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"pick","arguments":{}}}"#)
+    #expect(result(missing.object)?["isError"] as? Bool == true)
   }
 
   @Test func reportsTheAppsErrorsAndACancelledPickAsToolErrors() {

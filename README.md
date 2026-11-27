@@ -292,7 +292,8 @@ isn't stopped: a pick waits until you pick or close the panel.
 The app listens on a socket in your user's temporary folder, readable and writable by your user
 only. Any process running as you can use it, as it could edit the config file itself. It can open
 the panel, ask you to pick, and read and write the config, nothing more: it doesn't run commands,
-paste, or read Clipboard History.
+paste, or read Clipboard History itself. A config it writes can still change what your own actions
+do later, such as the snippets a keyword expands to or the folders Script Commands come from.
 
 ## Known limitations
 

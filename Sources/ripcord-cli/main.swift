@@ -43,6 +43,11 @@ func serveMCP() -> Never {
   while let line = readLine(strippingNewline: true) {
     guard !line.isEmpty else { continue }
     let data = Data(line.utf8)
+    // Only a tool call can wait on the app; the rest are answered before the next line is read.
+    guard line.contains(#""tools/call""#) else {
+      if let answer = MCP.respond(to: data, send: Control.send) { write(answer) }
+      continue
+    }
     Thread.detachNewThread {
       if let answer = MCP.respond(to: data, send: Control.send) { write(answer) }
     }

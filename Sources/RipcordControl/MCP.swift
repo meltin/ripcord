@@ -37,6 +37,7 @@ public enum MCP {
       ],
       [
         "name": "get_config",
+        "annotations": ["readOnlyHint": true],
         "description":
           "Read Ripcord's configuration: the whole config.json, or one top-level key's value as JSON.",
         "inputSchema": [
@@ -103,7 +104,7 @@ public enum MCP {
       request = .open(query: arguments["query"] as? String)
     case "pick":
       guard let items = arguments["items"] as? [String] else {
-        return ["error": error(-32602, "pick needs items, an array of strings.")]
+        return toolResult("pick needs items, an array of strings.", isError: true)
       }
       request = .pick(
         items: Control.pickable(items), placeholder: arguments["placeholder"] as? String)
@@ -113,7 +114,7 @@ public enum MCP {
       // Null is a value (it clears the key); a value left out is a mistake.
       guard let key = arguments["key"] as? String, let value = arguments["value"],
         let json = try? JSONSerialization.data(withJSONObject: value, options: .fragmentsAllowed)
-      else { return ["error": error(-32602, "set_config needs a key and a value.")] }
+      else { return toolResult("set_config needs a key and a value.", isError: true) }
       request = .configSet(key: key, json: String(decoding: json, as: UTF8.self))
     case let name:
       return ["error": error(-32602, "Unknown tool: \(name ?? "none")")]
@@ -123,12 +124,12 @@ public enum MCP {
       response.error
       ?? (response.cancelled ? "The panel was closed without picking a line." : nil)
       ?? response.output ?? "Done."
-    return [
-      "result": [
-        "content": [["type": "text", "text": text]],
-        "isError": response.error != nil || response.cancelled,
-      ]
-    ]
+    return toolResult(text, isError: response.error != nil || response.cancelled)
+  }
+
+  /// A tool's outcome, its failures included, so the model sees them and can try again.
+  private static func toolResult(_ text: String, isError: Bool) -> [String: Any] {
+    ["result": ["content": [["type": "text", "text": text]], "isError": isError]]
   }
 
   private static func error(_ code: Int, _ message: String) -> [String: Any] {
