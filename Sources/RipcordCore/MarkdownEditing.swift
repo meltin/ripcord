@@ -197,6 +197,17 @@ public enum MarkdownEditing {
     {
       return stop
     }
+    // Up onto a hidden line, a code block's opening fence, carries on to the line above it
+    // rather than back down into the block.
+    if proposed < old,
+      let line = hidden.first(where: {
+        NSLocationInRange(proposed, $0) && $0.location > 0
+          && string.character(at: NSMaxRange($0) - 1) == 0x0A
+          && string.character(at: $0.location - 1) == 0x0A
+      })
+    {
+      return line.location - 1
+    }
     if proposed == old - 1 {
       var location = proposed
       while location > 0, !canRest(location) {

@@ -240,6 +240,15 @@ import Testing
     #expect(MarkdownEditing.caret(13, from: 16, in: text, hidden: hidden, stops: stops) == 11)
   }
 
+  @Test func goesUpOutOfABlock() {
+    let hidden = MarkdownEditing.hidden(in: spans)
+    let stops = MarkdownEditing.stops(in: spans)
+    // ↑ from "let x" (6) is offered the hidden opening fence (3); it goes on to the end of "a".
+    #expect(MarkdownEditing.caret(3, from: 6, in: text, hidden: hidden, stops: stops) == 1)
+    // ↓ from "a" onto the fence goes into the block.
+    #expect(MarkdownEditing.caret(3, from: 1, in: text, hidden: hidden, stops: stops) == 6)
+  }
+
   @Test func keepsTheFencesThroughDeletes() {
     #expect(MarkdownEditing.deleteBackward(at: 6, in: text, spans: spans) == .nothing)
     #expect(MarkdownEditing.deleteForward(at: 11, in: text, spans: spans) == .nothing)
