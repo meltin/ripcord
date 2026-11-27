@@ -494,9 +494,13 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     let top = window.frame.maxY
     let lowest = (screen?.visibleFrame.minY ?? 0) + Self.inset.right
     let height = min(max(textHeight + chrome, Self.minHeight), max(top - lowest, Self.minHeight))
-    guard abs(height - window.frame.height) > 0.5 else { return }
+    // Raycast's width too, once auto-sizing is back after a resize by hand; the right edge
+    // stays where it is, as the window sits at the screen's right.
+    let width = Self.width
+    guard abs(height - window.frame.height) > 0.5 || abs(width - window.frame.width) > 0.5
+    else { return }
     window.setFrame(
-      NSRect(x: window.frame.minX, y: top - height, width: window.frame.width, height: height),
+      NSRect(x: window.frame.maxX - width, y: top - height, width: width, height: height),
       display: true)
   }
 
