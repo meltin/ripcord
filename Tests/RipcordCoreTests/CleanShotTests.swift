@@ -25,6 +25,16 @@ import Testing
       })
   }
 
+  @Test func listsItsCommandsByCleanShotsNameBelowTheApp() {
+    let results = Search.results(for: "clean", apps: [cleanShot], quicklinks: [])
+    #expect(results.first?.title == "CleanShot X")
+    #expect(results.contains { $0.action == .cleanShot(.captureArea) })
+    // A command matched by its own name stays above one matched only by CleanShot's.
+    let keyboard = results.firstIndex { $0.action == .run(.cleanKeyboard) }
+    let area = results.firstIndex { $0.action == .cleanShot(.captureArea) }
+    #expect(keyboard.flatMap { k in area.map { k < $0 } } == true)
+  }
+
   @Test func knowsItsEditionsByBundleID() {
     #expect(CleanShotCommand.isCleanShot(bundleID: "pl.maketheweb.cleanshotx"))
     #expect(CleanShotCommand.isCleanShot(bundleID: "pl.maketheweb.cleanshotx-setapp"))

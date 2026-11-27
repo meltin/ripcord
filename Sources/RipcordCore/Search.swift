@@ -566,9 +566,13 @@ public enum Search {
       everything
       .compactMap { candidate -> (score: Int, result: SearchResult)? in
         let names = candidate.names + [candidate.alias].compactMap { $0 }
-        guard let score = names.compactMap({ Fuzzy.score(trimmed, in: $0) }).max() else {
-          return nil
-        }
+        // As Raycast, a command is found by the name of what it belongs to too ("clean" lists
+        // CleanShot X's), below anything matched by its own name.
+        let group =
+          [.command, .script].contains(candidate.result.kind)
+          ? Fuzzy.score(trimmed, in: candidate.result.subtitle).map { $0 / 2 } : nil
+        let own = names.compactMap { Fuzzy.score(trimmed, in: $0) }.max()
+        guard let score = [own, group].compactMap({ $0 }).max() else { return nil }
         let exactAlias =
           candidate.alias?.trimmingCharacters(in: .whitespaces)
           .caseInsensitiveCompare(trimmed) == .orderedSame
