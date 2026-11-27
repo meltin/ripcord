@@ -26,6 +26,11 @@ final class SettingsModel {
   var sidebarQuery = ""
   /// Clear History on the Clipboard History page, once confirmed.
   var onClearClipboard: () -> Void = {}
+  /// Search Emoji & Symbols' skin tone, kept with the emoji used: 1 lightest to 5 darkest.
+  var emojiSkinTone: Int? {
+    didSet { if emojiSkinTone != oldValue { onSetEmojiSkinTone(emojiSkinTone) } }
+  }
+  var onSetEmojiSkinTone: (Int?) -> Void = { _ in }
   /// Why the chosen backdrop shader isn't drawing; nil when it is, or it's off.
   var backdropError: String?
   /// Whether Lid Awake is on, so its permission isn't removed from under it.
@@ -685,6 +690,13 @@ private enum SettingText {
   static let showColorName = SettingsSearch.Item(
     title: "Show Color Name After Picking",
     detail: "Pick Color's message names the nearest named color too.")
+  static let emojiColumns = SettingsSearch.Item(
+    title: "Column Count", detail: "How many emoji each row of the grid has.")
+  static let emojiPrimaryAction = SettingsSearch.Item(
+    title: "Primary Action", detail: "What Return does on an emoji; the other is on ⌘↵.")
+  static let emojiSkinTone = SettingsSearch.Item(
+    title: "Emoji Skin Tone",
+    detail: "The skin tone of the emoji that have them, as ⌘K sets it too.")
   static let windowGap = SettingsSearch.Item(
     title: "Window Gap", detail: "Gap between windows")
   static let screenGap = SettingsSearch.Item(
@@ -719,6 +731,8 @@ extension SettingsPage {
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
       case .dummyText: [SettingText.dummyTextLanguage]
       case .windowManagement: [SettingText.windowGap, SettingText.screenGap, SettingText.cycling]
+      case .emoji:
+        [SettingText.emojiColumns, SettingText.emojiPrimaryAction, SettingText.emojiSkinTone]
       case .cleanKeyboard:
         [SettingText.cleanDuration, SettingText.lockFunctionKeys, SettingText.lockMouseClicks]
       case .coffee:
@@ -881,6 +895,12 @@ struct SettingsView: View {
             PageHeader(page: .lidAwake)
             LidAwakeSettings(model: model)
             CommandsList(model: model, page: .lidAwake)
+          }
+        case .emoji:
+          PageScroll(model: model) {
+            PageHeader(page: .emoji)
+            EmojiSettingsCard(model: model)
+            CommandsList(model: model, page: .emoji)
           }
         case .cleanKeyboard:
           PageScroll(model: model) {
@@ -2549,6 +2569,53 @@ private struct GapRow: View {
       }
       .labelsHidden()
       .fixedSize()
+    }
+  }
+}
+
+/// Search Emoji & Symbols' Column Count, Primary Action and Emoji Skin Tone, as Raycast's.
+private struct EmojiSettingsCard: View {
+  @Bindable var model: SettingsModel
+
+  var body: some View {
+    Card {
+      SettingRow(
+        title: SettingText.emojiColumns.title, description: SettingText.emojiColumns.detail
+      ) {
+        Picker(SettingText.emojiColumns.title, selection: $model.config.emoji.columns) {
+          ForEach(Array(EmojiSettings.columnCounts), id: \.self) { Text("\($0)").tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+      }
+      Divider()
+      SettingRow(
+        title: SettingText.emojiPrimaryAction.title,
+        description: SettingText.emojiPrimaryAction.detail
+      ) {
+        Picker(
+          SettingText.emojiPrimaryAction.title, selection: $model.config.emoji.primaryAction
+        ) {
+          ForEach(ClipboardSettings.PrimaryAction.allCases, id: \.self) { Text($0.title).tag($0) }
+        }
+        .labelsHidden()
+        .fixedSize()
+      }
+      Divider()
+      SettingRow(
+        title: SettingText.emojiSkinTone.title, description: SettingText.emojiSkinTone.detail
+      ) {
+        // The raised hand in each tone, the default yellow first, as Raycast shows them.
+        Picker(SettingText.emojiSkinTone.title, selection: $model.emojiSkinTone) {
+          ForEach(0...5, id: \.self) { tone in
+            Text(["✋", "✋🏻", "✋🏼", "✋🏽", "✋🏾", "✋🏿"][tone]).tag(tone == 0 ? nil : Optional(tone))
+          }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+      }
     }
   }
 }

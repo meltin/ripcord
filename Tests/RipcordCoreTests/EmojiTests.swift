@@ -92,4 +92,19 @@ import Testing
     // Loose, for a busy machine and a debug build: folding on every key press took seconds.
     #expect(took < .seconds(2))
   }
+
+  /// Raycast's Emoji & Symbols settings: eight columns, kept within 6 to 10, and Return
+  /// copying with Copy to Clipboard as the Primary Action.
+  @Test func takesRaycastsSettings() throws {
+    let config = try JSONDecoder().decode(Config.self, from: Data(#"{"hotkey":"cmd+space"}"#.utf8))
+    #expect(config.emoji == EmojiSettings())
+    #expect(config.emoji.columns == 8)
+    let wide = try JSONDecoder().decode(EmojiSettings.self, from: Data(#"{"columns":42}"#.utf8))
+    #expect(wide.columns == 10)
+    let copying = Search.emojiSections(
+      for: "cat", catalog: catalog, history: history(), primaryAction: .copy)
+    let first = try #require(copying.first?.results.first)
+    #expect(first.actions.prefix(2).map(\.title) == ["Copy to Clipboard", "Paste"])
+    #expect(first.actions.prefix(2).map(\.shortcut) == ["↵", "⌘↵"])
+  }
 }

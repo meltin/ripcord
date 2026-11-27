@@ -65,6 +65,28 @@ public struct EmojiCatalog: Decodable, Sendable {
   }
 }
 
+/// Search Emoji & Symbols' settings, as Raycast's: how many columns its grid has and what
+/// Return does on an emoji.
+public struct EmojiSettings: Codable, Equatable, Sendable {
+  public static let columnCounts = 6...10
+  public var columns: Int
+  public var primaryAction: ClipboardSettings.PrimaryAction
+
+  public init(columns: Int = 8, primaryAction: ClipboardSettings.PrimaryAction = .paste) {
+    self.columns = columns
+    self.primaryAction = primaryAction
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let columns = try container.decodeIfPresent(Int.self, forKey: .columns) ?? 8
+    self.init(
+      columns: min(max(columns, Self.columnCounts.lowerBound), Self.columnCounts.upperBound),
+      primaryAction: (try? container.decodeIfPresent(
+        ClipboardSettings.PrimaryAction.self, forKey: .primaryAction)) ?? .paste)
+  }
+}
+
 /// The emoji used recently, newest first, and the skin tone picked, kept in a file of their own
 /// as Color History is.
 public struct EmojiHistory: Sendable {
@@ -115,8 +137,10 @@ extension Search {
   /// Search Emoji & Symbols: Frequently Used and then each category, or the matches for a
   /// query, best first; a query matches English and Japanese names and keywords, kana of
   /// either kind.
+  /// With Copy to Clipboard as `primaryAction`, Return copies and ⌘↵ pastes.
   public static func emojiSections(
-    for query: String, catalog: EmojiCatalog, history: EmojiHistory, category: Int? = nil
+    for query: String, catalog: EmojiCatalog, history: EmojiHistory, category: Int? = nil,
+    primaryAction: ClipboardSettings.PrimaryAction = .paste
   ) -> [SearchSection] {
     let wanted = catalog.emoji.filter { category == nil || $0.group == category }
     let key = foldedForEmoji(query.trimmingCharacters(in: .whitespaces))
@@ -128,7 +152,8 @@ extension Search {
         }
       }
       .sorted { ($0.rank, $0.length, $0.index) < ($1.rank, $1.length, $1.index) }.map(\.emoji)
-      return ranked.isEmpty ? [] : [emojiSection("Results", ranked, history: history)]
+      return ranked.isEmpty
+        ? [] : [emojiSection("Results", ranked, history: history, primaryAction: primaryAction)]
     }
     let byCharacter = Dictionary(
       catalog.emoji.map { ($0.character, $0) }, uniquingKeysWith: { first, _ in first })
@@ -137,9 +162,14 @@ extension Search {
     let groups = catalog.groups.indices.compactMap { group -> SearchSection? in
       let members = wanted.filter { $0.group == group }
       return members.isEmpty
-        ? nil : emojiSection(catalog.groups[group], members, history: history)
+        ? nil
+        : emojiSection(
+          catalog.groups[group], members, history: history, primaryAction: primaryAction)
     }
-    return (frequent.isEmpty ? [] : [emojiSection("Frequently Used", frequent, history: history)])
+    return
+      (frequent.isEmpty
+      ? []
+      : [emojiSection("Frequently Used", frequent, history: history, primaryAction: primaryAction)])
       + groups
   }
 
@@ -171,38 +201,47 @@ extension Search {
     return String(String.UnicodeScalarView(scalars))
   }
 
-  private static func emojiSection(_ title: String, _ members: [Emoji], history: EmojiHistory)
+  private static func emojiSection(
+    _ title: String, _ members: [Emoji], history: EmojiHistory,
+    primaryAction: ClipboardSettings.PrimaryAction
+  )
     -> SearchSection
   {
     let all = members.map { $0.character(tone: history.skinTone) }.joined()
     return SearchSection(
       title: title,
-      results: members.map { emojiResult($0, tone: history.skinTone, in: title, section: all) },
+      results: members.map {
+        emojiResult(
+          $0, tone: history.skinTone, in: title, section: all, primaryAction: primaryAction)
+      },
       // Frequently Used repeats emoji of the categories below, so the ID tells them apart.
       id: "emoji-section:\(title)")
   }
 
   private static func emojiResult(
-    _ emoji: Emoji, tone: Int?, in sectionTitle: String, section: String
+    _ emoji: Emoji, tone: Int?, in sectionTitle: String, section: String,
+    primaryAction: ClipboardSettings.PrimaryAction
   ) -> SearchResult {
     let shown = emoji.character(tone: tone)
-    var menu = [
-      MenuAction(
-        title: "Paste", symbol: "doc.on.doc", shortcut: "↵",
-        action: .emoji(shown, base: emoji.character, .paste)),
-      MenuAction(
-        title: "Copy to Clipboard", symbol: "doc.on.doc", shortcut: "⌘↵",
-        action: .emoji(shown, base: emoji.character, .copy)),
-      MenuAction(
-        title: "Paste and Keep Window Open", symbol: "doc.on.doc", shortcut: "⌥↵",
-        action: .emoji(shown, base: emoji.character, .pasteKeepingOpen)),
-      MenuAction(
-        title: "Copy Unicode", symbol: "doc.on.doc", shortcut: "⌥⇧⌘C",
-        action: .copy(emoji.unicode(tone: tone)), startsSection: true),
-      MenuAction(
-        title: "Copy All Emojis from Section", symbol: "doc.on.doc", shortcut: "⌃⌘C",
-        action: .copy(section)),
-    ]
+    let paste = MenuAction(
+      title: "Paste", symbol: "doc.on.doc", shortcut: primaryAction == .copy ? "⌘↵" : "↵",
+      action: .emoji(shown, base: emoji.character, .paste))
+    let copy = MenuAction(
+      title: "Copy to Clipboard", symbol: "doc.on.doc",
+      shortcut: primaryAction == .copy ? "↵" : "⌘↵",
+      action: .emoji(shown, base: emoji.character, .copy))
+    var menu =
+      (primaryAction == .copy ? [copy, paste] : [paste, copy]) + [
+        MenuAction(
+          title: "Paste and Keep Window Open", symbol: "doc.on.doc", shortcut: "⌥↵",
+          action: .emoji(shown, base: emoji.character, .pasteKeepingOpen)),
+        MenuAction(
+          title: "Copy Unicode", symbol: "doc.on.doc", shortcut: "⌥⇧⌘C",
+          action: .copy(emoji.unicode(tone: tone)), startsSection: true),
+        MenuAction(
+          title: "Copy All Emojis from Section", symbol: "doc.on.doc", shortcut: "⌃⌘C",
+          action: .copy(section)),
+      ]
     if emoji.tones != nil {
       menu.append(
         MenuAction(

@@ -1575,10 +1575,8 @@ private struct EmojiGrid: View {
   let model: LauncherModel
   let onCommand: (SearchCommand) -> Void
 
-  private let columns = Array(
-    repeating: GridItem(.flexible(), spacing: 8), count: LauncherController.emojiColumns)
-
   var body: some View {
+    let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: model.emojiColumns)
     // Once per body: each tile asking would flatten every section again.
     let selectedID = model.selected?.id
     return ScrollViewReader { proxy in

@@ -139,6 +139,8 @@ enum LauncherMode {
 @Observable
 final class LauncherModel {
   var mode = LauncherMode.root
+  /// Search Emoji & Symbols' grid width.
+  var emojiColumns = 8
   /// The history the clipboard rows were built from, for the preview of the selected one.
   var clipboard: ClipboardHistory?
   /// Clipboard History's type filter; nil lists every type.
@@ -420,6 +422,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Clean Keyboard: block the keyboard for this many seconds.
   var onCleanKeyboard: (TimeInterval) -> Void = { _ in }
   private static let lastConvertedFormatKey = "lastConvertedColorFormat"
+  /// The emoji skin tone, for Settings, which shows and sets it: 1 lightest to 5 darkest.
+  var emojiSkinTone: Int? { emojiHistory.skinTone }
+  func setEmojiSkinTone(_ tone: Int?) {
+    do { try emojiHistory.setSkinTone(tone) } catch { onError(error.localizedDescription) }
+    if model.mode == .emoji { refreshRows(selecting: model.selected?.id) }
+  }
   /// Pick Color's message names the nearest named color too.
   var showColorName = false
   /// What Clean Keyboard runs for with no time typed; Always Ask asks for one.
@@ -445,7 +453,13 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private var emojiHistory = EmojiHistory(
     fileURL: URL.applicationSupportDirectory.appending(path: "Ripcord/emoji.json"))
   /// Search Emoji & Symbols' grid: rows of this many.
-  static let emojiColumns = 8
+  /// Search Emoji & Symbols' columns and Return, from the settings.
+  var emojiSettings = EmojiSettings() {
+    didSet {
+      model.emojiColumns = emojiSettings.columns
+      if model.mode == .emoji { refreshRows(selecting: model.selected?.id) }
+    }
+  }
   /// Read each time Search Bookmarks opens, so edits made by hand show up.
   private var bookmarks = BookmarkFile(text: "")
   /// The notes folder, and its notes as Search Notes last read them.
@@ -748,7 +762,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if model.mode == .notes { return Search.noteSections(for: query, notes: notes) }
     if model.mode == .emoji, let emojiCatalog {
       return Search.emojiSections(
-        for: query, catalog: emojiCatalog, history: emojiHistory, category: model.emojiCategory)
+        for: query, catalog: emojiCatalog, history: emojiHistory, category: model.emojiCategory,
+        primaryAction: emojiSettings.primaryAction)
     }
     if model.mode == .colors {
       return Search.colorSections(for: query, history: colors, format: colorFormat)
@@ -1476,7 +1491,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Where an arrow moves the emoji grid's selection: ←→ by one, ↑↓ to the same column of the
   /// row above or below, across sections; nil for other commands.
   private func gridSelection(after command: SearchCommand) -> Int? {
-    let columns = Self.emojiColumns
+    let columns = model.emojiColumns
     // Each item's section, row and column, in display order.
     let cells = model.sections.enumerated().flatMap { section, entry in
       entry.results.indices.map { (section: section, row: $0 / columns, column: $0 % columns) }
