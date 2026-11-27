@@ -31,8 +31,9 @@
   `{datetime}`, `{day}` and `{uuid}` are filled in, and `{cursor}` is where the caret lands.
   ⇧⌘C copies, ⌘E edits, ⌘D duplicates and ⌃X deletes; the tag menu filters the list. Export
   Snippets and Import Snippets read and write the JSON Raycast uses. Typing a snippet's keyword
-  (`;addr`) in any app replaces it with the snippet, while typing in English rather than kana;
-  Settings › Snippets sets when it expands, and the apps it stays out of
+  (`;addr`) in another app replaces it with the snippet, while typing in English rather than kana
+  and never in a password field or Ripcord's own panel and Notes; Settings › Snippets sets when
+  it expands, and the apps it stays out of
 - System Actions: lock the screen, log out, restart, shut down, sleep, control music and volume,
   hide, unhide or quit apps, restart the frontmost app, open or empty the Trash, eject disks, show
   the desktop, and toggle Dark Mode or Finder's hidden files. Ones that lose work ask first
@@ -170,6 +171,10 @@ the settings window opens. The settings window writes every change back to it.
   },
   "colorFormat": "hex",
   "favorites": ["com.apple.Safari", "command:search-snippets"],
+  "snippetExpansion": {
+    "enabled": true, "mode": "immediately", "withinWords": false,
+    "disabledApps": ["com.1password.1password", "com.apple.keychainaccess"]
+  },
   "snippets": [
     { "name": "Address", "keyword": "addr", "text": "1 Infinite Loop\nCupertino", "icon": "house",
       "tags": ["home"] }
@@ -194,6 +199,9 @@ Clipboard History keeps its last 300 unpinned items (plus every pinned one) in
 `items` holds the aliases, hotkeys and on/off switches set on the settings pages, for apps (by
 bundle ID) and Ripcord's commands; a Quicklink keeps its own `hotkey` and `disabled`, and its
 `keyword` is its alias.
+
+`snippetExpansion` sets keyword expansion, as Settings › Snippets does: `mode` is `immediately`,
+`afterDelimiterKeeping` or `afterDelimiterDiscarding`, and `disabledApps` lists bundle IDs.
 
 `inputSource` is the keyboard input source the panel switches to while it's open, so a Japanese
 input method left on doesn't turn the query into kana; the previous one comes back when it closes.
