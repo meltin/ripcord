@@ -88,4 +88,13 @@ import Testing
     #expect(back?.title == "Kept")
     #expect(!FileManager.default.fileExists(atPath: away.path))
   }
+
+  /// Escape Key Loses Focus is off unless set, as Raycast's is.
+  @Test func readsNotesSettings() throws {
+    let empty = try JSONDecoder().decode(Config.self, from: Data(#"{"hotkey":"cmd+space"}"#.utf8))
+    #expect(!empty.notes.escapeLosesFocus)
+    let set = try JSONDecoder().decode(
+      Config.self, from: Data(#"{"hotkey":"cmd+space","notes":{"escapeLosesFocus":true}}"#.utf8))
+    #expect(set.notes.escapeLosesFocus)
+  }
 }

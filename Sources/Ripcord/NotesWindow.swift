@@ -45,6 +45,11 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   var onBrowse: () -> Void = {}
   /// Settings' Notes page, for Open Notes Settings.
   var onSettings: () -> Void = {}
+  var settings = NotesSettings()
+  /// Esc handed the keys away and the note hasn't had them back. The launcher closing makes the
+  /// window key again by itself, so key status alone can't tell Ripcord Notes to come forward
+  /// rather than close.
+  private var isAwayAfterEscape = false
   private let actionsModel = NotesActionsModel()
   /// Set while Ripcord moves the window itself, so only the user's moves are remembered.
   private var isMovingWindow = false
@@ -261,9 +266,12 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     actionsModel.filter = ""
   }
 
-  /// Esc closes ⌘F's find bar first, as a text view's does, and the window after.
+  /// Esc closes ⌘F's find bar first, as a text view's does, and the window after, or with Escape
+  /// Key Loses Focus on, hands the keys back to the app in front and leaves the window open.
   private func escape() {
-    guard let editor, editor.enclosingScrollView?.isFindBarVisible == true else { return hide() }
+    guard let editor, editor.enclosingScrollView?.isFindBarVisible == true else {
+      return settings.escapeLosesFocus ? loseFocus() : hide()
+    }
     let item = NSMenuItem()
     item.tag = NSTextFinder.Action.hideFindInterface.rawValue
     editor.performTextFinderAction(item)
@@ -440,7 +448,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   func handle(_ request: NotesRequest) {
     switch request {
     case .toggle:
-      if window.isVisible && window.isKeyWindow { return hide() }
+      if window.isVisible && window.isKeyWindow && !isAwayAfterEscape { return hide() }
       // Back to the note as it is on disk, in case it changed while hidden.
       if !window.isVisible, model.note.isSaved, model.text == model.note.text,
         let fresh = store.read(model.note.url)
@@ -512,6 +520,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   }
 
   private func bringForward() {
+    isAwayAfterEscape = false
     if !window.isVisible { place() }
     window.orderFrontRegardless()
     window.makeKey()
@@ -588,7 +597,17 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     }
   }
 
+  /// The window stays and the keys go back to the app in front, which the panel never stopped
+  /// being in front of: ordered out and back without becoming key again.
+  private func loseFocus() {
+    flush()
+    isAwayAfterEscape = true
+    window.orderOut(nil)
+    window.orderFrontRegardless()
+  }
+
   private func hide() {
+    isAwayAfterEscape = false
     flush()
     window.orderOut(nil)
     stopWatching()
@@ -651,6 +670,13 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     model.problem = nil
     model.text = text
     flush()
+  }
+
+  /// A click on the note takes the keys back.
+  func windowDidBecomeKey(_ notification: Notification) {
+    if notification.object as? NSWindow === window, NSApp.currentEvent?.type == .leftMouseDown {
+      isAwayAfterEscape = false
+    }
   }
 
   /// The actions close when something else is clicked, as a menu does.

@@ -102,7 +102,8 @@
   `~/.config/ripcord/notes`, marks and all, titled by its first line and saved as you type. Edits
   another editor saves show up in the open note, and a note changed outside Ripcord is never saved
   over. Search Notes finds notes by their text, and ⌃X moves one to the Trash, with Undo for a
-  few seconds
+  few seconds. Esc closes the window; with Escape Key Loses Focus on, it leaves the window open
+  and hands the keys back to the app you were in
 - Lorem Ipsum Generator JP: Generate Dummy Text writes Japanese or English filler text of the
   length typed in the field beside the search bar, as Raycast's Japanese Lorem Ipsum Generator
   does; Return pastes it into the app you were in and ⌘↵ copies it. Settings › Lorem Ipsum
@@ -224,6 +225,7 @@ the settings window opens. The settings window writes every change back to it.
   "showColorName": false,
   "emoji": { "columns": 8, "primaryAction": "paste", "disableInlinePicker": false },
   "httpStatusPicture": "none",
+  "notes": { "escapeLosesFocus": false },
   "favorites": ["com.apple.Safari", "command:search-snippets"],
   "snippetExpansion": {
     "enabled": true, "mode": "immediately", "withinWords": false,
