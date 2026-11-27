@@ -303,6 +303,9 @@ Things Ripcord leaves as they are rather than work around with something macOS d
   such as Raycast Notes, both open, clicking the other one can leave the keys with Ripcord Notes
   ([#73](https://github.com/meltin/ripcord/issues/73)). Clicking any ordinary app moves them as
   usual.
+- System Actions: there's no Dismiss Notifications, as Raycast has. macOS offers no way for an app
+  to clear Notification Center; the only route is pressing its buttons through Accessibility, which
+  breaks as macOS changes them ([#30](https://github.com/meltin/ripcord/issues/30)).
 
 ## Roadmap
 
