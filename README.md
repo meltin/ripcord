@@ -54,11 +54,13 @@
   apps without taking them out of front, on one note at a time, and grows with the note. Its
   Markdown is formatted as you type, as in Raycast Notes: once a mark is complete it's hidden
   (`# ` makes a heading, `**bold**` turns bold), and lists, checkboxes, quotes and code blocks are
-  drawn in place of theirs. The T button (⇧⌘,) formats the selection, ⌘K lists the note's actions,
-  ⌘N starts another and ⌘P searches them. Each note is a Markdown file in
+  drawn in place of theirs. Tab and Shift-Tab nest list items, Shift-Return breaks a line inside
+  one, and ⌘Return checks a task. The T button (⇧⌘,) formats the selection, ⌘K lists the note's
+  actions, ⌘N starts another and ⌘P searches them. Each note is a Markdown file in
   `~/.config/ripcord/notes`, marks and all, titled by its first line and saved as you type. Edits
   another editor saves show up in the open note, and a note changed outside Ripcord is never saved
-  over. Search Notes finds notes by their text, and ⌃X moves one to the Trash
+  over. Search Notes finds notes by their text, and ⌃X moves one to the Trash, with Undo for a
+  few seconds
 - Emoji & Symbols: Search Emoji & Symbols shows emoji and symbols (→ ° ⌘ and the like) in a grid by
   category, Frequently Used first; search in English or Japanese (`cat`, `ねこ`), Return pastes,
   ⌘↵ copies, and ⌘K picks a skin tone that's remembered
