@@ -50,12 +50,15 @@
   URL or title, edits it, moves it to another group or deletes it. Add Bookmark opens a form for
   a new one, filled with the tab you're on in Safari, Chrome or Arc. Only the lines a change
   touches are rewritten; the rest stays as you wrote it
-- Notes: Ripcord Notes opens a window floating over your apps, without taking them out of front,
-  on one note at a time, formatting its Markdown as you type (headings, emphasis, code, quotes,
-  lists, checkboxes, links); ⌘N starts another and ⌘P searches them. Each note is a Markdown file in
-  `~/.config/ripcord/notes`, titled by its first line and saved as you type. Edits another editor
-  saves show up in the open note, and a note changed outside Ripcord is never saved over. Search
-  Notes finds notes by their text, and ⌃X moves one to the Trash
+- Notes: Ripcord Notes opens a small window at the top right of the screen, floating over your
+  apps without taking them out of front, on one note at a time, and grows with the note. Its
+  Markdown is formatted as you type, as in Raycast Notes: once a mark is complete it's hidden
+  (`# ` makes a heading, `**bold**` turns bold), and lists, checkboxes, quotes and code blocks are
+  drawn in place of theirs. The T button (⇧⌘,) formats the selection, ⌘K lists the note's actions,
+  ⌘N starts another and ⌘P searches them. Each note is a Markdown file in
+  `~/.config/ripcord/notes`, marks and all, titled by its first line and saved as you type. Edits
+  another editor saves show up in the open note, and a note changed outside Ripcord is never saved
+  over. Search Notes finds notes by their text, and ⌃X moves one to the Trash
 - Emoji & Symbols: Search Emoji & Symbols shows emoji and symbols (→ ° ⌘ and the like) in a grid by
   category, Frequently Used first; search in English or Japanese (`cat`, `ねこ`), Return pastes,
   ⌘↵ copies, and ⌘K picks a skin tone that's remembered
@@ -179,6 +182,15 @@ bundle ID) and Ripcord's commands; a Quicklink keeps its own `hotkey` and `disab
 `inputSource` is the keyboard input source the panel switches to while it's open, so a Japanese
 input method left on doesn't turn the query into kana; the previous one comes back when it closes.
 Leave it out to keep whatever is on. Pick it under Settings > General.
+
+## Known limitations
+
+Things Ripcord leaves as they are rather than work around with something macOS doesn't support:
+
+- Notes: with Ripcord Notes and another app's floating window that doesn't bring its app forward,
+  such as Raycast Notes, both open, clicking the other one can leave the keys with Ripcord Notes
+  ([#73](https://github.com/meltin/ripcord/issues/73)). Clicking any ordinary app moves them as
+  usual.
 
 ## Roadmap
 
