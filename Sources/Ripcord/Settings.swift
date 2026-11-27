@@ -611,6 +611,11 @@ private enum SettingText {
   )
   static let clearHistory = SettingsSearch.Item(
     title: "Clear History", detail: "Delete every entry but the pinned ones.")
+  static let cycling = SettingsSearch.Item(
+    title: "Cycling",
+    detail:
+      "Using a half again on the same window goes ½ → ⅔ → ⅓ and back to ½, as Raycast's Cycle ½, ⅔, and ⅓."
+  )
   static let dummyTextLanguage = SettingsSearch.Item(
     title: "Default Language",
     detail: "What Generate Dummy Text writes in when its menu is left alone.")
@@ -635,6 +640,7 @@ extension SettingsPage {
       case .scripts: [SettingText.scriptFolders]
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
       case .dummyText: [SettingText.dummyTextLanguage]
+      case .windowManagement: [SettingText.cycling]
       case .clipboardHistory:
         [SettingText.keepHistoryFor, SettingText.maxEntries, SettingText.clearHistory]
       case .snippets:
@@ -765,6 +771,19 @@ struct SettingsView: View {
               ) { EmptyView() }
               FolderList(folders: $model.config.scriptFolders)
             }
+          }
+        case .windowManagement:
+          PageScroll(model: model) {
+            PageHeader(page: .windowManagement)
+            Card {
+              SettingRow(title: SettingText.cycling.title, description: SettingText.cycling.detail)
+              {
+                Toggle(SettingText.cycling.title, isOn: $model.config.cycleHalves)
+                  .labelsHidden()
+                  .toggleStyle(.switch)
+              }
+            }
+            CommandsList(model: model, page: .windowManagement)
           }
         default:
           PageScroll(model: model) {

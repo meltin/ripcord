@@ -26,6 +26,8 @@ public struct Config: Codable, Equatable, Sendable {
   public var clipboardHistory: ClipboardSettings
   /// The panel's backdrop shader: "off", a built-in one's name, or a file in the shaders folder.
   public var backdrop: String
+  /// Using a half again on the same window goes ½ → ⅔ → ⅓, as Raycast's Cycling setting.
+  public var cycleHalves: Bool
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
@@ -35,7 +37,7 @@ public struct Config: Codable, Equatable, Sendable {
     snippetExpansion: SnippetExpansion = SnippetExpansion(),
     dummyTextLanguage: DummyText.Language = .japanese,
     clipboardHistory: ClipboardSettings = ClipboardSettings(),
-    backdrop: String = Backdrop.off
+    backdrop: String = Backdrop.off, cycleHalves: Bool = true
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
@@ -51,6 +53,7 @@ public struct Config: Codable, Equatable, Sendable {
     self.dummyTextLanguage = dummyTextLanguage
     self.clipboardHistory = clipboardHistory
     self.backdrop = backdrop
+    self.cycleHalves = cycleHalves
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -80,6 +83,7 @@ public struct Config: Codable, Equatable, Sendable {
       try container.decodeIfPresent(ClipboardSettings.self, forKey: .clipboardHistory)
       ?? ClipboardSettings()
     backdrop = try container.decodeIfPresent(String.self, forKey: .backdrop) ?? Backdrop.off
+    cycleHalves = try container.decodeIfPresent(Bool.self, forKey: .cycleHalves) ?? true
   }
 
   public static let `default` = Config(
