@@ -50,11 +50,11 @@
   (`;addr`) in another app replaces it with the snippet, while typing in English rather than kana
   and never in a password field or Ripcord's own panel and Notes; Settings › Snippets sets when
   it expands, and the apps it stays out of
-- System Actions: lock the screen, log out, restart, shut down, sleep, control music and volume,
-  hide, unhide or quit apps, restart the frontmost app, open or empty the Trash, eject disks, show
-  the desktop, and toggle Dark Mode or Finder's hidden files. Ones that lose work ask first. As
-  Raycast's, Set Volume takes a level typed after it (`set volume 40`), and Set Volume to 0%, 25%,
-  50%, 75% and 100% set those
+- System Actions: lock the screen, show the screen saver, log out, restart, shut down, sleep,
+  control music and volume, hide, unhide or quit apps, restart the frontmost app, open or empty the
+  Trash, eject disks, show the desktop, and toggle Dark Mode or Finder's hidden files. Ones that
+  lose work ask first. As Raycast's, Set Volume takes a level typed after it (`set volume 40`), and
+  Set Volume to 0%, 25%, 50%, 75% and 100% set those
 - Git Repositories: Search Repositories lists the repositories in the folders you pick (`~/dev`
   and the like) and opens one in the app you assign to ↵, ⌘↵, ⌥↵, ⌃↵ or ⇧↵, an editor or a
   terminal; ⌘K adds Open on GitHub, Show in Finder and Copy Path. Clone Repo, as Raycast's Git

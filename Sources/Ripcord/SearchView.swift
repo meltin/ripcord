@@ -606,6 +606,7 @@ extension SystemAction {
     case .shutDown: "power"
     case .sleep: "moon.fill"
     case .sleepDisplays: "display"
+    case .showScreenSaver: "sparkles"
     case .playPause: "playpause.fill"
     case .nextTrack: "forward.fill"
     case .previousTrack: "backward.fill"

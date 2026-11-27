@@ -57,6 +57,10 @@ enum SystemActions {
       return pmset("sleepnow")
     case .sleepDisplays:
       return pmset("displaysleepnow")
+    case .showScreenSaver:
+      // macOS's own, which ends on the next key or move as set in System Settings.
+      let engine = URL(fileURLWithPath: "/System/Library/CoreServices/ScreenSaverEngine.app")
+      return NSWorkspace.shared.open(engine) ? nil : "Couldn't start the screen saver."
     case .playPause:
       return pressMediaKey(NX_KEYTYPE_PLAY)
     case .nextTrack:
