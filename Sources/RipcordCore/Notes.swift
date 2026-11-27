@@ -174,3 +174,16 @@ public struct NotesSettings: Codable, Equatable, Sendable {
         Bool.self, forKey: .moveCheckedTasksToBottom) ?? false)
   }
 }
+
+/// Ripcord Notes' zoom, as ⌘+ and ⌘- and the settings page step it.
+public enum NotesZoom {
+  public static let range: ClosedRange<Double> = 0.6...2
+  /// One step in or out.
+  public static let step = 1.1
+
+  /// `scale` kept in range, and exactly 1 when a step lands near it, so Actual Size reads as such.
+  public static func clamped(_ scale: Double) -> Double {
+    let clamped = min(max(scale, range.lowerBound), range.upperBound)
+    return abs(clamped - 1) < 0.01 ? 1 : clamped
+  }
+}

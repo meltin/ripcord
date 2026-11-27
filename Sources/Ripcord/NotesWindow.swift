@@ -67,7 +67,8 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   private static let lastNoteKey = "lastNote"
   private static let autoSizingKey = "notesWindowAutoSizing"
   private static let hiddenWhileSharingKey = "notesHiddenWhileSharing"
-  private static let zoomKey = "notesZoom"
+  /// Shared with Settings › Notes' Zoom.
+  static let zoomKey = "notesZoom"
   /// Where the window's top left was last, as Raycast Notes reopens where it was moved to.
   private static let placeKey = "notesWindowTopLeft"
   private static let saveDelay = 0.6
@@ -160,8 +161,18 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     let last = UserDefaults.standard.string(forKey: Self.lastNoteKey)
       .flatMap { store.read(URL(fileURLWithPath: $0)) }
     model = NotesModel(note: last ?? store.list().first ?? store.newNote())
+    super.init()
+    readZoom()
+    // Settings › Notes sets it too.
+    NotificationCenter.default.addObserver(
+      forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+    ) { [weak self] _ in MainActor.assumeIsolated { self?.readZoom() } }
+  }
+
+  private func readZoom() {
     let zoom = UserDefaults.standard.double(forKey: Self.zoomKey)
-    model.zoom = zoom > 0 ? zoom : 1
+    let scale = zoom > 0 ? zoom : 1
+    if model.zoom != scale { model.zoom = scale }
   }
 
   /// Raycast Notes' actions that Ripcord has: what ⌘K lists and what their keys run.
@@ -201,12 +212,12 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
       ),
       NotesAction(
         title: "Zoom In", symbol: "plus.magnifyingglass", keys: ["+", "="], modifiers: .command,
-        isEnabled: model.zoom < Self.zoomRange.upperBound,
-        run: { [weak self] in self?.zoom(by: 1.1) }),
+        isEnabled: model.zoom < NotesZoom.range.upperBound,
+        run: { [weak self] in self?.zoom(by: NotesZoom.step) }),
       NotesAction(
         title: "Zoom Out", symbol: "minus.magnifyingglass", keys: ["-"], modifiers: .command,
-        isEnabled: model.zoom > Self.zoomRange.lowerBound,
-        run: { [weak self] in self?.zoom(by: 1 / 1.1) }),
+        isEnabled: model.zoom > NotesZoom.range.lowerBound,
+        run: { [weak self] in self?.zoom(by: 1 / NotesZoom.step) }),
       NotesAction(
         title: "Open Notes Settings", symbol: "gearshape", keys: [","], modifiers: .command,
         startsSection: true, run: { [weak self] in self?.onSettings() }),
@@ -215,8 +226,6 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
         isDestructive: true, startsSection: true, run: { [weak self] in self?.deleteNote() }),
     ]
   }
-
-  private static let zoomRange: ClosedRange<CGFloat> = 0.6...2
 
   /// Raycast Notes' Format as…, with its keys.
   private var formats: [NotesAction] {
@@ -392,9 +401,7 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   }
 
   private func zoom(to scale: CGFloat) {
-    let clamped = min(max(scale, Self.zoomRange.lowerBound), Self.zoomRange.upperBound)
-    // Back to exactly 1 when a step lands near it, so Actual Size reads as such.
-    model.zoom = abs(clamped - 1) < 0.01 ? 1 : clamped
+    model.zoom = NotesZoom.clamped(scale)
     UserDefaults.standard.set(model.zoom, forKey: Self.zoomKey)
   }
 

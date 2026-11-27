@@ -104,7 +104,8 @@
   over. Search Notes finds notes by their text, and ⌃X moves one to the Trash, with Undo for a
   few seconds. Esc closes the window; with Escape Key Loses Focus on, it leaves the window open
   and hands the keys back to the app you were in. Move Checked Tasks to Bottom moves a task, once
-  checked, below the unchecked ones of its list
+  checked, below the unchecked ones of its list. Zoom sets the text's size there as ⌘+ and ⌘- do
+  in the window
 - Lorem Ipsum Generator JP: Generate Dummy Text writes Japanese or English filler text of the
   length typed in the field beside the search bar, as Raycast's Japanese Lorem Ipsum Generator
   does; Return pastes it into the app you were in and ⌘↵ copies it. Settings › Lorem Ipsum

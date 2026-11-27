@@ -98,4 +98,12 @@ import Testing
       Config.self, from: Data(#"{"hotkey":"cmd+space","notes":{"escapeLosesFocus":true}}"#.utf8))
     #expect(set.notes.escapeLosesFocus)
   }
+
+  /// Zoom stays between 60% and 200%, and a step landing near 100% is 100%.
+  @Test func clampsTheZoom() {
+    #expect(NotesZoom.clamped(5) == 2)
+    #expect(NotesZoom.clamped(0.1) == 0.6)
+    #expect(NotesZoom.clamped(1.1 / 1.1 * 1.005) == 1)
+    #expect(NotesZoom.clamped(1.1) == 1.1)
+  }
 }

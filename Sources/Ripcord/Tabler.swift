@@ -104,6 +104,7 @@ enum Tabler {
     "menubar.dock.rectangle": "outline/layout-navbar",
     "message": "outline/message",
     "mic": "outline/microphone",
+    "minus": "outline/minus",
     "minus.circle": "outline/circle-minus",
     "moon": "outline/moon",
     "moon.fill": "filled/moon",
