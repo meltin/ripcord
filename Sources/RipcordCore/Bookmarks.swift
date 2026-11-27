@@ -190,7 +190,8 @@ public struct BookmarkFile: Equatable, Sendable {
     let found: Bookmark? = if let original { try bookmark(original) } else { nil }
     if let found, !found.isEditable {
       throw .invalid(
-        "This bookmark's line has text the form doesn't show; edit it in bookmarks.md instead.")
+        "This bookmark's line has text the form doesn't show; edit it in the bookmarks file instead."
+      )
     }
     guard !title.isEmpty else { throw .invalid("A bookmark needs a title.") }
     guard !url.contains(where: \.isWhitespace), let parsedURL = URL(string: url),
@@ -270,7 +271,8 @@ public struct BookmarkFile: Equatable, Sendable {
     guard target != nil else {
       // Lines after a code block left open would land inside it, out of the list.
       guard !file.scan.endsInFence else {
-        throw .invalid("bookmarks.md ends inside a code block that isn't closed; close it first.")
+        throw .invalid(
+          "The bookmarks file ends inside a code block that isn't closed; close it first.")
       }
       return file.appendingHeading(newTitle ?? "", then: placed)
     }
@@ -444,5 +446,27 @@ extension Search {
       id: "bookmark:\(bookmark.line):\(bookmark.text)", title: bookmark.title,
       subtitle: bookmark.description ?? bookmark.url.host() ?? bookmark.url.absoluteString,
       keyword: nil, kind: .bookmark, action: menu[0].action, menu: menu)
+  }
+}
+
+/// Where bookmarks.md lives: Raycast's MarkMarks has the user pick its file. Unset, Ripcord's
+/// own under ~/.config.
+public enum BookmarkFileLocation {
+  public static let defaultPath = "~/.config/ripcord/bookmarks.md"
+
+  /// `path`, `~` expanded; the default for nil or blank. One typed without `/` or `~/` is taken
+  /// from the home folder, never from wherever the app happens to run.
+  public static func url(for path: String?, home: String = NSHomeDirectory()) -> URL {
+    let trimmed = path?.trimmingCharacters(in: .whitespaces) ?? ""
+    let chosen = trimmed.isEmpty ? defaultPath : trimmed
+    let expanded =
+      chosen == "~" || chosen.hasPrefix("~/")
+      ? home + chosen.dropFirst() : chosen.hasPrefix("/") ? chosen : home + "/" + chosen
+    return URL(fileURLWithPath: expanded)
+  }
+
+  /// `url` as Settings shows it and config.json keeps it, with `~` for the home folder.
+  public static func path(for url: URL, home: String = NSHomeDirectory()) -> String {
+    url.path.hasPrefix(home + "/") ? "~" + url.path.dropFirst(home.count) : url.path
   }
 }

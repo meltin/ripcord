@@ -99,8 +99,9 @@
   back on early. As Raycast's, Settings › Clean Keyboard sets a Default Duration that starts it at
   once (up to 24 hours, or Forever, until ⌃⌥⌘↩) instead of asking, can leave the function row
   (F-keys, media and brightness keys) working, and can lock mouse clicks too
-- Bookmarks: Search Bookmarks lists the Markdown links in `~/.config/ripcord/bookmarks.md`
-  (`- [Title](URL) - description`) under their `#` headings; Return opens one, and ⌘K copies its
+- Bookmarks: Search Bookmarks lists the Markdown links (`- [Title](URL) - description`) in
+  `~/.config/ripcord/bookmarks.md`, or the file picked under Settings › Bookmarks as Raycast's
+  MarkMarks has one picked, under their `#` headings; Return opens one, and ⌘K copies its
   URL or title, edits it, moves it to another group or deletes it. Add Bookmark opens a form for
   a new one, filled with the tab you're on in Safari, Chrome or Arc. Only the lines a change
   touches are rewritten; the rest stays as you wrote it
@@ -242,6 +243,7 @@ the settings window opens. The settings window writes every change back to it.
   "httpStatusPicture": "none",
   "notes": { "escapeLosesFocus": false, "moveCheckedTasksToBottom": false },
   "quicklinkSettings": { "passSelectedText": false, "showDeleteWarning": true },
+  "bookmarksFile": "~/.config/ripcord/bookmarks.md",
   "systemActions": {
     "warnBeforeEmptyingTrash": true, "warnBeforeQuittingAll": true, "quitAllExcluded": [],
     "warnBeforeQuittingOthers": true, "quitOthersExcluded": []

@@ -324,7 +324,7 @@ private struct EmptyState: View {
     case .colorNames:
       "No color name matches “\(query)”. Type a hex, as #00ff00, for the names nearest it."
     case .bookmarks where query.trimmingCharacters(in: .whitespaces).isEmpty:
-      "Bookmarks you keep in ~/.config/ripcord/bookmarks.md show up here, one “- [Title](URL)” per line under “# Group” headings."
+      "Bookmarks you keep in your bookmarks file, set under Settings › Bookmarks, show up here, one “- [Title](URL)” per line under “# Group” headings."
     case .bookmarks:
       "No bookmark matches “\(query)”."
     case .emoji:

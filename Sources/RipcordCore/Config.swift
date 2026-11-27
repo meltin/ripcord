@@ -46,6 +46,8 @@ public struct Config: Codable, Equatable, Sendable {
   public var notes: NotesSettings
   public var quicklinkSettings: QuicklinkSettings
   public var systemActions: SystemActionSettings
+  /// Search Bookmarks' file; nil for ~/.config/ripcord/bookmarks.md.
+  public var bookmarksFile: String?
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
@@ -61,7 +63,7 @@ public struct Config: Codable, Equatable, Sendable {
     emoji: EmojiSettings = EmojiSettings(), httpStatusPicture: HTTPStatusPicture = .none,
     notes: NotesSettings = NotesSettings(),
     quicklinkSettings: QuicklinkSettings = QuicklinkSettings(),
-    systemActions: SystemActionSettings = SystemActionSettings()
+    systemActions: SystemActionSettings = SystemActionSettings(), bookmarksFile: String? = nil
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
@@ -89,6 +91,7 @@ public struct Config: Codable, Equatable, Sendable {
     self.notes = notes
     self.quicklinkSettings = quicklinkSettings
     self.systemActions = systemActions
+    self.bookmarksFile = bookmarksFile
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -138,6 +141,7 @@ public struct Config: Codable, Equatable, Sendable {
     systemActions =
       try container.decodeIfPresent(SystemActionSettings.self, forKey: .systemActions)
       ?? SystemActionSettings()
+    bookmarksFile = try container.decodeIfPresent(String.self, forKey: .bookmarksFile)
   }
 
   public static let `default` = Config(
