@@ -2660,23 +2660,26 @@ private struct NotesZoomRow: View {
         }
         .disabled(scale == 1)
         .help("Actual Size")
+        .accessibilityLabel("Actual Size")
         Button {
-          zoom = NotesZoom.clamped(scale / NotesZoom.step)
+          zoom = NotesZoom.stepped(scale, by: -1)
         } label: {
           Glyph("minus", pointSize: 11)
         }
         .disabled(scale <= NotesZoom.range.lowerBound)
         .help("Zoom Out")
+        .accessibilityLabel("Zoom Out")
         Text("\(Int((scale * 100).rounded()))%")
           .monospacedDigit()
           .frame(minWidth: 40)
         Button {
-          zoom = NotesZoom.clamped(scale * NotesZoom.step)
+          zoom = NotesZoom.stepped(scale, by: 1)
         } label: {
           Glyph("plus", pointSize: 11)
         }
         .disabled(scale >= NotesZoom.range.upperBound)
         .help("Zoom In")
+        .accessibilityLabel("Zoom In")
       }
     }
   }

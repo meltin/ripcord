@@ -99,11 +99,13 @@ import Testing
     #expect(set.notes.escapeLosesFocus)
   }
 
-  /// Zoom stays between 60% and 200%, and a step landing near 100% is 100%.
-  @Test func clampsTheZoom() {
-    #expect(NotesZoom.clamped(5) == 2)
-    #expect(NotesZoom.clamped(0.1) == 0.6)
-    #expect(NotesZoom.clamped(1.1 / 1.1 * 1.005) == 1)
-    #expect(NotesZoom.clamped(1.1) == 1.1)
+  /// Zoom steps 5% between 75% and 200%, as Raycast Notes' does, and lands back on 100%.
+  @Test func stepsTheZoom() {
+    #expect(NotesZoom.stepped(1, by: 2) == 1.1)
+    #expect(NotesZoom.stepped(1.1, by: -2) == 1)
+    #expect(NotesZoom.stepped(1.95, by: 3) == 2)
+    #expect(NotesZoom.stepped(0.8, by: -3) == 0.75)
+    // An older build's ×1.1 step.
+    #expect(NotesZoom.stepped(1.21, by: 0) == 1.2)
   }
 }

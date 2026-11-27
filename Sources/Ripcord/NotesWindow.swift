@@ -213,11 +213,11 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
       NotesAction(
         title: "Zoom In", symbol: "plus.magnifyingglass", keys: ["+", "="], modifiers: .command,
         isEnabled: model.zoom < NotesZoom.range.upperBound,
-        run: { [weak self] in self?.zoom(by: NotesZoom.step) }),
+        run: { [weak self] in self?.zoom(by: 1) }),
       NotesAction(
         title: "Zoom Out", symbol: "minus.magnifyingglass", keys: ["-"], modifiers: .command,
         isEnabled: model.zoom > NotesZoom.range.lowerBound,
-        run: { [weak self] in self?.zoom(by: 1 / NotesZoom.step) }),
+        run: { [weak self] in self?.zoom(by: -1) }),
       NotesAction(
         title: "Open Notes Settings", symbol: "gearshape", keys: [","], modifiers: .command,
         startsSection: true, run: { [weak self] in self?.onSettings() }),
@@ -396,12 +396,12 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     window.sharingType = Self.isHiddenWhileSharing ? .none : .readOnly
   }
 
-  private func zoom(by factor: CGFloat) {
-    zoom(to: model.zoom * factor)
+  private func zoom(by steps: Int) {
+    zoom(to: NotesZoom.stepped(model.zoom, by: steps))
   }
 
   private func zoom(to scale: CGFloat) {
-    model.zoom = NotesZoom.clamped(scale)
+    model.zoom = NotesZoom.stepped(scale, by: 0)
     UserDefaults.standard.set(model.zoom, forKey: Self.zoomKey)
   }
 
