@@ -1301,8 +1301,9 @@ final class NoteTextView: NSTextView {
     setSelectedRange(selection)
   }
 
-  /// Ripcord's accent, the caret's orange, for bullets, numbers, checkboxes and quote bars.
-  private static let accent = FocusingTextField.caretColor
+  /// The system accent colour, as the owner chose, for bullets, numbers, checkboxes and quote
+  /// bars; it follows System Settings.
+  private static var accent: NSColor { .controlAccentColor }
 
   /// Where a line's first fragment sits, in the view: the marks drawn for it line up with it.
   private func lineRect(at location: Int) -> NSRect? {
