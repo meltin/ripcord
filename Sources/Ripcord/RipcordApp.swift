@@ -1,4 +1,5 @@
 import AppKit
+import RipcordControl
 import RipcordCore
 import ServiceManagement
 import UniformTypeIdentifiers
@@ -22,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let launcher = LauncherController()
   private let updater = Updater()
   private let snippetExpander = SnippetExpander()
+  private var control: ControlServer?
   private lazy var settings: SettingsWindowController = {
     let model = SettingsModel(configURL: configURL)
     model.updater = updater
@@ -89,6 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     launcher.onCheckForUpdates = { [weak self] in self?.checkForUpdates() }
     settings.model.onClearClipboard = { [weak self] in self?.launcher.clearClipboardHistory() }
     launcher.onBackdropError = { [weak self] in self?.settings.model.backdropError = $0 }
+    startControl()
     snippetExpander.onExpand = { [weak self] in self?.launcher.pasteExpansion($0, trailing: $1) }
     launcher.onNotes = { [weak self] in self?.notes.handle($0) }
     notes.onBrowse = { [weak self] in self?.launcher.perform(.run(.searchNotes)) }
@@ -120,6 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   /// What's typed in a note is saved before quitting, as its autosave may not have run yet.
   func applicationWillTerminate(_ notification: Notification) {
     notes.flushForQuit()
+    control?.stop()
   }
 
   /// Opening Ripcord.app again shows the panel, a way in when the hotkey or menu bar icon fails.
@@ -214,6 +218,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
     } catch {
       showError("Couldn't import \(url.lastPathComponent): \(error.localizedDescription)")
+    }
+  }
+
+  /// The socket the `ripcord` command talks to; without it the app works as before.
+  private func startControl() {
+    let server = ControlServer { [weak self] request in
+      await self?.answer(request) ?? ControlResponse(error: "Ripcord is quitting.")
+    }
+    do {
+      try server.start()
+      control = server
+    } catch {
+      NSLog("Ripcord: \(error.localizedDescription)")
+    }
+  }
+
+  private func answer(_ request: ControlRequest) async -> ControlResponse {
+    switch request {
+    case .open(let query):
+      if !launcher.isVisible { applyConfig() }
+      launcher.open(query: query)
+      return ControlResponse()
+    case .configGet(let key):
+      do {
+        // Written with the defaults first if it's missing, as at launch.
+        _ = try Config.load(from: configURL)
+        return ControlResponse(output: try Config.get(key, from: Data(contentsOf: configURL)))
+      } catch {
+        return ControlResponse(error: "ripcord: \(error.localizedDescription)")
+      }
+    case .configSet(let key, let json):
+      // Through the settings window's model, as its own edits go, so an open window shows the
+      // change and can't write back what was there before.
+      let model = settings.model
+      model.load()
+      if let failure = model.loadError { return ControlResponse(error: "ripcord: \(failure)") }
+      do {
+        model.config = try Config.setting(key, to: json, in: Data(contentsOf: configURL))
+      } catch {
+        return ControlResponse(error: "ripcord: \(error.localizedDescription)")
+      }
+      model.saveIfChanged()
+      return model.loadError.map { ControlResponse(error: "ripcord: \($0)") } ?? ControlResponse()
+    case .pick(let items, let placeholder):
+      if !launcher.isVisible { applyConfig() }
+      return await launcher.pick(items: items, placeholder: placeholder)
     }
   }
 

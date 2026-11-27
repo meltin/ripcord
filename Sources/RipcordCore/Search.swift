@@ -224,6 +224,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case deleteNote(URL)
     /// Generate Dummy Text's ⌘↵: the text copied rather than pasted.
     case copyDummyText
+    /// `ripcord pick`'s line at this index, handed back to the command.
+    case pick(Int)
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -244,7 +246,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   public enum Kind: Equatable, Sendable {
     case application, calculator, quicklink, command, text, image, file, snippet, repository
     case statusCode
-    case color, bookmark, emoji, draft, script, note
+    case color, bookmark, emoji, draft, script, note, line
 
     public var primaryAction: String {
       switch self {
@@ -259,6 +261,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
       case .draft: "Open Draft"
       case .script: "Run Script"
       case .note: "Open Note"
+      case .line: "Select"
       }
     }
   }

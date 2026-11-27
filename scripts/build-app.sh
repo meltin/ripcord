@@ -6,6 +6,9 @@ cd "$(dirname "$0")/.."
 # SWIFT_BUILD_FLAGS lets the Nix build pass --disable-sandbox; sandbox-exec is refused there.
 # shellcheck disable=SC2086
 swift build -c release --arch arm64 --product Ripcord ${SWIFT_BUILD_FLAGS:-}
+# The `ripcord` command, beside the app's own binary (a different name: the file system ignores case).
+# shellcheck disable=SC2086
+swift build -c release --arch arm64 --product ripcord-cli ${SWIFT_BUILD_FLAGS:-}
 # shellcheck disable=SC2086
 bin="$(swift build -c release --arch arm64 --show-bin-path ${SWIFT_BUILD_FLAGS:-})"
 
@@ -13,6 +16,7 @@ app=build/Ripcord.app
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin/Ripcord" "$app/Contents/MacOS/Ripcord"
+cp "$bin/ripcord-cli" "$app/Contents/MacOS/ripcord-cli"
 cp Resources/Info.plist "$app/Contents/Info.plist"
 
 # sips renders the SVGs at each size, so the icons stay sharp without committed PNGs.
@@ -52,7 +56,7 @@ cp Resources/ThirdParty/Sparkle-LICENSE.txt "$app/Contents/Resources/"
 identity="Ripcord Self-Signed"
 sign() {
   for path in "$framework/Versions/B/Autoupdate" "$framework/Versions/B/Updater.app" \
-    "$framework" "$app"; do
+    "$framework" "$app/Contents/MacOS/ripcord-cli" "$app"; do
     codesign --force --sign "$1" "$path" || return 1
   done
 }
