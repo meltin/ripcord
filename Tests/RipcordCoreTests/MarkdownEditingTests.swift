@@ -238,6 +238,34 @@ import Testing
     #expect(toggle("- plain", at: 7) == nil)
   }
 
+  /// Move Checked Tasks to Bottom: a task checked goes below the unchecked ones of its list,
+  /// with what's nested under it, and stays put when none follow.
+  @Test func sinksACheckedTask() {
+    func sunk(_ text: String, line: Int) -> String? {
+      let start = text.components(separatedBy: "\n").prefix(line).map { $0.count + 1 }.reduce(0, +)
+      guard let edit = MarkdownEditing.sinkCheckedTask(at: start, in: text) else { return nil }
+      return (text as NSString).replacingCharacters(in: edit.range, with: edit.replacement)
+    }
+    let list = "# Todo\n- [x] a\n  note\n- [ ] b\n- [ ] c\n- [x] d\n\nafter"
+    #expect(sunk(list, line: 1) == "# Todo\n- [ ] b\n- [ ] c\n- [x] a\n  note\n- [x] d\n\nafter")
+    // Already below the unchecked ones.
+    #expect(sunk(list, line: 5) == nil)
+    // Not a task.
+    #expect(sunk(list, line: 0) == nil)
+    // The last line has no line break.
+    #expect(sunk("- [x] a\n- [ ] b", line: 0) == "- [ ] b\n- [x] a")
+    // A nested list is its own list.
+    #expect(
+      sunk("- [ ] a\n  - [x] x\n  - [ ] y\n- [ ] b", line: 1)
+        == "- [ ] a\n  - [ ] y\n  - [x] x\n- [ ] b")
+    let edit = MarkdownEditing.sinkCheckedTask(at: 0, in: "- [x] a\n- [ ] b\n")
+    #expect(edit?.item == NSRange(location: 0, length: 8))
+    #expect(edit?.to == 8)
+    // Windows line breaks, with and without one at the end: nothing lost or added.
+    #expect(sunk("- [x] a\r\n- [ ] b", line: 0) == "- [ ] b\r\n- [x] a")
+    #expect(sunk("- [x] a\r\n- [ ] b\r\n", line: 0) == "- [ ] b\r\n- [x] a\r\n")
+  }
+
   @Test func takesDashEmptyBracketsAsATask() {
     let edit = MarkdownEditing.taskShortcut(at: 5, in: "- [] ")
     #expect(
@@ -515,30 +543,5 @@ import Testing
     #expect(
       MarkdownEditing.lineAfterFinalBlock(
         at: 10, in: ended, spans: MarkdownSpan.spans(in: ended)) == nil)
-  }
-
-  /// Move Checked Tasks to Bottom: a task checked goes below the unchecked ones of its list,
-  /// with what's nested under it, and stays put when none follow.
-  @Test func sinksACheckedTask() {
-    func sunk(_ text: String, line: Int) -> String? {
-      let start = text.components(separatedBy: "\n").prefix(line).map { $0.count + 1 }.reduce(0, +)
-      guard let edit = MarkdownEditing.sinkCheckedTask(at: start, in: text) else { return nil }
-      return (text as NSString).replacingCharacters(in: edit.range, with: edit.replacement)
-    }
-    let list = "# Todo\n- [x] a\n  note\n- [ ] b\n- [ ] c\n- [x] d\n\nafter"
-    #expect(sunk(list, line: 1) == "# Todo\n- [ ] b\n- [ ] c\n- [x] a\n  note\n- [x] d\n\nafter")
-    // Already below the unchecked ones.
-    #expect(sunk(list, line: 5) == nil)
-    // Not a task.
-    #expect(sunk(list, line: 0) == nil)
-    // The last line has no line break.
-    #expect(sunk("- [x] a\n- [ ] b", line: 0) == "- [ ] b\n- [x] a")
-    // A nested list is its own list.
-    #expect(
-      sunk("- [ ] a\n  - [x] x\n  - [ ] y\n- [ ] b", line: 1)
-        == "- [ ] a\n  - [ ] y\n  - [x] x\n- [ ] b")
-    let edit = MarkdownEditing.sinkCheckedTask(at: 0, in: "- [x] a\n- [ ] b\n")
-    #expect(edit?.item == NSRange(location: 0, length: 8))
-    #expect(edit?.to == 8)
   }
 }

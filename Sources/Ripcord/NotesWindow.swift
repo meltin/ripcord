@@ -1527,9 +1527,9 @@ final class NoteTextView: NSTextView {
     } else {
       caret = selection.location
     }
-    replace(
-      sink.range, with: sink.replacement,
-      selecting: NSRange(location: caret, length: selection.length))
+    // The text is as long as before; a selection carried down mustn't run past its end.
+    let length = min(selection.length, (string as NSString).length - caret)
+    replace(sink.range, with: sink.replacement, selecting: NSRange(location: caret, length: length))
   }
 
   /// `- [] ` typed becomes `- [ ] `, and ``` a code block, as an undo step of its own.

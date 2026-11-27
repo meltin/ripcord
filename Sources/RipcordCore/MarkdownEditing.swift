@@ -211,10 +211,11 @@ public enum MarkdownEditing {
     let range = NSUnionRange(items[moving], items[lastOpen])
     var passed = string.substring(with: NSUnionRange(items[moving + 1], items[lastOpen]))
     var item = string.substring(with: items[moving])
-    // The last item of the text may end without a line break; the one moved there takes over.
-    if !passed.hasSuffix("\n") {
-      passed += "\n"
-      item = String(item.dropLast(item.hasSuffix("\r\n") ? 2 : 1))
+    // The last item of the text may end without a line break; the one moved there hands its own
+    // over. "\r\n" is one Character, so it moves whole.
+    if passed.last?.isNewline != true, let ending = item.last, ending.isNewline {
+      passed.append(ending)
+      item.removeLast()
     }
     return (range, passed + item, items[moving], range.location + (passed as NSString).length)
   }
