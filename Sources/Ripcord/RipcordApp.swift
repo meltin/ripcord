@@ -1,4 +1,5 @@
 import AppKit
+import RipcordControl
 import RipcordCore
 import ServiceManagement
 import UniformTypeIdentifiers
@@ -22,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let launcher = LauncherController()
   private let updater = Updater()
   private let snippetExpander = SnippetExpander()
+  private var control: ControlServer?
   private lazy var settings: SettingsWindowController = {
     let model = SettingsModel(configURL: configURL)
     model.updater = updater
@@ -89,6 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     launcher.onCheckForUpdates = { [weak self] in self?.checkForUpdates() }
     settings.model.onClearClipboard = { [weak self] in self?.launcher.clearClipboardHistory() }
     launcher.onBackdropError = { [weak self] in self?.settings.model.backdropError = $0 }
+    startControl()
     snippetExpander.onExpand = { [weak self] in self?.launcher.pasteExpansion($0, trailing: $1) }
     launcher.onNotes = { [weak self] in self?.notes.handle($0) }
     notes.onBrowse = { [weak self] in self?.launcher.perform(.run(.searchNotes)) }
@@ -120,6 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   /// What's typed in a note is saved before quitting, as its autosave may not have run yet.
   func applicationWillTerminate(_ notification: Notification) {
     notes.flushForQuit()
+    control?.stop()
   }
 
   /// Opening Ripcord.app again shows the panel, a way in when the hotkey or menu bar icon fails.
@@ -214,6 +218,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
     } catch {
       showError("Couldn't import \(url.lastPathComponent): \(error.localizedDescription)")
+    }
+  }
+
+  /// The socket the `ripcord` command talks to; without it the app works as before.
+  private func startControl() {
+    let server = ControlServer { [weak self] request in
+      await MainActor.run { self?.answer(request) }
+        ?? ControlResponse(error: "Ripcord is quitting.")
+    }
+    do {
+      try server.start()
+      control = server
+    } catch {
+      NSLog("Ripcord: \(error.localizedDescription)")
+    }
+  }
+
+  private func answer(_ request: ControlRequest) -> ControlResponse {
+    switch request {
+    case .open(let query):
+      if !launcher.isVisible { applyConfig() }
+      launcher.open(query: query)
+      return ControlResponse()
+    case .pick, .configGet, .configSet:
+      return ControlResponse(error: "ripcord: not yet.")
     }
   }
 

@@ -1958,6 +1958,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
     clipboard.pasteSnippet(text, trailing: trailing)
   }
 
+  /// `ripcord open`: the panel, with `query` typed if given; one already open stays open.
+  func open(query: String?) {
+    if !panel.isVisible { show(.root) }
+    if let query { update(query) }
+  }
+
   /// The backdrop setting: "off", a built-in shader's name, or a file in the shaders folder.
   var backdrop = Backdrop.off {
     didSet { if backdrop != oldValue { loadBackdrop() } }

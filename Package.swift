@@ -10,14 +10,19 @@ let package = Package(
   ],
   targets: [
     .target(name: "RipcordCore"),
+    // What the `ripcord` command and the app share: Foundation only, so the command starts fast.
+    .target(name: "RipcordControl"),
+    .executableTarget(name: "ripcord-cli", dependencies: ["RipcordControl"]),
     .executableTarget(
       name: "Ripcord",
-      dependencies: ["RipcordCore", .product(name: "Sparkle", package: "Sparkle")],
+      dependencies: [
+        "RipcordCore", "RipcordControl", .product(name: "Sparkle", package: "Sparkle"),
+      ],
       // Where the embedded Sparkle.framework is found at run time.
       linkerSettings: [
         .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])
       ]
     ),
-    .testTarget(name: "RipcordCoreTests", dependencies: ["RipcordCore"]),
+    .testTarget(name: "RipcordCoreTests", dependencies: ["RipcordCore", "RipcordControl"]),
   ]
 )
