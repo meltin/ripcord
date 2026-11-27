@@ -136,7 +136,7 @@ struct SearchView: View {
           if toast.failed {
             Glyph("exclamationmark.triangle.fill", pointSize: 12).foregroundStyle(.red)
           }
-          Text(toast.text).lineLimit(1).font(.system(size: 13))
+          Text(toast.text).lineLimit(1).font(.system(size: Metrics.toastFontSize))
         }
         .padding(.horizontal, 14)
         .frame(height: 32)
@@ -216,7 +216,7 @@ struct SearchView: View {
           ForEach(model.sections) { section in
             if !section.title.isEmpty {
               Text(section.title)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: Metrics.sectionFontSize, weight: .medium))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
@@ -297,9 +297,9 @@ private struct EmptyState: View {
     VStack(spacing: 10) {
       Glyph("magnifyingglass", pointSize: 34)
         .foregroundStyle(.tertiary)
-      Text("No Results").font(.system(size: 15, weight: .semibold))
+      Text("No Results").font(.system(size: Metrics.emptyTitleFontSize, weight: .semibold))
       Text(message)
-        .font(.system(size: 13))
+        .font(.system(size: Metrics.emptyMessageFontSize))
         .foregroundStyle(.secondary)
         .multilineTextAlignment(.center)
         .frame(maxWidth: 360)
@@ -320,14 +320,16 @@ private struct ResultRow: View {
     HStack(spacing: 12) {
       ResultIcon(result: result)
       // Ahead of a long path on the right, which shrinks first.
-      Text(result.title).font(.system(size: 14)).lineLimit(1).layoutPriority(1)
+      Text(result.title).font(.system(size: Metrics.rowTitleFontSize))
+        .lineLimit(1).layoutPriority(1)
       // A repository's path goes on the right, as Raycast lines them up.
       if !result.subtitle.isEmpty, result.kind != .repository {
-        Text(result.subtitle).font(.system(size: 14)).foregroundStyle(.secondary).lineLimit(1)
+        Text(result.subtitle).font(.system(size: Metrics.rowSubtitleFontSize))
+          .foregroundStyle(.secondary).lineLimit(1)
       }
       if let keyword = result.keyword {
         Text(keyword)
-          .font(.system(size: 13))
+          .font(.system(size: Metrics.rowKeywordFontSize))
           .foregroundStyle(.secondary)
           .padding(.horizontal, 7)
           .padding(.vertical, 2)
@@ -339,18 +341,18 @@ private struct ResultRow: View {
       Spacer(minLength: 12)
       ForEach(result.tags, id: \.self) { tag in
         Text(tag)
-          .font(.system(size: 12))
+          .font(.system(size: Metrics.rowTagFontSize))
           .foregroundStyle(.secondary)
           .padding(.horizontal, 7)
           .padding(.vertical, 2)
           .background(.quaternary, in: Capsule())
       }
       if result.kind == .repository {
-        Text(result.subtitle).font(.system(size: 13)).foregroundStyle(.secondary)
-          .lineLimit(1).truncationMode(.head)
+        Text(result.subtitle).font(.system(size: Metrics.rowPathFontSize))
+          .foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
       } else if showsKind {
         // Raycast's Draft label is green.
-        Text(result.kind.label).font(.system(size: 13))
+        Text(result.kind.label).font(.system(size: Metrics.rowKindFontSize))
           .foregroundStyle(
             result.kind == .draft ? AnyShapeStyle(Color.green) : AnyShapeStyle(.secondary))
       }
@@ -449,7 +451,7 @@ private struct ResultIcon: View {
       tile("star", .yellow)
     case .runScript:
       if let emoji = result.symbol {
-        Text(emoji).font(.system(size: 17)).frame(width: 24, height: 24)
+        Text(emoji).font(.system(size: Metrics.iconEmojiFontSize)).frame(width: 24, height: 24)
       } else {
         tile("terminal", .gray)
       }
@@ -659,7 +661,7 @@ private struct ClipPreview: View {
           ScrollView {
             // A 1 MB clip would stall layout; the start is what anyone reads here.
             Text(String(text.prefix(20_000)))
-              .font(.system(size: 12))
+              .font(.system(size: Metrics.previewFontSize))
               .textSelection(.enabled)
               .frame(maxWidth: .infinity, alignment: .topLeading)
               .padding(16)
@@ -718,7 +720,7 @@ private struct SnippetForm: View {
       VStack(alignment: .leading, spacing: 8) {
         label("Snippet")
         TextEditor(text: $model.draft.text, selection: $selection)
-          .font(.system(size: 13))
+          .font(.system(size: Metrics.formTextBoxFontSize))
           .scrollContentBackground(.hidden)
           .scrollIndicators(.never)
           .padding(10)
@@ -784,7 +786,7 @@ private struct SnippetForm: View {
       }
       .frame(width: 280)
     }
-    .font(.system(size: 14))
+    .font(.system(size: Metrics.formFontSize))
     .padding(.horizontal, 40)
     .padding(.top, 4)
     // Clear of the floating footer, with the same gap the sides have.
@@ -820,7 +822,7 @@ private struct SnippetForm: View {
   }
 
   private func label(_ text: String) -> some View {
-    Text(text).font(.system(size: 12)).foregroundStyle(.secondary)
+    Text(text).font(.system(size: Metrics.formLabelFontSize)).foregroundStyle(.secondary)
   }
 }
 
@@ -880,7 +882,7 @@ private struct BookmarkForm: View {
         }
       }
     }
-    .font(.system(size: 14))
+    .font(.system(size: Metrics.formFontSize))
     .padding(.top, 28)
     // Clear of the floating footer.
     .padding(.bottom, LauncherController.footerHeight + 12)
@@ -931,7 +933,7 @@ private struct BookmarkForm: View {
   }
 
   private func label(_ text: String) -> some View {
-    Text(text).font(.system(size: 12)).foregroundStyle(.secondary)
+    Text(text).font(.system(size: Metrics.formLabelFontSize)).foregroundStyle(.secondary)
       .gridColumnAlignment(.trailing)
   }
 }
@@ -962,7 +964,7 @@ private struct PlaceholderList: View {
           Text("· \(hovered)").foregroundStyle(.tertiary)
         }
       }
-      .font(.system(size: 12))
+      .font(.system(size: Metrics.formLabelFontSize))
       ForEach(rows.indices, id: \.self) { row in
         HStack(spacing: 6) {
           ForEach(rows[row], id: \.token) { placeholder in
@@ -988,7 +990,7 @@ private struct PlaceholderChip: View {
       onInsert(token)
     } label: {
       Text(verbatim: token)
-        .font(.system(size: 11, design: .monospaced))
+        .font(.system(size: Metrics.placeholderChipFontSize, design: .monospaced))
         .foregroundStyle(.tint)
         .padding(.horizontal, 7)
         .padding(.vertical, 3)
@@ -1356,7 +1358,7 @@ private struct OptionalBadge: View {
   var body: some View {
     if argument.optional == true {
       Text("?")
-        .font(.system(size: 8, weight: .bold))
+        .font(.system(size: Metrics.optionalBadgeFontSize, weight: .bold))
         .foregroundStyle(Color(nsColor: .windowBackgroundColor))
         .frame(width: 12, height: 12)
         .background(Circle().fill(Color.primary.opacity(0.75)))
@@ -1487,10 +1489,10 @@ private struct ScriptOutputView: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 10) {
-        Text(output.title).font(.system(size: 13, weight: .semibold))
+        Text(output.title).font(.system(size: Metrics.outputTitleFontSize, weight: .semibold))
           .foregroundStyle(output.failed ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
         Text(output.output ?? "Running…")
-          .font(.system(size: 12, design: .monospaced))
+          .font(.system(size: Metrics.outputFontSize, design: .monospaced))
           .foregroundStyle(
             output.output == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary)
           )
@@ -1525,7 +1527,7 @@ private struct EmojiGrid: View {
               Text(section.title).foregroundStyle(.secondary)
               Text("\(section.results.count)").foregroundStyle(.tertiary)
             }
-            .font(.system(size: 12, weight: .medium))
+            .font(.system(size: Metrics.sectionFontSize, weight: .medium))
             .padding(.horizontal, 4)
             .padding(.top, 6)
             LazyVGrid(columns: columns, spacing: 8) {
@@ -1551,7 +1553,7 @@ private struct EmojiGrid: View {
 
   private func tile(_ result: SearchResult, isSelected: Bool) -> some View {
     Text(result.subtitle)
-      .font(.system(size: 34))
+      .font(.system(size: Metrics.emojiTileFontSize))
       .frame(maxWidth: .infinity)
       .frame(height: 64)
       .background(
@@ -1608,7 +1610,7 @@ private struct SnippetPreview: View {
     VStack(alignment: .leading, spacing: 0) {
       ScrollView {
         Text(text)
-          .font(.system(size: 12))
+          .font(.system(size: Metrics.previewFontSize))
           .textSelection(.enabled)
           .frame(maxWidth: .infinity, alignment: .topLeading)
           .padding(16)
@@ -1639,13 +1641,13 @@ private struct Information<Rows: View>: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 2) {
         Text("Information")
-          .font(.system(size: 12, weight: .medium))
+          .font(.system(size: Metrics.infoTitleFontSize, weight: .medium))
           .foregroundStyle(.secondary)
           .padding(.horizontal, 8)
           .padding(.bottom, 4)
         rows
       }
-      .font(.system(size: 12))
+      .font(.system(size: Metrics.infoFontSize))
       .padding(.horizontal, 8)
       .padding(.top, 10)
       // Clear of the floating footer.
@@ -1799,7 +1801,7 @@ private struct Footer: View {
       .frame(height: 32)
       .glassEffect(.regular, in: Capsule())
     }
-    .font(.system(size: 12))
+    .font(.system(size: Metrics.footerFontSize))
     .padding(.horizontal, 8)
     .frame(height: LauncherController.footerHeight)
     .background(DragArea())
@@ -1849,9 +1851,10 @@ private struct ConfirmationCard: View {
             .frame(width: 42, height: 42)
             .background(icon.color.gradient, in: RoundedRectangle(cornerRadius: 11))
           VStack(alignment: .leading, spacing: 5) {
-            Text(confirmation.title).font(.system(size: 15, weight: .semibold))
+            Text(confirmation.title)
+              .font(.system(size: Metrics.confirmationTitleFontSize, weight: .semibold))
             Text(confirmation.message)
-              .font(.system(size: 13))
+              .font(.system(size: Metrics.confirmationMessageFontSize))
               .foregroundStyle(.secondary)
               .fixedSize(horizontal: false, vertical: true)
           }
@@ -1878,7 +1881,7 @@ private struct ConfirmationCard: View {
         Text(title).foregroundStyle(tint)
         Keycap(key)
       }
-      .font(.system(size: 13, weight: .medium))
+      .font(.system(size: Metrics.confirmationButtonFontSize, weight: .medium))
       .frame(maxWidth: .infinity, minHeight: 36)
       .background(tint.opacity(fill), in: RoundedRectangle(cornerRadius: 10))
       .contentShape(RoundedRectangle(cornerRadius: 10))
@@ -2037,12 +2040,12 @@ private struct ConfigureEditorCard: View {
         case .hotkey:
           VStack(spacing: 8) {
             Text(hotkeyCaption)
-              .font(.system(size: 12))
+              .font(.system(size: Metrics.cardCaptionFontSize))
               .foregroundStyle(.secondary)
             HStack(spacing: 4) {
               ForEach(Array(shownKeys.enumerated()), id: \.offset) { _, key in
                 Text(key)
-                  .font(.system(size: 11, weight: .medium))
+                  .font(.system(size: Metrics.cardKeyFontSize, weight: .medium))
                   .frame(minWidth: 22, minHeight: 22)
                   .padding(.horizontal, key.count > 1 ? 4 : 0)
                   .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
@@ -2050,7 +2053,7 @@ private struct ConfigureEditorCard: View {
             }
             .opacity(isExample ? 0.6 : 1)
             Text(editor.problem ?? (isExample ? "Modifiers and a key" : " "))
-              .font(.system(size: 12))
+              .font(.system(size: Metrics.cardCaptionFontSize))
               .foregroundStyle(
                 editor.problem == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.red))
           }
@@ -2061,7 +2064,7 @@ private struct ConfigureEditorCard: View {
       Divider().opacity(0.5)
       HStack(spacing: 8) {
         ResultIcon(result: editor.row).scaleEffect(0.75).frame(width: 18, height: 18)
-        Text(editor.row.title).font(.system(size: 12)).lineLimit(1)
+        Text(editor.row.title).font(.system(size: Metrics.cardFooterFontSize)).lineLimit(1)
         Spacer(minLength: 12)
         if editor.kind == .alias {
           hint("Close", "Esc")
@@ -2099,7 +2102,7 @@ private struct ConfigureEditorCard: View {
 
   private func hint(_ title: String, _ key: String) -> some View {
     HStack(spacing: 5) {
-      Text(title).font(.system(size: 12)).foregroundStyle(.secondary)
+      Text(title).font(.system(size: Metrics.cardFooterFontSize)).foregroundStyle(.secondary)
       Keycap(key)
     }
   }
@@ -2139,7 +2142,7 @@ struct Keycap: View {
         ? Text(
           Tabler.image("return", size: 11).map { Image(nsImage: $0).renderingMode(.template) }
             ?? Image(systemName: "return")
-        ).font(.system(size: 9, weight: .semibold))
+        ).font(.system(size: Metrics.keycapGlyphFontSize, weight: .semibold))
         : Text(String(character))
       return Text("\(text)\(piece)")
     }
@@ -2148,7 +2151,7 @@ struct Keycap: View {
   var body: some View {
     // Filled and softly edged, like Raycast's keycaps.
     text
-      .font(.system(size: 10, weight: .medium))
+      .font(.system(size: Metrics.keycapFontSize, weight: .medium))
       .foregroundStyle(.secondary)
       .padding(.horizontal, 4)
       .frame(minWidth: 18, minHeight: 18)
