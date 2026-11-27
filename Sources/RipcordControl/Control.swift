@@ -49,7 +49,13 @@ public enum Control {
            ripcord pick [--placeholder TEXT] < lines
            ripcord config get [KEY]
            ripcord config set KEY JSON
+           ripcord mcp
     """
+
+  /// What a pick can list: no empty lines, and at most `maxPickItems`.
+  public static func pickable(_ items: [String]) -> [String] {
+    Array(items.filter { !$0.isEmpty }.prefix(maxPickItems))
+  }
 
   /// The request `arguments` (without the command's own name) ask for; `stdin` gives a pick's
   /// lines. Nil with a usage error when they don't parse.
@@ -72,9 +78,8 @@ public enum Control {
       } else {
         return .failure(UsageError())
       }
-      let items = stdin().split(separator: "\n", omittingEmptySubsequences: true)
-        .prefix(maxPickItems).map(String.init)
-      return .success(.pick(items: items, placeholder: placeholder))
+      let lines = stdin().split(separator: "\n").map(String.init)
+      return .success(.pick(items: pickable(lines), placeholder: placeholder))
     case "config":
       let rest = Array(arguments.dropFirst())
       switch (rest.first, rest.count) {
