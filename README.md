@@ -219,7 +219,7 @@ bundle ID) and Ripcord's commands; a Quicklink keeps its own `hotkey` and `disab
 
 `backdrop` animates a Metal shader behind the panel's text: `off` (the default), `glow`, `matrix`,
 or the name of a `.metal` file in `~/.config/ripcord/shaders`. Pick it under Settings › General,
-whose Open Shaders Folder button opens that folder. A shader defines one function:
+whose Open Folder button opens that folder. A shader defines one function:
 
 ```metal
 float4 backdrop(float2 p, Backdrop b) {
@@ -232,9 +232,10 @@ float4 backdrop(float2 p, Backdrop b) {
 color and its alpha, which Ripcord premultiplies and clips to the panel's corners. `b` holds the
 panel's `size`, `time` since it showed, `dark` (1 or 0), the system `accent` color (`.rgb`),
 `keystroke` (seconds since the query last changed), `query` (its length) and `field` (the search
-field's height). The file is read each time the panel shows; one that doesn't compile keeps the
-last that did, and Settings › General shows why. It runs on the GPU for every pixel while the
-panel shows, so a heavy one slows the panel; under Reduce Motion or Low Power Mode it holds still.
+field's height). A file can be at most 32 KB. It's read each time the panel or Settings opens;
+one that doesn't compile keeps the last that did, and Settings › General shows why. It runs on
+the GPU for every pixel while the panel shows, so a heavy one slows the panel; under Reduce
+Motion or Low Power Mode it holds still.
 
 `inputSource` is the keyboard input source the panel switches to while it's open, so a Japanese
 input method left on doesn't turn the query into kana; the previous one comes back when it closes.
