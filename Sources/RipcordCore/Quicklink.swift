@@ -171,3 +171,21 @@ extension Quicklink {
     return (links, links.count - current.count, skipped)
   }
 }
+
+/// Settings › Quicklinks' settings, as Raycast's.
+public struct QuicklinkSettings: Codable, Equatable, Sendable {
+  /// A Quicklink's hotkey fills its `{query}` with the text selected in the app in front, as
+  /// Raycast's "Pass Selected Text as Argument"; off by default, as there.
+  public var passSelectedText: Bool
+
+  public init(passSelectedText: Bool = false) {
+    self.passSelectedText = passSelectedText
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.init(
+      passSelectedText: try container.decodeIfPresent(Bool.self, forKey: .passSelectedText)
+        ?? false)
+  }
+}

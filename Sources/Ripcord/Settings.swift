@@ -713,6 +713,11 @@ private enum SettingText {
     detail: "When you check off a task, move it below the unchecked tasks in its list.")
   static let notesZoom = SettingsSearch.Item(
     title: "Zoom", detail: "Adjust the zoom level in the Notes content.")
+  static let passSelectedText = SettingsSearch.Item(
+    title: "Pass Selected Text as Argument",
+    detail:
+      "When enabled, a Quicklink's hotkey fills its {query} with the text selected in the app in front."
+  )
   static let windowGap = SettingsSearch.Item(
     title: "Window Gap", detail: "Gap between windows")
   static let screenGap = SettingsSearch.Item(
@@ -744,6 +749,7 @@ extension SettingsPage {
           ]
       case .colorPicker: [SettingText.colorFormat, SettingText.showColorName]
       case .httpStatusCodes: [SettingText.httpStatusPicture]
+      case .quicklinks: [SettingText.passSelectedText]
       case .notes:
         [SettingText.escapeLosesFocus, SettingText.moveCheckedTasks, SettingText.notesZoom]
       case .scripts: [SettingText.scriptFolders]
@@ -838,6 +844,19 @@ struct SettingsView: View {
         case .quicklinks:
           PageScroll(model: model) {
             PageHeader(page: .quicklinks)
+            Card {
+              SettingRow(
+                title: SettingText.passSelectedText.title,
+                description: SettingText.passSelectedText.detail
+              ) {
+                Toggle(
+                  SettingText.passSelectedText.title,
+                  isOn: $model.config.quicklinkSettings.passSelectedText
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+              }
+            }
             QuicklinksPage(model: model)
             CommandsList(model: model, page: .quicklinks)
           }
