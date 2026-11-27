@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import RipcordCore
@@ -45,5 +46,10 @@ struct DummyTextTests {
   @Test func offersThePreferredLanguageFirst() {
     #expect(DummyText.arguments(preferred: .english)[1].initialValue == "en")
     #expect(DummyText.arguments(preferred: .japanese)[1].initialValue == "ja")
+  }
+
+  @Test func writesJapaneseUnlessSetOtherwise() throws {
+    let config = try JSONDecoder().decode(Config.self, from: Data(#"{"hotkey":"cmd+space"}"#.utf8))
+    #expect(config.dummyTextLanguage == .japanese)
   }
 }
