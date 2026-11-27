@@ -48,6 +48,8 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   private static let autoSizingKey = "notesWindowAutoSizing"
   private static let hiddenWhileSharingKey = "notesHiddenWhileSharing"
   private static let zoomKey = "notesZoom"
+  /// Where the window's top left was last, as Raycast Notes reopens where it was moved to.
+  private static let placeKey = "notesWindowTopLeft"
   private static let saveDelay = 0.6
 
   /// Raycast Notes' window, measured: 396pt wide, 144pt tall empty, 39pt in from the right of
@@ -455,10 +457,22 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? .main
     else { return }
     let size = window.frame.size
+    // Where it was moved to, when that's on this screen; else this screen's top right.
+    if let saved = UserDefaults.standard.string(forKey: Self.placeKey).map(NSPointFromString),
+      screen.visibleFrame.contains(saved)
+    {
+      return window.setFrameTopLeftPoint(saved)
+    }
     window.setFrameOrigin(
       NSPoint(
         x: screen.visibleFrame.maxX - Self.inset.right - size.width,
         y: screen.frame.maxY - Self.inset.top - size.height))
+  }
+
+  func windowDidMove(_ notification: Notification) {
+    guard notification.object as? NSWindow === window else { return }
+    let topLeft = NSPoint(x: window.frame.minX, y: window.frame.maxY)
+    UserDefaults.standard.set(NSStringFromPoint(topLeft), forKey: Self.placeKey)
   }
 
   /// As tall as the note, top edge kept, up to the screen's bottom, as Raycast Notes grows.
