@@ -20,6 +20,8 @@ final class SettingsModel {
   var failedHotkeys: Set<HotkeyTarget> = []
   /// Scanned when the Applications page first appears, so the window costs nothing until then.
   var apps: [AppEntry] = []
+  /// Its daily check is a General setting; nil leaves the row out.
+  var updater: Updater?
   /// The one row recording a hotkey; starting another row stops it.
   private(set) var recordingTarget: HotkeyTarget?
   private(set) var recorderMessage: (target: HotkeyTarget, text: String)?
@@ -532,7 +534,7 @@ extension BuiltinCommand {
     case .ripcordNotes, .createNote, .searchNotes: .notes
     case .searchEmoji: .emoji
     case .httpStatusCodes: .httpStatusCodes
-    case .settings, .resetWindowPosition, .quit: .ripcord
+    case .settings, .resetWindowPosition, .checkForUpdates, .quit: .ripcord
     }
   }
 }
@@ -790,6 +792,18 @@ private struct GeneralPage: View {
         Toggle("Launch at Login", isOn: $model.config.launchAtLogin)
           .toggleStyle(.switch)
           .labelsHidden()
+      }
+      // Not in a copy Nix installed, which Nix updates.
+      if let updater = model.updater, updater.isAvailable {
+        Divider()
+        SettingRow(
+          title: "Check for Updates Automatically",
+          description: "Looks for a new version once a day, and offers to install it."
+        ) {
+          Toggle("Check for Updates Automatically", isOn: Bindable(updater).checksAutomatically)
+            .toggleStyle(.switch)
+            .labelsHidden()
+        }
       }
       Divider()
       SettingRow(

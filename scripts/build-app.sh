@@ -37,16 +37,30 @@ cp Resources/ThirdParty/Tabler-LICENSE.txt "$app/Contents/Resources/"
 # Search Emoji & Symbols' list, made by scripts/make-emoji-data.py.
 cp -R Resources/Emoji "$app/Contents/Resources/"
 cp Resources/ThirdParty/Unicode-LICENSE.txt "$app/Contents/Resources/"
+# Sparkle, for updates in the app. ditto keeps the framework's symbolic links. Its XPC services
+# are only for sandboxed apps, which Ripcord isn't.
+framework="$app/Contents/Frameworks/Sparkle.framework"
+mkdir -p "$app/Contents/Frameworks"
+ditto "$bin/Sparkle.framework" "$framework"
+rm -rf "$framework/XPCServices" "$framework/Versions/B/XPCServices"
+cp Resources/ThirdParty/Sparkle-LICENSE.txt "$app/Contents/Resources/"
 # Signed with the certificate from scripts/create-signing-certificate.sh when it's in the keychain,
 # so macOS keeps permissions across builds; ad hoc otherwise (Nix, CI, a fresh clone).
+# Sparkle's helpers and framework are signed first, inside out, with the same identity as the app.
 identity="Ripcord Self-Signed"
+sign() {
+  for path in "$framework/Versions/B/Autoupdate" "$framework/Versions/B/Updater.app" \
+    "$framework" "$app"; do
+    codesign --force --sign "$1" "$path" || return 1
+  done
+}
 if command -v security >/dev/null 2>&1 &&
   security find-identity -v -p codesigning 2>/dev/null | grep -qF "\"$identity\"" &&
-  codesign --force --sign "$identity" "$app"; then
+  sign "$identity"; then
   echo "Signed with \"$identity\"." >&2
 else
   # Also when the keychain is locked, as over SSH: a build beats none.
   echo "Signed ad hoc: no usable \"$identity\"; macOS will ask for Accessibility again." >&2
-  codesign --force --sign - "$app"
+  sign -
 fi
 echo "$app"

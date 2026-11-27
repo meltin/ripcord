@@ -21,3 +21,21 @@ These settled after side-by-side comparisons with Raycast; new UI should follow 
 - **Searchable lists in a dropdown**: rounded rows with a soft highlight that follows the pointer
   and ↑↓ (held keys repeat), Return to pick, and the search field at the bottom, focused as it
   opens.
+
+## Releasing
+
+Releases are made on the maintainer's Mac, which holds the two keys they're signed with: the
+certificate from `scripts/create-signing-certificate.sh`, and Sparkle's EdDSA key, made once with
+`.build/artifacts/sparkle/Sparkle/bin/generate_keys` (after any `swift build`). Neither goes in the
+repository. Back the EdDSA key up (`generate_keys -x <file>`): without it, no update can be signed
+that installed copies will accept.
+
+1. In `Resources/Info.plist`, raise `CFBundleShortVersionString`, and `CFBundleVersion` by one.
+   Sparkle offers a release only when its `CFBundleVersion` is higher than the installed one.
+2. Run `scripts/make-release.sh`. It builds the app, stops if it isn't signed with the
+   certificate (an ad hoc build would make every update drop Accessibility), zips it with `ditto`,
+   checks the zip's copy still verifies, and writes `build/release/appcast.xml` with the zip's
+   EdDSA signature.
+3. Publish both files: `gh release create v<version> --title "Ripcord <version>" --notes "…"
+   build/release/Ripcord-<version>.zip build/release/appcast.xml`. Every release needs its
+   `appcast.xml`: Ripcord reads the feed from the latest release, and without it the check fails.

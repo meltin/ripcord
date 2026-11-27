@@ -87,11 +87,18 @@ another hotkey in Settings later.
 
 1. Download `Ripcord-<version>.zip` from [Releases](https://github.com/meltin/ripcord/releases),
    unzip it and move `Ripcord.app` to `/Applications`.
-2. Ripcord is ad-hoc signed and not notarized, so macOS blocks the first launch. Run
-   `xattr -dr com.apple.quarantine /Applications/Ripcord.app`, or Control-click the app and choose
-   Open.
+2. Ripcord is signed with its own self-signed certificate and not notarized, so macOS blocks the
+   first launch. Run `xattr -dr com.apple.quarantine /Applications/Ripcord.app`, or Control-click
+   the app and choose Open.
 
 Requires macOS 26 or later on Apple silicon.
+
+### Updates
+
+Ripcord looks for a new release once a day and offers to install it, through
+[Sparkle](https://sparkle-project.org). Check for Updates is in the menu bar menu, the panel's ⌘K
+menu and the search; Settings › General turns the daily check off. 0.1.0 has no updater, so install
+the release after it by hand once. A copy installed with Nix is updated by Nix instead.
 
 ### With Nix
 
@@ -134,6 +141,9 @@ It adds a self-signed certificate to your login keychain and asks for your passw
 it for code signing. `scripts/build-app.sh` signs with it from then on. Once after creating it,
 remove Ripcord from the Accessibility list (or run the `tccutil reset` command above) and grant it
 to the next build; later builds keep it.
+
+Releases after 0.1.0 are signed with the project's own certificate, the same one each time, so an
+update keeps the permission. Moving from 0.1.0, which was signed ad hoc, grant it once more.
 
 System Actions use Accessibility for the music and volume keys too, as Window Management does to
 move windows. Empty Trash, Toggle System Appearance and Log Out, Restart and Shut Down ask macOS
@@ -211,3 +221,5 @@ The emoji names come from Unicode's [CLDR](https://github.com/unicode-org/cldr-j
 [Unicode License](./Resources/ThirdParty/Unicode-LICENSE.txt).
 The other icons are [Tabler Icons](https://github.com/tabler/tabler-icons), under
 [MIT](./Resources/ThirdParty/Tabler-LICENSE.txt).
+Updates come through [Sparkle](https://github.com/sparkle-project/Sparkle), under
+[its license](./Resources/ThirdParty/Sparkle-LICENSE.txt).
