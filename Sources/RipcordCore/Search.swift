@@ -11,6 +11,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case searchBookmarks, addBookmark
   case searchEmoji
   case ripcordNotes, createNote, searchNotes
+  case generateDummyText
   case resetWindowPosition, checkForUpdates, quit
 
   public var title: String {
@@ -36,6 +37,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .ripcordNotes: "Ripcord Notes"
     case .createNote: "Create Note"
     case .searchNotes: "Search Notes"
+    case .generateDummyText: "Generate Dummy Text"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .checkForUpdates: "Check for Updates"
     case .quit: "Quit Ripcord"
@@ -52,6 +54,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .searchBookmarks, .addBookmark: "Bookmarks"
     case .searchEmoji: "Emoji & Symbols"
     case .ripcordNotes, .createNote, .searchNotes: "Notes"
+    case .generateDummyText: "Dummy Text"
     default: "Ripcord"
     }
   }
@@ -80,6 +83,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .ripcordNotes: "command:ripcord-notes"
     case .createNote: "command:create-note"
     case .searchNotes: "command:search-notes"
+    case .generateDummyText: "command:generate-dummy-text"
     case .resetWindowPosition: "command:reset-window-position"
     case .checkForUpdates: "command:check-for-updates"
     case .quit: "command:quit"
@@ -218,6 +222,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case openNote(URL)
     /// Moves the note in this file to the Trash.
     case deleteNote(URL)
+    /// Generate Dummy Text's ⌘↵: the text copied rather than pasted.
+    case copyDummyText
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -907,9 +913,19 @@ public enum Search {
   }
 
   private static func result(for command: BuiltinCommand, alias: String?) -> SearchResult {
-    SearchResult(
+    // Return pastes the text into the app you were in, and ⌘↵ copies it, as Search Emoji's do.
+    let menu: [MenuAction]? =
+      command == .generateDummyText
+      ? [
+        MenuAction(
+          title: "Paste Dummy Text", symbol: "return", shortcut: "↵", action: .run(command)),
+        MenuAction(
+          title: "Copy Dummy Text", symbol: "doc.on.doc", shortcut: "⌘↵", action: .copyDummyText),
+        .configure(command.settingsKey),
+      ] : nil
+    return SearchResult(
       id: "command:\(command)", title: command.title, subtitle: command.group, keyword: alias,
-      kind: .command, action: .run(command))
+      kind: .command, action: .run(command), menu: menu)
   }
 }
 
