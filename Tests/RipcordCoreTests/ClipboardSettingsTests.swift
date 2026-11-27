@@ -115,6 +115,38 @@ struct ClipboardSettingsTests {
     #expect(ClipboardHistory(directory: directory).items[0].recognizedText == "Invoice 2026-11")
   }
 
+  /// A text's formatting is kept in its own file, and goes with the entry.
+  @Test func keepsATextsFormatting() throws {
+    var (history, directory) = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let rtf = Data(#"{\rtf1 {\b bold} text}"#.utf8)
+    try history.add(.text("bold text"), formatting: (rtf, "rtf"))
+    try history.add(.text("plain"))
+    let formatted = history.items[1]
+    let url = try #require(history.formatURL(of: formatted))
+    #expect(try Data(contentsOf: url) == rtf)
+    #expect(history.formatURL(of: history.items[0]) == nil)
+    #expect(ClipboardSettings().preferPlainText)
+    try history.delete(formatted.id)
+    #expect(!FileManager.default.fileExists(atPath: url.path))
+  }
+
+  /// Copied again, a text takes that copy's formatting, or none.
+  @Test func theLatestCopysFormattingWins() throws {
+    var (history, directory) = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let rtf = Data(#"{\rtf1 {\b same}}"#.utf8)
+    try history.add(.text("same"))
+    #expect(history.formatURL(of: history.items[0]) == nil)
+    try history.add(.text("same"), formatting: (rtf, "rtf"))
+    #expect(history.items.count == 1)
+    let url = try #require(history.formatURL(of: history.items[0]))
+    #expect(try Data(contentsOf: url) == rtf)
+    try history.add(.text("same"))
+    #expect(history.formatURL(of: history.items[0]) == nil)
+    #expect(!FileManager.default.fileExists(atPath: url.path))
+  }
+
   /// Copy to Clipboard as the Primary Action puts copy on Return and paste on ⌘↵.
   @Test func primaryActionSwapsPasteAndCopy() throws {
     var (history, directory) = temporaryHistory()

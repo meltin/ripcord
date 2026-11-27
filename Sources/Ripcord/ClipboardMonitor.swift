@@ -49,7 +49,7 @@ final class ClipboardMonitor {
     let source = ClipCapture.source(pasteboard) ?? app?.bundleIdentifier
     // Disabled Applications: what they copy isn't recorded at all.
     if let source, history.settings.disabledApps.contains(source) { return }
-    update { try $0.add(capture, from: source) }
+    update { try $0.add(capture, from: source, formatting: ClipCapture.formatting(pasteboard)) }
     recognizeImages()
   }
 
@@ -143,14 +143,23 @@ final class ClipboardMonitor {
   }
 
   /// Puts `id` on the pasteboard and, unless Update History After Action is off, moves it to the
-  /// top of the history.
-  func copy(_ id: UUID) -> Bool {
+  /// top of the history. A text goes with the formatting it was copied with, unless `plain`.
+  func copy(_ id: UUID, plain: Bool = false) -> Bool {
     guard let item = history.item(id) else { return false }
     let written: Bool
     switch item.content {
     case .text(let text):
       pasteboard.clearContents()
-      written = pasteboard.setString(text, forType: .string)
+      let formatted = plain ? nil : history.formatURL(of: item)
+      if let formatted, let data = try? Data(contentsOf: formatted) {
+        // One item with both, so an app that can't take the formatting pastes the text.
+        let both = NSPasteboardItem()
+        both.setData(data, forType: formatted.pathExtension == "rtf" ? .rtf : .html)
+        both.setString(text, forType: .string)
+        written = pasteboard.writeObjects([both])
+      } else {
+        written = pasteboard.setString(text, forType: .string)
+      }
     case .image:
       // Read before clearing, so a missing file leaves what the user has copied alone.
       guard let url = history.imageURL(of: item), let data = try? Data(contentsOf: url) else {

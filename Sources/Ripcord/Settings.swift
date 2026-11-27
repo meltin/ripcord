@@ -632,6 +632,10 @@ private enum SettingText {
     detail: "Clipboard changes from these applications will not be recorded.")
   static let clipboardPrimaryAction = SettingsSearch.Item(
     title: "Primary Action", detail: "What Return does on an entry; the other is on ⌘↵.")
+  static let preferPlainText = SettingsSearch.Item(
+    title: "Prefer Pasting as Plain Text",
+    detail:
+      "When enabled, pasting will prioritise plain text over restoring the original formats.")
   static let updateAfterAction = SettingsSearch.Item(
     title: "Update History After Action",
     detail:
@@ -686,7 +690,7 @@ extension SettingsPage {
           SettingText.keepHistoryFor, SettingText.maxEntries, SettingText.clearHistory,
           SettingText.textRecognition, SettingText.recognitionMode,
           SettingText.clipboardDisabledApps, SettingText.clipboardPrimaryAction,
-          SettingText.updateAfterAction,
+          SettingText.preferPlainText, SettingText.updateAfterAction,
         ]
       case .snippets:
         [
@@ -1770,6 +1774,16 @@ private struct ClipboardHistorySettings: View {
         }
         .labelsHidden()
         .fixedSize()
+      }
+      Divider()
+      SettingRow(
+        title: SettingText.preferPlainText.title, description: SettingText.preferPlainText.detail
+      ) {
+        Toggle(
+          SettingText.preferPlainText.title, isOn: $model.config.clipboardHistory.preferPlainText
+        )
+        .toggleStyle(.switch)
+        .labelsHidden()
       }
       Divider()
       SettingRow(
