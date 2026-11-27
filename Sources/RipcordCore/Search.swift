@@ -298,12 +298,24 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
           title: "Copy URL", symbol: "doc.on.doc", shortcut: "⇧⌘C",
           action: .copy(url.absoluteString)),
       ]
-    case .clip(let id, _):
-      return [
-        primary,
-        MenuAction(
-          title: "Copy to Clipboard", symbol: "doc.on.doc", shortcut: "⇧⌘C",
-          action: .clip(id, .copy)),
+    case .clip(let id, let clipAction):
+      // With Copy to Clipboard as the Primary Action, copy is on ↵ and paste on ⌘↵.
+      let pasteAndCopy =
+        clipAction == .copy
+        ? [
+          MenuAction(
+            title: "Copy to Clipboard", symbol: "doc.on.doc", shortcut: "↵", action: action),
+          MenuAction(
+            title: kind.primaryAction, symbol: "return", shortcut: "⌘↵",
+            action: .clip(id, .paste)),
+        ]
+        : [
+          primary,
+          MenuAction(
+            title: "Copy to Clipboard", symbol: "doc.on.doc", shortcut: "⇧⌘C",
+            action: .clip(id, .copy)),
+        ]
+      return pasteAndCopy + [
         MenuAction(
           title: isPinned ? "Unpin" : "Pin", symbol: isPinned ? "pin.slash" : "pin",
           shortcut: "⇧⌘P", action: .clip(id, .togglePin)),
@@ -725,7 +737,8 @@ public enum Search {
     let matches = (items ?? history.items).compactMap {
       item -> (item: ClipItem, result: SearchResult)? in
       let id = "clip:\(item.id)"
-      let action = SearchResult.Action.clip(item.id, .paste)
+      let action = SearchResult.Action.clip(
+        item.id, history.settings.primaryAction == .copy ? .copy : .paste)
       switch item.content {
       case .text(let text):
         guard trimmed.isEmpty || text.localizedStandardContains(trimmed) else { return nil }

@@ -1,7 +1,20 @@
 import Foundation
 
-/// How long Clipboard History keeps entries and how many, as Raycast's "Keep history for".
+/// Clipboard History's settings, as Raycast's: how long and how many it keeps, the apps whose
+/// copies it never records, and what Return does on an entry.
 public struct ClipboardSettings: Codable, Equatable, Sendable {
+  /// What Return does on an entry; the other one is on ⌘↵.
+  public enum PrimaryAction: String, Codable, CaseIterable, Sendable {
+    case paste, copy
+
+    public var title: String {
+      switch self {
+      case .paste: "Paste to Active App"
+      case .copy: "Copy to Clipboard"
+      }
+    }
+  }
+
   public enum Retention: String, Codable, CaseIterable, Sendable {
     case day, week, month, threeMonths, sixMonths, year, unlimited
 
@@ -33,22 +46,47 @@ public struct ClipboardSettings: Codable, Equatable, Sendable {
     }
   }
 
+  /// Unlimited, as the largest count: a build from before it reads it as keeping everything too,
+  /// where 0 would have kept one.
+  public static let unlimitedEntries = Int.max
   /// The most unpinned entries kept, newest first.
-  public static let entryCounts = [100, 300, 1_000, 3_000]
+  public static let entryCounts = [100, 300, 1_000, 3_000, unlimitedEntries]
+  /// Raycast's: Passwords and Keychain Access.
+  public static let defaultDisabledApps = ["com.apple.Passwords", "com.apple.keychainaccess"]
 
   public var keepFor: Retention
   public var maxEntries: Int
+  /// Bundle IDs of the apps whose copies aren't recorded.
+  public var disabledApps: [String]
+  public var primaryAction: PrimaryAction
+  /// Whether pasting or copying an entry moves it to the top, as Raycast's "Update history
+  /// after action".
+  public var updateAfterAction: Bool
 
   /// Unlimited by age, as before this setting: none of what was kept goes until asked.
-  public init(keepFor: Retention = .unlimited, maxEntries: Int = 300) {
+  public init(
+    keepFor: Retention = .unlimited, maxEntries: Int = 300,
+    disabledApps: [String] = defaultDisabledApps, primaryAction: PrimaryAction = .paste,
+    updateAfterAction: Bool = true
+  ) {
     self.keepFor = keepFor
     self.maxEntries = maxEntries
+    self.disabledApps = disabledApps
+    self.primaryAction = primaryAction
+    self.updateAfterAction = updateAfterAction
   }
 
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     keepFor = (try? container.decodeIfPresent(Retention.self, forKey: .keepFor)) ?? .unlimited
     maxEntries = max(1, try container.decodeIfPresent(Int.self, forKey: .maxEntries) ?? 300)
+    disabledApps =
+      try container.decodeIfPresent([String].self, forKey: .disabledApps)
+      ?? Self.defaultDisabledApps
+    primaryAction =
+      (try? container.decodeIfPresent(PrimaryAction.self, forKey: .primaryAction)) ?? .paste
+    updateAfterAction =
+      try container.decodeIfPresent(Bool.self, forKey: .updateAfterAction) ?? true
   }
 }
 

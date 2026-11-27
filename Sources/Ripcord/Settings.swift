@@ -619,6 +619,16 @@ private enum SettingText {
   )
   static let clearHistory = SettingsSearch.Item(
     title: "Clear History", detail: "Delete every entry but the pinned ones.")
+  static let clipboardDisabledApps = SettingsSearch.Item(
+    title: "Disabled Applications",
+    detail: "Clipboard changes from these applications will not be recorded.")
+  static let clipboardPrimaryAction = SettingsSearch.Item(
+    title: "Primary Action", detail: "What Return does on an entry; the other is on ⌘↵.")
+  static let updateAfterAction = SettingsSearch.Item(
+    title: "Update History After Action",
+    detail:
+      "When enabled, clipboard items are moved to the top of the history after a copy or paste action."
+  )
   static let lidAwakePermission = SettingsSearch.Item(
     title: "Permission",
     detail:
@@ -664,7 +674,11 @@ extension SettingsPage {
       case .windowManagement: [SettingText.windowGap, SettingText.screenGap, SettingText.cycling]
       case .lidAwake: [SettingText.lidAwakePermission, SettingText.lidAwakeLowBattery]
       case .clipboardHistory:
-        [SettingText.keepHistoryFor, SettingText.maxEntries, SettingText.clearHistory]
+        [
+          SettingText.keepHistoryFor, SettingText.maxEntries, SettingText.clearHistory,
+          SettingText.clipboardDisabledApps, SettingText.clipboardPrimaryAction,
+          SettingText.updateAfterAction,
+        ]
       case .snippets:
         [
           SettingText.snippetExpansion, SettingText.expansionMode, SettingText.expandWithinWords,
@@ -1691,7 +1705,9 @@ private struct ClipboardHistorySettings: View {
           // One set in the file by hand stays listed, so the picker never goes blank.
           let counts = Set(
             ClipboardSettings.entryCounts + [model.config.clipboardHistory.maxEntries])
-          ForEach(counts.sorted(), id: \.self) { Text($0.formatted()).tag($0) }
+          ForEach(counts.sorted(), id: \.self) {
+            Text($0 == ClipboardSettings.unlimitedEntries ? "Unlimited" : $0.formatted()).tag($0)
+          }
         }
         .labelsHidden()
         .fixedSize()
@@ -1703,6 +1719,38 @@ private struct ClipboardHistorySettings: View {
         Button("Clear History…", role: .destructive, action: confirmClear)
       }
     }
+    Card {
+      SettingRow(
+        title: SettingText.clipboardPrimaryAction.title,
+        description: SettingText.clipboardPrimaryAction.detail
+      ) {
+        Picker(
+          SettingText.clipboardPrimaryAction.title,
+          selection: $model.config.clipboardHistory.primaryAction
+        ) {
+          ForEach(ClipboardSettings.PrimaryAction.allCases, id: \.self) {
+            Text($0.title).tag($0)
+          }
+        }
+        .labelsHidden()
+        .fixedSize()
+      }
+      Divider()
+      SettingRow(
+        title: SettingText.updateAfterAction.title,
+        description: SettingText.updateAfterAction.detail
+      ) {
+        Toggle(
+          SettingText.updateAfterAction.title,
+          isOn: $model.config.clipboardHistory.updateAfterAction
+        )
+        .toggleStyle(.switch)
+        .labelsHidden()
+      }
+    }
+    DisabledAppsCard(
+      item: SettingText.clipboardDisabledApps,
+      apps: $model.config.clipboardHistory.disabledApps)
   }
 
   /// Asked first, as Delete All Entries in the panel is: the entries have no undo.
@@ -1756,11 +1804,21 @@ private struct SnippetExpansionSettings: View {
       }
       .disabled(!expansion.isEnabled)
     }
+    DisabledAppsCard(item: SettingText.disabledApps, apps: $expansion.disabledApps)
+      .disabled(!expansion.isEnabled)
+  }
+}
+
+/// Apps a feature leaves alone, by bundle ID, each removable, and Add Application… under them:
+/// Snippets' and Clipboard History's Disabled Applications.
+private struct DisabledAppsCard: View {
+  let item: SettingsSearch.Item
+  @Binding var apps: [String]
+
+  var body: some View {
     Card {
-      SettingRow(
-        title: SettingText.disabledApps.title, description: SettingText.disabledApps.detail
-      ) { EmptyView() }
-      ForEach(expansion.disabledApps, id: \.self) { id in
+      SettingRow(title: item.title, description: item.detail) { EmptyView() }
+      ForEach(apps, id: \.self) { id in
         let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id)
         Divider()
         HStack {
@@ -1770,7 +1828,7 @@ private struct SnippetExpansionSettings: View {
             .font(.system(size: Metrics.settingsRowFontSize))
           Spacer()
           Button {
-            expansion.disabledApps = expansion.disabledApps.filter { $0 != id }
+            apps = apps.filter { $0 != id }
           } label: {
             Glyph("minus.circle")
           }
@@ -1789,7 +1847,6 @@ private struct SnippetExpansionSettings: View {
       .padding(.horizontal, 18)
       .padding(.vertical, 10)
     }
-    .disabled(!expansion.isEnabled)
   }
 
   private func addApp() {
@@ -1798,9 +1855,9 @@ private struct SnippetExpansionSettings: View {
     panel.directoryURL = URL(filePath: "/Applications")
     panel.prompt = "Add"
     guard panel.runModal() == .OK, let url = panel.url,
-      let id = Bundle(url: url)?.bundleIdentifier, !expansion.disabledApps.contains(id)
+      let id = Bundle(url: url)?.bundleIdentifier, !apps.contains(id)
     else { return }
-    expansion.disabledApps = expansion.disabledApps + [id]
+    apps = apps + [id]
   }
 }
 

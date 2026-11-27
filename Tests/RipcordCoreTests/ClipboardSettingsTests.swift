@@ -71,5 +71,41 @@ struct ClipboardSettingsTests {
   @Test func readsMissingSettingsAsUnlimited() throws {
     let config = try JSONDecoder().decode(Config.self, from: Data(#"{"hotkey":"cmd+space"}"#.utf8))
     #expect(config.clipboardHistory == ClipboardSettings(keepFor: .unlimited, maxEntries: 300))
+    // Raycast's defaults for the settings added since.
+    #expect(
+      config.clipboardHistory.disabledApps == ["com.apple.Passwords", "com.apple.keychainaccess"])
+    #expect(config.clipboardHistory.primaryAction == .paste)
+    #expect(config.clipboardHistory.updateAfterAction)
+  }
+
+  @Test func unlimitedKeepsEveryEntry() throws {
+    var (history, directory) = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    history.settings.maxEntries = ClipboardSettings.unlimitedEntries
+    for text in ["a", "b", "c"] { try history.add(.text(text)) }
+    try history.prune()
+    #expect(history.items.count == 3)
+    // Saved and read back, as a build from before Unlimited reads it too.
+    let saved = try JSONEncoder().encode(history.settings)
+    let read = try JSONDecoder().decode(ClipboardSettings.self, from: saved)
+    #expect(read.maxEntries == .max)
+  }
+
+  /// Copy to Clipboard as the Primary Action puts copy on Return and paste on ⌘↵.
+  @Test func primaryActionSwapsPasteAndCopy() throws {
+    var (history, directory) = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try history.add(.text("hello"))
+    let id = history.items[0].id
+    func firstTwo() -> [(String, String, SearchResult.Action)] {
+      let row = Search.clipboardSections(for: "", history: history).flatMap(\.results)[0]
+      return row.actions.prefix(2).map { ($0.title, $0.shortcut, $0.action) }
+    }
+    #expect(firstTwo().map(\.2) == [.clip(id, .paste), .clip(id, .copy)])
+    history.settings.primaryAction = .copy
+    let swapped = firstTwo()
+    #expect(swapped.map(\.0) == ["Copy to Clipboard", "Paste to App"])
+    #expect(swapped.map(\.1) == ["↵", "⌘↵"])
+    #expect(swapped.map(\.2) == [.clip(id, .copy), .clip(id, .paste)])
   }
 }
