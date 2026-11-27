@@ -1447,6 +1447,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       toggleMenu(root: false)
       return true
     }
+    // ⌘P opens the list's filter at the search bar's end, as Raycast's dropdowns.
+    if flags == .command, key == "p", showFilterMenu() { return true }
     let symbols: [(NSEvent.ModifierFlags, String)] = [
       (.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘"),
     ]
@@ -1465,6 +1467,39 @@ final class LauncherController: NSObject, NSWindowDelegate {
     guard let match = candidates.first(where: { $0.shortcut == shortcut }) else { return false }
     perform(match.action)
     return true
+  }
+
+  /// What the open filter menu's items pick, by their tag.
+  private var filterChoices: [() -> Void] = []
+
+  /// The list's filter as a menu under the search bar's right end: Clipboard History's types.
+  /// False when the list has none.
+  private func showFilterMenu() -> Bool {
+    // Not over the ⌘K card or a question, which have the keys.
+    guard model.mode == .clipboard, model.menu == nil, model.confirmation == nil else {
+      return false
+    }
+    let items: [(String, ClipType?)] =
+      [("All Types", nil)] + ClipType.allCases.map { ($0.title, $0) }
+    let menu = NSMenu()
+    filterChoices = items.map { _, type in { [weak self] in self?.handle(.filterClipType(type)) } }
+    for (index, (title, type)) in items.enumerated() {
+      let item = NSMenuItem(title: title, action: #selector(pickFilter(_:)), keyEquivalent: "")
+      item.target = self
+      item.tag = index
+      item.state = type == model.clipType ? .on : .off
+      menu.addItem(item)
+      if index == 0 { menu.addItem(.separator()) }
+    }
+    let frame = panel.frame
+    menu.popUp(
+      positioning: nil,
+      at: NSPoint(x: frame.maxX - 200, y: frame.maxY - Self.fieldHeight + 6), in: nil)
+    return true
+  }
+
+  @objc private func pickFilter(_ item: NSMenuItem) {
+    if filterChoices.indices.contains(item.tag) { filterChoices[item.tag]() }
   }
 
   /// Runs a result's action; also what app, command and Quicklink hotkeys call.

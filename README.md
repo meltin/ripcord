@@ -28,9 +28,11 @@
   capture, and other copied files with their Finder icons, with a preview and details of the
   selected one (a file's kind, size and path). Return pastes into the app you were in (files paste
   as files, into Finder too), ⇧⌘P pins an item to the top, ⌃X deletes it and ⇧⌘X deletes all but
-  the pinned ones; the All Types menu narrows the list to text, images, files, links, emails or
-  colors. Copies a password manager marks as concealed are never recorded, and switching the
-  command off on its settings page stops recording
+  the pinned ones; the All Types menu (⌘P) narrows the list to text, images, files, links, emails
+  or colors. Settings › Clipboard History can make Return copy instead, with paste on ⌘↵, and
+  list apps whose copies aren't recorded (Passwords and Keychain Access to start with). Copies a
+  password manager marks as concealed are never recorded, and switching the command off on its
+  settings page stops recording
 - Snippets: Create Snippet saves text with a name, keyword, icon and tags from the panel, and
   Search Snippets pastes it into the app you were in. `{clipboard}`, `{date}`, `{time}`,
   `{datetime}`, `{day}` and `{uuid}` are filled in, and `{cursor}` is where the caret lands.
@@ -224,10 +226,13 @@ allows: `shift+shift` is ⇧ pressed twice on its own. A double tap needs Access
 keywords do, and stands aside while a password field has secure input on.
 Clipboard History keeps its last 300 unpinned items (plus every pinned one), for as long as
 Settings › Clipboard History says (`clipboardHistory`'s `keepFor` is `day`, `week`, `month`,
-`threeMonths`, `sixMonths`, `year` or `unlimited`, and `maxEntries` the most kept), in
+`threeMonths`, `sixMonths`, `year` or `unlimited`, and `maxEntries` the most kept, Unlimited
+saved as 9223372036854775807), in
 `~/Library/Application Support/Ripcord/Clipboard`, as plain text and image files; copied files
 are kept by path, not copied, so one moved or deleted since can't be pasted. An image over
-32 MB or a text over 1 MB isn't kept. Delete the folder to clear it.
+32 MB or a text over 1 MB isn't kept. Delete the folder to clear it. `disabledApps` lists the
+bundle IDs whose copies aren't recorded, `primaryAction` is `paste` or `copy` (what Return does),
+and `updateAfterAction` (on by default) moves an entry to the top once it's pasted or copied.
 
 `items` holds the aliases, hotkeys and on/off switches set on the settings pages, for apps (by
 bundle ID) and Ripcord's commands; a Quicklink keeps its own `hotkey` and `disabled`, and its

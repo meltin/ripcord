@@ -45,7 +45,10 @@ final class ClipboardMonitor {
     // overlay is up (CleanShot X keeps one for seconds after a capture) is credited to that app,
     // and a ⌘C followed within 0.5 s by ⌘Tab to the next app; exact needs a per-app event tap.
     let app = Self.overlayApp() ?? NSWorkspace.shared.frontmostApplication
-    update { try $0.add(capture, from: ClipCapture.source(pasteboard) ?? app?.bundleIdentifier) }
+    let source = ClipCapture.source(pasteboard) ?? app?.bundleIdentifier
+    // Disabled Applications: what they copy isn't recorded at all.
+    if let source, history.settings.disabledApps.contains(source) { return }
+    update { try $0.add(capture, from: source) }
   }
 
   /// A menu bar app with a window above the screen saver level, as CleanShot X shows while and
@@ -87,7 +90,8 @@ final class ClipboardMonitor {
     onChange()
   }
 
-  /// Puts `id` on the pasteboard and moves it to the top of the history.
+  /// Puts `id` on the pasteboard and, unless Update History After Action is off, moves it to the
+  /// top of the history.
   func copy(_ id: UUID) -> Bool {
     guard let item = history.item(id) else { return false }
     let written: Bool
@@ -123,7 +127,7 @@ final class ClipboardMonitor {
     }
     // Ripcord's own write isn't a new copy; count it here instead of on the next poll.
     changeCount = pasteboard.changeCount
-    if written { update { try $0.touch(id) } }
+    if written, history.settings.updateAfterAction { update { try $0.touch(id) } }
     return written
   }
 
