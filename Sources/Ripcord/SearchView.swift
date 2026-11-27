@@ -32,16 +32,28 @@ struct SearchView: View {
             placeholder: model.mode == .pick
               ? model.pickPlaceholder ?? model.mode.placeholder : model.mode.placeholder,
             sidewaysArrows: model.mode == .emoji,
-            takesTab: model.argumentScript != nil, caretAtEnd: true,
+            takesTab: model.argumentScript != nil,
+            // Back from an argument field, it selects what it holds, as Raycast's does.
+            caretAtEnd: !model.searchSelectsAll,
             onChange: onQueryChange, onCommand: onCommand,
-            onFocus: { model.isEditingArgument = false }
+            onFocus: {
+              // Clicked too: a dropdown that had the keys gives them up.
+              model.isEditingArgument = false
+              model.searchSelectsAll = false
+              model.argumentDropdown = nil
+              model.argumentMenu = nil
+            }
           )
           // A new one takes the focus back from Set Alias…'s field.
           .id(model.searchFieldID)
+          // As Raycast's: just as wide as what's typed, with the command's fields after it.
+          .frame(width: argumentFieldsShown ? queryWidth : nil)
           if let path = model.argumentScript, let arguments = model.scriptArguments[path] {
+            if let selected = model.selected { ResultIcon(result: selected) }
             ArgumentFields(model: model, path: path, arguments: arguments, onCommand: onCommand)
               // Another script's fields are new ones: a focused field gone hands the focus back.
               .id(path)
+            Spacer(minLength: 0)
           }
           if model.mode == .clipboard {
             ClipTypeFilter(selection: model.clipType) { onCommand(.filterClipType($0)) }
@@ -124,6 +136,23 @@ struct SearchView: View {
         selected: model.selected, mode: model.mode, command: model.footerCommand,
         pasteTarget: model.pasteTarget, onCommand: onCommand)
     }
+    // An argument dropdown's open list, under the dropdown, over the rows.
+    .overlayPreferenceValue(ArgumentAnchors.self) { anchors in
+      if model.argumentMenu != nil, let index = model.argumentDropdown, let anchor = anchors[index]
+      {
+        GeometryReader { proxy in
+          let frame = proxy[anchor]
+          ZStack(alignment: .topLeading) {
+            Color.clear.contentShape(Rectangle()).onTapGesture { onCommand(.closeArgumentMenu) }
+            ArgumentMenuCard(model: model, onCommand: onCommand)
+              // Under the dropdown, kept inside the panel when it sits near the edge.
+              .offset(
+                x: min(frame.minX, proxy.size.width - ArgumentMenuCard.width - 8),
+                y: frame.maxY + 6)
+          }
+        }
+      }
+    }
     .overlay {
       if let menu = model.menu {
         ZStack(alignment: menu.isRoot ? .bottomLeading : .bottomTrailing) {
@@ -150,6 +179,19 @@ struct SearchView: View {
           confirmation: confirmation, onCommand: onCommand)
       }
     }
+  }
+
+  private var argumentFieldsShown: Bool {
+    model.argumentScript.flatMap { model.scriptArguments[$0] }?.isEmpty == false
+  }
+
+  /// What's typed, or the placeholder while nothing is, measured in the search field's font with
+  /// room for the caret; at most 320 points, so a long query leaves the fields room.
+  private var queryWidth: CGFloat {
+    let font = NSFont.systemFont(ofSize: 18)
+    let shown = model.query.isEmpty ? model.mode.placeholder : model.query
+    let width = (shown as NSString).size(withAttributes: [.font: font]).width
+    return min(ceil(width) + 12, 320)
   }
 
   private var resultList: some View {
@@ -1143,8 +1185,9 @@ private struct IconPicker: View {
   }
 }
 
-/// A script's arguments beside the search bar, as Raycast shows them: Tab moves through them
-/// (⇧Tab back to the search), ↑↓ still move the list, and Return runs the script.
+/// A command's arguments beside the search bar, as Raycast shows them: Tab and ⇧Tab move
+/// through every field, dropdowns too, and back to the search field; Esc goes back to it; ↑↓
+/// still move the list from a text field, and Return runs the command.
 private struct ArgumentFields: View {
   @Bindable var model: LauncherModel
   let path: String
@@ -1161,93 +1204,245 @@ private struct ArgumentFields: View {
   var body: some View {
     HStack(spacing: 6) {
       ForEach(arguments.indices, id: \.self) { index in
-        if arguments[index].type == .dropdown {
-          dropdown(index).frame(width: 130)
-        } else {
-          textField(index)
-            .textFieldStyle(.plain)
-            .font(.system(size: 13))
-            .padding(.horizontal, 8)
-            .frame(width: 130, height: 26)
-            .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
-            .focused($focus, equals: index)
-            .onSubmit { onCommand(.submit) }
-            // While an input method composes, its keys pick candidates instead.
-            .onKeyPress(keys: [.tab, Self.backTab]) { press in
-              if Self.isComposing { return .ignored }
-              move(from: index, back: press.key == Self.backTab || press.modifiers.contains(.shift))
-              return .handled
-            }
-            .onKeyPress(.upArrow) {
-              if Self.isComposing { return .ignored }
-              onCommand(.up)
-              return .handled
-            }
-            .onKeyPress(.downArrow) {
-              if Self.isComposing { return .ignored }
-              onCommand(.down)
-              return .handled
-            }
+        Group {
+          if arguments[index].type == .dropdown {
+            ArgumentDropdown(
+              argument: arguments[index], value: chosen(at: index),
+              isFocused: model.argumentDropdown == index,
+              isOpen: model.argumentDropdown == index && model.argumentMenu != nil
+            ) { onCommand(.toggleArgumentMenu(index)) }
+          } else {
+            textField(index)
+          }
         }
+        .anchorPreference(key: ArgumentAnchors.self, value: .bounds) { [index: $0] }
       }
     }
     .onChange(of: model.argumentFocusRequest, initial: true) { _, request in
       guard let request else { return }
       focus = request
       model.argumentFocusRequest = nil
+      // Tabbed into, a field selects what it holds, so typing replaces it.
+      DispatchQueue.main.async {
+        (NSApp.keyWindow?.firstResponder as? NSTextView)?.selectAll(nil)
+      }
+    }
+    // A dropdown has the keys: no text field keeps them.
+    .onChange(of: model.argumentDropdown) { _, dropdown in
+      if dropdown != nil { focus = nil }
     }
     .onChange(of: focus) { _, now in
-      if now != nil { model.isEditingArgument = true }
+      guard now != nil else { return }
+      model.isEditingArgument = true
+      // A text field clicked while a dropdown had the keys takes them.
+      model.argumentDropdown = nil
+      model.argumentMenu = nil
     }
     .onDisappear {
       // The row changed under a focused field: the search field takes it back.
+      model.argumentDropdown = nil
+      model.argumentMenu = nil
       guard model.isEditingArgument else { return }
       model.isEditingArgument = false
       model.searchFieldID += 1
     }
   }
 
+  private func textField(_ index: Int) -> some View {
+    Group {
+      if arguments[index].type == .password {
+        SecureField(arguments[index].placeholder, text: binding(index))
+      } else {
+        TextField(arguments[index].placeholder, text: binding(index))
+      }
+    }
+    .textFieldStyle(.plain)
+    .font(.system(size: 13))
+    .padding(.horizontal, 8)
+    // Narrower when a command has many, so they stay inside the panel.
+    .frame(minWidth: 90, maxWidth: 180, minHeight: 26, maxHeight: 26)
+    .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
+    .overlay(ArgumentOutline(isFocused: focus == index))
+    .overlay(alignment: .topTrailing) { OptionalBadge(argument: arguments[index]) }
+    .focused($focus, equals: index)
+    .onSubmit { onCommand(.submit) }
+    // While an input method composes, its keys pick candidates instead.
+    .onKeyPress(keys: [.tab, Self.backTab]) { press in
+      if Self.isComposing { return .ignored }
+      onCommand(
+        .moveArgument(
+          from: index, back: press.key == Self.backTab || press.modifiers.contains(.shift)))
+      return .handled
+    }
+    .onKeyPress(.upArrow) {
+      if Self.isComposing { return .ignored }
+      onCommand(.up)
+      return .handled
+    }
+    .onKeyPress(.downArrow) {
+      if Self.isComposing { return .ignored }
+      onCommand(.down)
+      return .handled
+    }
+  }
+
   private func binding(_ index: Int) -> Binding<String> {
-    Binding(get: { value(at: index) }, set: { set($0, at: index) })
+    Binding(get: { chosen(at: index) }, set: { set($0, at: index) })
   }
 
-  private func dropdown(_ index: Int) -> some View {
-    Picker(arguments[index].placeholder, selection: binding(index)) {
-      ForEach(arguments[index].data ?? [], id: \.self) { Text($0.title).tag($0.value) }
-    }
-    .labelsHidden()
-    .pickerStyle(.menu)
-  }
-
-  @ViewBuilder private func textField(_ index: Int) -> some View {
-    let text = binding(index)
-    if arguments[index].type == .password {
-      SecureField(arguments[index].placeholder, text: text)
-    } else {
-      TextField(arguments[index].placeholder, text: text)
-    }
-  }
-
-  private func value(at index: Int) -> String {
+  /// What's in the field at `index`: "" until something's typed or chosen.
+  private func chosen(at index: Int) -> String {
     let values = model.argumentValues[path] ?? []
-    let value = values.indices.contains(index) ? values[index] : ""
-    return value.isEmpty ? arguments[index].initialValue : value
+    return values.indices.contains(index) ? values[index] : ""
   }
 
   private func set(_ value: String, at index: Int) {
-    let values = arguments.indices.map { $0 == index ? value : self.value(at: $0) }
+    let values = arguments.indices.map { $0 == index ? value : chosen(at: $0) }
     model.argumentValues[path] = values
   }
+}
 
-  private func move(from index: Int, back: Bool) {
-    // Text fields only: a dropdown takes a click.
-    let typed = arguments.indices.filter { arguments[$0].type != .dropdown }
-    let next = back ? typed.last { $0 < index } : typed.first { $0 > index }
-    if let next {
-      focus = next
-    } else if back {
-      model.isEditingArgument = false
-      model.searchFieldID += 1
+/// Where each argument field sits, by index, for the open dropdown's list to hang from.
+private struct ArgumentAnchors: PreferenceKey {
+  static let defaultValue: [Int: Anchor<CGRect>] = [:]
+  static func reduce(value: inout [Int: Anchor<CGRect>], nextValue: () -> [Int: Anchor<CGRect>]) {
+    value.merge(nextValue()) { $1 }
+  }
+}
+
+/// Raycast's "?" on an argument that can be left empty.
+private struct OptionalBadge: View {
+  let argument: ScriptCommand.Argument
+
+  var body: some View {
+    if argument.optional == true {
+      Text("?")
+        .font(.system(size: 8, weight: .bold))
+        .foregroundStyle(Color(nsColor: .windowBackgroundColor))
+        .frame(width: 12, height: 12)
+        .background(Circle().fill(Color.primary.opacity(0.75)))
+        .offset(x: 4, y: -4)
+        .accessibilityLabel("Optional")
+    }
+  }
+}
+
+/// The ring around the argument field that has the keys, as Raycast draws it.
+private struct ArgumentOutline: View {
+  let isFocused: Bool
+
+  var body: some View {
+    RoundedRectangle(cornerRadius: 6)
+      .strokeBorder(Color.primary.opacity(isFocused ? 0.35 : 0), lineWidth: 1)
+  }
+}
+
+/// An argument's dropdown, as Raycast's: its placeholder until a choice is made, ↑↓ step
+/// through the choices, and Space, a letter or a click opens the list.
+private struct ArgumentDropdown: View {
+  let argument: ScriptCommand.Argument
+  let value: String
+  let isFocused: Bool
+  let isOpen: Bool
+  let onClick: () -> Void
+
+  var body: some View {
+    let title = argument.data?.first { $0.value == value }?.title
+    Button(action: onClick) {
+      HStack(spacing: 4) {
+        Text(title ?? argument.placeholder)
+          .foregroundStyle(title == nil ? .tertiary : .primary)
+          .lineLimit(1)
+          // A long choice is cut short rather than pushing the fields out of the panel.
+          .frame(maxWidth: 160, alignment: .leading)
+        Spacer(minLength: 2)
+        Glyph(isOpen ? "chevron.up" : "chevron.down", pointSize: 10)
+          .foregroundStyle(.secondary)
+      }
+      .font(.system(size: 13))
+      .padding(.horizontal, 8)
+      .frame(height: 26)
+      // As wide as its title, as Raycast's: "English" narrower than "Select Language".
+      .fixedSize()
+      .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
+      .overlay(ArgumentOutline(isFocused: isFocused))
+      .contentShape(RoundedRectangle(cornerRadius: 6))
+    }
+    .buttonStyle(.plain)
+    .overlay(alignment: .topTrailing) { OptionalBadge(argument: argument) }
+  }
+}
+
+/// An argument dropdown's open list, as Raycast's: a search line on top, "-" for none, and
+/// the choices, filtered by what's typed.
+private struct ArgumentMenuCard: View {
+  let model: LauncherModel
+  let onCommand: (SearchCommand) -> Void
+
+  var body: some View {
+    let filter = model.argumentMenu?.filter ?? ""
+    let highlight = model.argumentMenu?.highlight ?? 0
+    let choices = model.argumentChoices
+    VStack(alignment: .leading, spacing: 2) {
+      HStack(spacing: 0) {
+        Text(filter.isEmpty ? "Search…" : filter)
+          .foregroundStyle(filter.isEmpty ? .tertiary : .primary)
+          .lineLimit(1)
+          .truncationMode(.head)
+        // A caret, as the field the text appears to be typed into would show.
+        Rectangle().fill(Color(nsColor: FocusingTextField.caretColor)).frame(width: 2, height: 16)
+          .padding(.leading, filter.isEmpty ? 0 : 1)
+        Spacer()
+      }
+      .font(.system(size: 13))
+      .padding(.horizontal, 10)
+      .frame(height: 34)
+      Divider().opacity(0.5).padding(.bottom, 4)
+      if choices.isEmpty {
+        Text("No Results").font(.system(size: 13)).foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity).frame(height: 34)
+      }
+      if choices.count > Self.visibleRows {
+        // Long lists scroll, following the highlight, so the card stays inside the panel.
+        ScrollViewReader { proxy in
+          ScrollView { rows(choices, highlight: highlight) }
+            .thinScroller()
+            .frame(height: CGFloat(Self.visibleRows) * 34)
+            .onChange(of: highlight) { _, now in proxy.scrollTo(now) }
+        }
+      } else {
+        rows(choices, highlight: highlight)
+      }
+    }
+    .padding(6)
+    .frame(width: Self.width)
+    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+  }
+
+  static let width: CGFloat = 200
+  /// Rows before the list scrolls: what fits under the header, over the list.
+  private static let visibleRows = 9
+
+  private func rows(_ choices: [(value: String, title: String)], highlight: Int) -> some View {
+    VStack(spacing: 2) {
+      ForEach(Array(choices.enumerated()), id: \.offset) { index, choice in
+        Button {
+          onCommand(.chooseArgument(index))
+        } label: {
+          Text(choice.title)
+            .font(.system(size: 13))
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+            .background(
+              RoundedRectangle(cornerRadius: 8)
+                .fill(Color.primary.opacity(index == highlight ? 0.1 : 0))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .id(index)
+      }
     }
   }
 }
@@ -2010,7 +2205,7 @@ struct SearchField: NSViewRepresentable {
   var fontSize: CGFloat = 18
   /// ← and → move a grid's selection instead of the caret.
   var sidewaysArrows = false
-  /// Tab goes to `onCommand` as .nextField instead of the next control.
+  /// Tab and ⇧Tab go to `onCommand` as .nextField and .previousField, not to other controls.
   var takesTab = false
   /// Remounted with text, the caret lands at its end instead of selecting it all.
   var caretAtEnd = false
@@ -2080,6 +2275,7 @@ struct SearchField: NSViewRepresentable {
           .submit
         case #selector(NSResponder.cancelOperation(_:)): .cancel
         case #selector(NSResponder.insertTab(_:)) where parent.takesTab: .nextField
+        case #selector(NSResponder.insertBacktab(_:)) where parent.takesTab: .previousField
         default: nil
         }
       guard let command else { return false }

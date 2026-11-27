@@ -189,6 +189,25 @@ final class LauncherModel {
   var argumentFocusRequest: Int?
   /// An argument field has had the focus since the search field last took it.
   var isEditingArgument = false
+  /// The argument dropdown that has the keys. It isn't a control that takes the focus: the
+  /// panel hands it keys, as it does an open ⌘K menu's filter.
+  var argumentDropdown: Int?
+  /// That dropdown's open list, as Raycast's: what's typed to filter it, and the highlight.
+  var argumentMenu: (filter: String, highlight: Int)?
+  /// The search field, taken back from an argument field, selects what it holds.
+  var searchSelectsAll = false
+
+  /// The open dropdown's choices as (value, title): none ("-") and every choice, or those a
+  /// word of which starts with what's typed.
+  var argumentChoices: [(value: String, title: String)] {
+    guard let index = argumentDropdown, let menu = argumentMenu, let path = argumentScript,
+      let arguments = scriptArguments[path], arguments.indices.contains(index),
+      let options = arguments[index].data
+    else { return [] }
+    let matched = ArgumentFieldNavigation.matches(menu.filter, in: options.map(\.title))
+      .map { (value: options[$0].value, title: options[$0].title) }
+    return menu.filter.isEmpty ? [(value: "", title: "-")] + matched : matched
+  }
   /// The selected row's key in `scriptArguments` when it takes arguments: a script's path, or
   /// Generate Dummy Text's settings key.
   var argumentScript: String? {
@@ -217,8 +236,18 @@ final class LauncherModel {
 
 enum SearchCommand {
   case up, down, left, right, submit, cancel, back
-  /// Tab in the search field: on to the selected script's first argument.
+  /// Tab in the search field: on to the selected command's first argument field.
   case nextField
+  /// ⇧Tab in the search field: back to its last argument field.
+  case previousField
+  /// Tab or ⇧Tab in the argument field at this index.
+  case moveArgument(from: Int, back: Bool)
+  /// A click on the argument dropdown at this index: its list opens, or closes.
+  case toggleArgumentMenu(Int)
+  /// A click on a choice in the open dropdown's list, by its place in `argumentChoices`.
+  case chooseArgument(Int)
+  /// A click outside the open dropdown's list.
+  case closeArgumentMenu
   case filterCategory(Int?)
   case activate(String)
   case toggleMenu(root: Bool)
@@ -413,13 +442,30 @@ final class LauncherController: NSObject, NSWindowDelegate {
     panel.typingHandler = { [weak self] event in
       guard let self else { return false }
       guard model.confirmation == nil else { return answerQuestion(event) }
-      return typeIntoMenu(event)
+      return typeIntoMenu(event) || typeIntoArgumentDropdown(event) || spaceAfterAlias(event)
     }
     panel.escapeHandler = { [weak self] in
       // Only the form: the search field turns Esc into .cancel itself.
       // The output view has no field either, and an argument field acts as the search field.
       guard let self, model.mode.isForm || model.mode == .scriptOutput || model.isEditingArgument
       else { return false }
+      // As Raycast's: what's typed in an open dropdown's list goes first, then the list, then
+      // the keys go back to the search field. The panel stays.
+      if let menu = model.argumentMenu {
+        if menu.filter.isEmpty {
+          model.argumentMenu = nil
+        } else {
+          model.argumentMenu = (filter: "", highlight: 0)
+        }
+        return true
+      }
+      // Only with nothing over the fields: an open ⌘K menu or card takes Esc first.
+      if model.isEditingArgument, !model.mode.isForm, model.menu == nil,
+        model.configureEditor == nil, model.confirmation == nil
+      {
+        focusArgument(nil)
+        return true
+      }
       // An open icon list closes first, as a menu does.
       if model.isPickingIcon {
         model.isPickingIcon = false
@@ -578,6 +624,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.toast = nil
     model.argumentValues = [:]
     model.argumentFocusRequest = nil
+    model.argumentDropdown = nil
+    model.argumentMenu = nil
     confirmedScript = nil
     if model.isEditingArgument {
       // The search field takes the focus back for next time.
@@ -632,6 +680,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.sections = sections(for: query)
     model.selection = 0
     model.menu = nil
+    model.argumentMenu = nil
+    // New rows from elsewhere (`ripcord open`) while a dropdown had the keys: they go back to the
+    // search field, as no field would take them.
+    if model.argumentDropdown != nil { focusArgument(nil) }
     // A question belongs to the rows it was asked over; once they change it goes too.
     model.confirmation = nil
   }
@@ -781,12 +833,22 @@ final class LauncherController: NSObject, NSWindowDelegate {
       goBack()
     case .nextField:
       // Not behind an open menu.
-      // The first field to type in; a dropdown takes a click.
-      if model.menu == nil, let path = model.argumentScript {
-        model.argumentFocusRequest = model.scriptArguments[path]?.firstIndex {
-          $0.type != .dropdown
-        }
+      if model.menu == nil { focusArgument(from: nil, back: false) }
+    case .previousField:
+      if model.menu == nil { focusArgument(from: nil, back: true) }
+    case .moveArgument(let index, let back):
+      focusArgument(from: index, back: back)
+    case .toggleArgumentMenu(let index):
+      if model.argumentDropdown == index, model.argumentMenu != nil {
+        model.argumentMenu = nil
+      } else {
+        focusArgument(index)
+        openArgumentMenu(filter: "")
       }
+    case .chooseArgument(let choice):
+      chooseArgument(choice)
+    case .closeArgumentMenu:
+      model.argumentMenu = nil
     case .activate(let id): model.results.first { $0.id == id }.map { perform($0.action) }
     case .toggleMenu(let root): toggleMenu(root: root)
     case .filterClipType(let type):
@@ -919,7 +981,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     // Only while the row is still there, or the request would wait for another script.
     DispatchQueue.main.async { [weak self] in
       guard let self, model.argumentScript == path else { return }
-      model.argumentFocusRequest = index
+      // A dropdown too, which takes its keys at the panel.
+      focusArgument(index)
     }
   }
 
@@ -1051,6 +1114,160 @@ final class LauncherController: NSObject, NSWindowDelegate {
       handle(.cancel)
     default: break
     }
+    return true
+  }
+
+  /// The selected command's argument fields, when it takes any.
+  private var argumentFields: [ScriptCommand.Argument] {
+    model.argumentScript.flatMap { model.scriptArguments[$0] } ?? []
+  }
+
+  /// Tab or ⇧Tab from `field` (nil: the search field), as Raycast's: through every field,
+  /// dropdowns too, and past either end back to the search field.
+  private func focusArgument(from field: Int?, back: Bool) {
+    guard !argumentFields.isEmpty else { return }
+    focusArgument(
+      ArgumentFieldNavigation.next(from: field, count: argumentFields.count, back: back))
+  }
+
+  /// Gives the keys to the argument field at `index`, or back to the search field for nil,
+  /// which then selects what it holds.
+  private func focusArgument(_ index: Int?) {
+    model.argumentMenu = nil
+    guard let index, argumentFields.indices.contains(index) else {
+      model.argumentDropdown = nil
+      guard model.isEditingArgument else { return }
+      model.isEditingArgument = false
+      model.searchSelectsAll = true
+      model.searchFieldID += 1
+      return
+    }
+    model.isEditingArgument = true
+    if argumentFields[index].type == .dropdown {
+      // No control holds the focus, so no field takes the keys the panel hands the dropdown.
+      model.argumentDropdown = index
+      panel.makeFirstResponder(nil)
+    } else {
+      model.argumentDropdown = nil
+      model.argumentFocusRequest = index
+    }
+  }
+
+  /// What's chosen in the argument dropdown at `index`: "" until a choice is made.
+  private func chosen(at index: Int) -> String {
+    guard let path = model.argumentScript, let values = model.argumentValues[path],
+      values.indices.contains(index)
+    else { return "" }
+    return values[index]
+  }
+
+  private func choose(_ value: String, at index: Int) {
+    guard let path = model.argumentScript else { return }
+    var values = model.argumentValues[path] ?? []
+    if values.count < argumentFields.count {
+      values += Array(repeating: "", count: argumentFields.count - values.count)
+    }
+    values[index] = value
+    model.argumentValues[path] = values
+  }
+
+  /// Opens the focused dropdown's list, its highlight on the choice made, if it's listed.
+  private func openArgumentMenu(filter: String) {
+    guard let index = model.argumentDropdown else { return }
+    model.argumentMenu = (filter: filter, highlight: 0)
+    let current = chosen(at: index)
+    // Read first: reading the choices while writing the menu in one statement traps.
+    let highlight = model.argumentChoices.firstIndex { $0.value == current } ?? 0
+    model.argumentMenu?.highlight = highlight
+  }
+
+  private func chooseArgument(_ choice: Int) {
+    let choices = model.argumentChoices
+    guard let index = model.argumentDropdown, choices.indices.contains(choice) else { return }
+    choose(choices[choice].value, at: index)
+    model.argumentMenu = nil
+  }
+
+  /// Keys for the focused argument dropdown, and its open list, as Raycast's take them.
+  private func typeIntoArgumentDropdown(_ event: NSEvent) -> Bool {
+    guard let index = model.argumentDropdown, argumentFields.indices.contains(index) else {
+      return false
+    }
+    // Over the dropdown, an open ⌘K menu or Set Alias… card takes the arrows and Return, which
+    // no field is there to pass on.
+    if model.menu != nil || model.configureEditor != nil {
+      switch Int(event.keyCode) {
+      case kVK_UpArrow: handle(.up)
+      case kVK_DownArrow: handle(.down)
+      case kVK_Return, kVK_ANSI_KeypadEnter: handle(.submit)
+      default: return false
+      }
+      return true
+    }
+    // ⌘ and ⌃ keys stay shortcuts, as ⌘↵ for Generate Dummy Text's copy.
+    guard event.modifierFlags.isDisjoint(with: [.command, .control]) else { return false }
+    let key = Int(event.keyCode)
+    let back = event.modifierFlags.contains(.shift)
+    let text = event.characters ?? ""
+    let printable =
+      !text.isEmpty
+      && text.unicodeScalars.allSatisfy {
+        !CharacterSet.controlCharacters.contains($0) && !(0xF700...0xF8FF).contains($0.value)
+      }
+    // Esc is the panel's: it clears what's typed in the list, then closes it.
+    if key == kVK_Escape { return false }
+    if let menu = model.argumentMenu {
+      let count = model.argumentChoices.count
+      switch key {
+      case kVK_UpArrow:
+        model.argumentMenu?.highlight = max(menu.highlight - 1, 0)
+      case kVK_DownArrow:
+        model.argumentMenu?.highlight = min(menu.highlight + 1, max(count - 1, 0))
+      case kVK_Return, kVK_ANSI_KeypadEnter:
+        chooseArgument(menu.highlight)
+      case kVK_Tab:
+        focusArgument(from: index, back: back)
+      case kVK_Delete, kVK_ForwardDelete:
+        model.argumentMenu = (filter: String(menu.filter.dropLast()), highlight: 0)
+      default:
+        guard printable else { return true }
+        model.argumentMenu = (filter: menu.filter + text, highlight: 0)
+      }
+      return true
+    }
+    let values = (argumentFields[index].data ?? []).map(\.value)
+    switch key {
+    case kVK_UpArrow, kVK_DownArrow:
+      choose(
+        ArgumentFieldNavigation.step(chosen(at: index), in: values, up: key == kVK_UpArrow),
+        at: index)
+    case kVK_Space:
+      openArgumentMenu(filter: "")
+    case kVK_Tab:
+      focusArgument(from: index, back: back)
+    case kVK_Return, kVK_ANSI_KeypadEnter:
+      handle(.submit)
+    default:
+      // A letter opens the list, filtered by it.
+      guard printable else { return false }
+      openArgumentMenu(filter: text)
+    }
+    return true
+  }
+
+  /// A space typed right after the alias of a command that takes arguments goes into its first
+  /// field instead, as Raycast's: "lorem" then a space, and the number of characters is next.
+  private func spaceAfterAlias(_ event: NSEvent) -> Bool {
+    guard event.keyCode == UInt16(kVK_Space),
+      event.modifierFlags.isDisjoint(with: [.command, .control, .option, .shift]),
+      model.mode == .root, model.menu == nil, model.configureEditor == nil,
+      !model.isEditingArgument, model.argumentDropdown == nil,
+      (panel.firstResponder as? NSTextView)?.hasMarkedText() != true,
+      ArgumentFieldNavigation.spaceEntersFields(
+        previous: model.query, query: model.query + " ", alias: model.selected?.keyword,
+        takesArguments: !argumentFields.isEmpty)
+    else { return false }
+    focusArgument(0)
     return true
   }
 
