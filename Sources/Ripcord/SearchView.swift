@@ -23,7 +23,7 @@ struct SearchView: View {
         } else if let logo = Bundle.main.image(forResource: "MenuBarIcon") {
           Image(nsImage: logo).renderingMode(.template).foregroundStyle(.secondary)
         }
-        if model.mode.isForm || model.mode == .scriptOutput {
+        if model.mode.isForm || model.mode == .scriptOutput || model.mode == .colorWheel {
           // Only the way back, as Raycast's forms have: the footer names the command.
           Spacer()
         } else {
@@ -100,6 +100,8 @@ struct SearchView: View {
         BookmarkForm(model: model)
       } else if model.mode == .scriptOutput {
         ScriptOutputView(output: model.scriptOutput)
+      } else if model.mode == .colorWheel {
+        ColorWheel()
       } else if model.sections.isEmpty {
         EmptyState(query: model.query, mode: model.mode)
       } else if model.mode == .emoji {
@@ -285,6 +287,8 @@ private struct EmptyState: View {
       "Colors you pick with Pick Color show up here."
     case .colors:
       "No color matches “\(query)”."
+    case .colorWheel:
+      ""
     case .favoriteColors where query.trimmingCharacters(in: .whitespaces).isEmpty:
       "Add colors to your favorites from Color History, with ⇧⌘F."
     case .favoriteColors:
@@ -616,6 +620,7 @@ extension BuiltinCommand {
     case .colorNames: "tag"
     case .convertColor: "arrow.clockwise"
     case .favoriteColors: "star"
+    case .colorWheel: "circle.lefthalf.filled"
     case .cleanKeyboard: "keyboard"
     case .searchBookmarks: "bookmark.fill"
     case .searchEmoji: "face.smiling"
@@ -639,7 +644,7 @@ extension BuiltinCommand {
       .brown
     case .sleepTimer, .stopSleepTimer: .indigo
     case .lidAwake: .orange
-    case .pickColor, .colorHistory, .colorNames, .convertColor, .favoriteColors: .pink
+    case .pickColor, .colorHistory, .colorNames, .convertColor, .favoriteColors, .colorWheel: .pink
     case .cleanKeyboard: .cyan
     case .searchBookmarks, .addBookmark: .yellow
     case .searchEmoji: .orange
@@ -2394,6 +2399,7 @@ extension LauncherMode {
     case .colorNames: "Search HEX (#00ff00)"
     case .convertColor: "Type or paste a color..."
     case .favoriteColors: "Search favorite colors"
+    case .colorWheel: ""
     case .bookmarks: "Search Bookmarks…"
     case .emoji: "Search Emoji & Symbols…"
     case .notes: "Search Notes…"
@@ -2417,5 +2423,24 @@ private struct LinkIcon<Placeholder: View>: View {
     } else {
       placeholder()
     }
+  }
+}
+
+/// Color Wheel: every hue around, white at the middle, to pick from with the color sampler that
+/// opens over it, as Raycast's Color Wheel shows its RGB wheel.
+private struct ColorWheel: View {
+  var body: some View {
+    let hues = stride(from: 0.0, through: 1.0, by: 1.0 / 12).map {
+      Color(hue: $0, saturation: 1, brightness: 1)
+    }
+    Circle()
+      .fill(AngularGradient(colors: hues, center: .center))
+      .overlay(
+        Circle().fill(
+          RadialGradient(
+            colors: [.white, .white.opacity(0)], center: .center, startRadius: 0, endRadius: 150))
+      )
+      .frame(width: 300, height: 300)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }

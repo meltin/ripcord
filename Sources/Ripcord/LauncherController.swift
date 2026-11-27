@@ -102,7 +102,7 @@ enum NotesRequest {
 /// What the panel lists: apps and commands, or one command's own list.
 enum LauncherMode {
   case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, colorNames
-  case convertColor, favoriteColors
+  case convertColor, favoriteColors, colorWheel
   case bookmarks
   case bookmarkForm, emoji, scriptOutput, notes
   /// `ripcord pick`: lines handed in, one to choose.
@@ -124,6 +124,7 @@ enum LauncherMode {
     case .colorNames: .colorNames
     case .convertColor: .convertColor
     case .favoriteColors: .favoriteColors
+    case .colorWheel: .colorWheel
     case .bookmarks: .searchBookmarks
     case .bookmarkForm: .addBookmark
     case .emoji: .searchEmoji
@@ -1631,6 +1632,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.colorNames) { return open(.colorNames) }
     if action == .run(.convertColor) { return open(.convertColor) }
     if action == .run(.favoriteColors) { return open(.favoriteColors) }
+    // The wheel stays in the panel while the sampler is up; a pick copies and closes it.
+    if action == .run(.colorWheel) {
+      open(.colorWheel)
+      return pickColor()
+    }
     // Convert Color: the format copied comes first next time, as Raycast keeps it.
     // The row whose text it is, clicked or selected.
     if model.mode == .convertColor, case .copy(let text) = action,
@@ -1931,7 +1937,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onCleanKeyboard(seconds)
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
       .run(.searchRepositories), .run(.httpStatusCodes), .run(.sleepTimer), .run(.colorHistory),
-      .run(.colorNames), .run(.convertColor), .run(.favoriteColors),
+      .run(.colorNames), .run(.convertColor), .run(.favoriteColors), .run(.colorWheel),
       .run(.cleanKeyboard), .run(.searchBookmarks), .run(.addBookmark), .deleteBookmark,
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,
