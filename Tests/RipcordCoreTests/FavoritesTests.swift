@@ -69,6 +69,9 @@ import Testing
       for: "", apps: [app], running: [elsewhere], quicklinks: [], favorites: [elsewhere.settingsKey]
     )
     #expect(sections.map(\.title) == ["Running"])
+    // Settings can't turn it back on, so it can't be turned off here; a scanned one can.
+    #expect(sections[0].results[0].actions.allSatisfy { $0.title != "Disable Command" })
+    #expect(root([]).first?.results.first?.actions.last?.title == "Disable Command")
   }
 
   @Test func searchResultsOfferFavoritesToo() throws {

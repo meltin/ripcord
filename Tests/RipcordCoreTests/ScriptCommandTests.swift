@@ -90,9 +90,9 @@ import Testing
     #expect(row.action == .runScript("/tmp/Tools/hello.sh"))
     #expect(row.subtitle == "Tools")
     #expect(row.itemKey == hello.settingsKey)
-    // Once, last, as on any other row.
-    #expect(row.actions.filter { $0.title == "Disable Command" }.count == 1)
-    #expect(row.actions.last?.action == .disableCommand(hello.settingsKey))
+    // No Disable Command: Settings lists scripts only by their folder, so nothing could turn
+    // one back on.
+    #expect(!row.actions.contains { $0.title == "Disable Command" })
   }
 
   @Test func readsArguments() throws {

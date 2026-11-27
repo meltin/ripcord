@@ -565,6 +565,8 @@ public enum Search {
       (items[$0.settingsKey]?.isEnabled ?? true) && !shown.contains($0.settingsKey)
     }
     let decorate = { (result: SearchResult) in withFavoriteActions(result, favorites: shown) }
+    // An app run from outside the folders scanned has no On box in Settings to turn it back on.
+    let scanned = Set(apps.map(\.settingsKey))
     // Ripcord's own commands live in the footer's root menu; typing still finds them.
     // On, Lid Awake stays at the top with the way to turn it off.
     return [lidAwakeSection(lidAwake), draftSection(drafts)].compactMap { $0 }
@@ -574,7 +576,9 @@ public enum Search {
         SearchSection(
           title: "Running",
           results: shownRunning.prefix(5).map {
-            decorate(result(for: $0, alias: items[$0.settingsKey]?.alias))
+            withFavoriteActions(
+              result(for: $0, alias: items[$0.settingsKey]?.alias), favorites: shown,
+              disables: scanned.contains($0.settingsKey))
           }),
         SearchSection(
           title: "Quicklinks",
@@ -606,7 +610,10 @@ public enum Search {
 
   /// The row's ⌘K actions with Add to Favorites, or a favorite's Remove and Move, as Raycast's
   /// list them; rows that can't be one stay as they are.
-  static func withFavoriteActions(_ result: SearchResult, favorites: [String]) -> SearchResult {
+  /// `disables` adds Raycast's Disable Command, last; not for an item Settings can't turn back on.
+  static func withFavoriteActions(
+    _ result: SearchResult, favorites: [String], disables: Bool = true
+  ) -> SearchResult {
     guard let key = result.itemKey else { return result }
     let favorite: [MenuAction] =
       if let index = favorites.firstIndex(of: key) {
@@ -643,10 +650,10 @@ public enum Search {
     let cut =
       actions.indices.dropFirst().first { actions[$0].startsSection }
       ?? actions.count - (configure == nil ? 0 : 1)
-    // Last and red, as Raycast's.
-    let disable = MenuAction.disable(key)
+    // Last and red, as Raycast's. Not on a script, which Settings lists only by its folder.
+    let disable = disables && result.kind != .script ? [MenuAction.disable(key)] : []
     var decorated = result
-    decorated.menu = Array(actions[..<cut]) + favorite + Array(actions[cut...]) + [disable]
+    decorated.menu = Array(actions[..<cut]) + favorite + Array(actions[cut...]) + disable
     return decorated
   }
 
