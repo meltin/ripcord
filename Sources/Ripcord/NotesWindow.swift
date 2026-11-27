@@ -382,7 +382,12 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     } catch {
       return NSSound.beep()
     }
-    show(store.list().first { $0.url != note.url } ?? store.newNote())
+    // The last note gone, the window goes too, rather than showing an empty one.
+    guard let next = store.list().first(where: { $0.url != note.url }) else {
+      show(store.newNote(), focusing: false)
+      return hide()
+    }
+    show(next)
   }
 
   func handle(_ request: NotesRequest) {
@@ -407,7 +412,12 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
       // Its text is in the Trash now; nothing is left to save. The launcher keeps the keys.
       pendingSave?.cancel()
       pendingSave = nil
-      show(store.list().first ?? store.newNote(), focusing: false)
+      // The last note gone, the window goes too, rather than showing an empty one.
+      guard let next = store.list().first else {
+        show(store.newNote(), focusing: false)
+        return hide()
+      }
+      show(next, focusing: false)
     }
   }
 
