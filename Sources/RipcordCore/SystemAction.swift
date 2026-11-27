@@ -95,8 +95,9 @@ public enum SystemAction: String, CaseIterable, Sendable {
     case .restart: "Apps will quit and the Mac will restart."
     case .shutDown: "Apps will quit and the Mac will shut down."
     case .emptyTrash: "Everything in the Trash will be deleted. This can't be undone."
-    case .quitAllApps: "Every open app will be asked to quit."
-    case .quitOtherApps: "Every open app but the frontmost one will be asked to quit."
+    case .quitAllApps: "Every open app, but those excluded in Settings, will be asked to quit."
+    case .quitOtherApps:
+      "Every open app but the frontmost one, and those excluded in Settings, will be asked to quit."
     default: nil
     }
   }
