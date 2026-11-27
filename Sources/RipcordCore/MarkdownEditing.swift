@@ -93,27 +93,36 @@ public enum MarkdownEditing {
         range, string.lineRange(for: NSRange(location: NSMaxRange(range), length: 0)))
     }
     let items = spans.filter {
-      (MarkdownSpan.isItem($0.style) || isContinuation($0))
-        && NSLocationInRange($0.range.location, range)
+      MarkdownSpan.isItem($0.style) && NSLocationInRange($0.range.location, range)
     }
     .map(\.range.location)
+    let nextLines = spans.filter { isContinuation($0) }.map(\.range.location)
     var replacement = ""
     var shifts: [(at: Int, by: Int)] = []
+    // How far the item above moved: its next lines move the same, and stay put with it.
+    var itemShift = 0
     var location = range.location
     while location < NSMaxRange(range) {
       let line = string.lineRange(for: NSRange(location: location, length: 0))
       var text = string.substring(with: line)
+      var shift = 0
       if items.contains(location) {
         if outdent {
           let lead = text.prefix { $0 == " " }.count
-          let cut = text.hasPrefix("\t") ? 1 : min(lead, 2)
-          text.removeFirst(cut)
-          shifts.append((location, -cut))
+          shift = -(text.hasPrefix("\t") ? 1 : min(lead, 2))
         } else {
-          text = "  " + text
-          shifts.append((location, 2))
+          shift = 2
         }
+        itemShift = shift
+      } else if nextLines.contains(location) {
+        shift = itemShift
       }
+      if shift < 0 {
+        text.removeFirst(-shift)
+      } else if shift > 0 {
+        text = String(repeating: " ", count: shift) + text
+      }
+      if shift != 0 { shifts.append((location, shift)) }
       replacement += text
       location = NSMaxRange(line)
     }

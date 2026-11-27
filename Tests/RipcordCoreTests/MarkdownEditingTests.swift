@@ -465,6 +465,24 @@ import Testing
         == "  - a\n    b")
   }
 
+  @Test func keepsATopItemsNextLineOnShiftTab() {
+    // A top-level item can't go further out, so neither does its next line.
+    let text = "- a\n  b"
+    let edit = MarkdownEditing.indentItems(
+      selection: NSRange(location: 1, length: 0), in: text, spans: MarkdownSpan.spans(in: text),
+      outdent: true)
+    #expect(
+      edit.map { (text as NSString).replacingCharacters(in: $0.range, with: $0.replacement) }
+        == "- a\n  b")
+    let nested = "  - a\n    b"
+    let back = MarkdownEditing.indentItems(
+      selection: NSRange(location: 3, length: 0), in: nested,
+      spans: MarkdownSpan.spans(in: nested), outdent: true)
+    #expect(
+      back.map { (nested as NSString).replacingCharacters(in: $0.range, with: $0.replacement) }
+        == "- a\n  b")
+  }
+
   @Test func joinsANextLineThatStartsWithAStyle() {
     let text = "- a\n  **b**"
     // The caret rests after the spaces and the bold's marks (8).
