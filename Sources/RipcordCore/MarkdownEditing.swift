@@ -80,6 +80,43 @@ public enum MarkdownEditing {
     return (box, "[ ]", caret + 1)
   }
 
+  /// ↓ on a code block's last line when the block ends the note: a line goes in after its
+  /// closing fence for the caret, so it can leave the block. Nil elsewhere.
+  public static func leaveBlockDown(at caret: Int, in text: String, spans: [MarkdownSpan])
+    -> (range: NSRange, replacement: String, caret: Int)?
+  {
+    let string = text as NSString
+    guard
+      let block = spans.first(where: {
+        $0.style == .fenced && $0.range.location <= caret && caret <= NSMaxRange($0.range)
+      }),
+      let closing = block.marks.last, NSMaxRange(closing) == string.length,
+      !string.substring(with: NSRange(location: caret, length: NSMaxRange(block.range) - caret))
+        .contains("\n"),
+      !string.substring(with: closing).hasSuffix("\n")
+    else { return nil }
+    return (NSRange(location: string.length, length: 0), "\n", string.length + 1)
+  }
+
+  /// ``` typed alone on a line opens a code block straight away, as in Raycast: the closing
+  /// fence goes in with an empty line between for the caret. Nil when this ``` would close an
+  /// open block instead, or the line holds more.
+  public static func codeFenceShortcut(at caret: Int, in text: String)
+    -> (range: NSRange, replacement: String, caret: Int)?
+  {
+    let string = text as NSString
+    let line = string.lineRange(for: NSRange(location: caret, length: 0))
+    let lineText = string.substring(with: line).trimmingCharacters(in: .newlines)
+    guard lineText.trimmingCharacters(in: .whitespaces) == "```",
+      caret == line.location + (lineText as NSString).length
+    else { return nil }
+    // An odd number of fences above means this one closes a block.
+    let above = string.substring(to: line.location).components(separatedBy: "\n")
+      .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }
+    guard above.count % 2 == 0 else { return nil }
+    return (NSRange(location: caret, length: 0), "\n\n```", caret + 1)
+  }
+
   /// A selection made in one go (⌘A, a click and drag) grown over hidden marks at its ends, so
   /// a copy keeps a first line's `# ` or `- `.
   public static func outward(_ range: NSRange, spans: [MarkdownSpan]) -> NSRange {

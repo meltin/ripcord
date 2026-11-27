@@ -250,6 +250,29 @@ import Testing
         == .normal)
   }
 
+  @Test func opensABlockAsSoonAsAFenceIsTyped() {
+    let edit = MarkdownEditing.codeFenceShortcut(at: 5, in: "a\n```")
+    #expect(
+      edit.map { ("a\n```" as NSString).replacingCharacters(in: $0.range, with: $0.replacement) }
+        == "a\n```\n\n```")
+    #expect(edit?.caret == 6)
+    // Closing an open block, or with more on the line, it's left alone.
+    #expect(MarkdownEditing.codeFenceShortcut(at: 9, in: "```\nx\n```") == nil)
+    #expect(MarkdownEditing.codeFenceShortcut(at: 4, in: "a```") == nil)
+  }
+
+  @Test func leavesABlockThatEndsTheNoteDownward() {
+    let text = "```\nx\n```"
+    let edit = MarkdownEditing.leaveBlockDown(
+      at: 5, in: text, spans: MarkdownSpan.spans(in: text))
+    #expect(edit?.replacement == "\n")
+    #expect(edit?.caret == 10)
+    // With a line after the block, ↓ just goes there.
+    let more = "```\nx\n```\nafter"
+    #expect(
+      MarkdownEditing.leaveBlockDown(at: 5, in: more, spans: MarkdownSpan.spans(in: more)) == nil)
+  }
+
   @Test func closesABlockOnReturnAfterAnOpeningFence() {
     let open = "a\n```"
     let edit = MarkdownEditing.newline(at: 5, in: open, spans: MarkdownSpan.spans(in: open))

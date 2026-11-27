@@ -874,8 +874,11 @@ private struct MarkdownEditor: NSViewRepresentable {
       } else if !textView.isTidying, textView.selectedRange().length == 0,
         let edit = MarkdownEditing.taskShortcut(
           at: textView.selectedRange().location, in: textView.string)
+          ?? MarkdownEditing.codeFenceShortcut(
+            at: textView.selectedRange().location, in: textView.string)
       {
-        // `- [] ` becomes `- [ ] `; that edit comes back through here and is formatted then.
+        // `- [] ` becomes `- [ ] ` and ``` a code block; that edit comes back through here and
+        // is formatted then.
         return textView.replace(
           edit.range, with: edit.replacement, selecting: NSRange(location: edit.caret, length: 0))
       } else {
@@ -1007,6 +1010,15 @@ private struct MarkdownEditor: NSViewRepresentable {
         return textView.apply(
           MarkdownEditing.deleteForward(
             at: selection.location, in: text, spans: spans))
+      case #selector(NSResponder.moveDown(_:)) where selection.length == 0:
+        // Out of a code block that ends the note, onto a line made for it.
+        guard
+          let edit = MarkdownEditing.leaveBlockDown(
+            at: selection.location, in: text, spans: spans)
+        else { return false }
+        textView.replace(
+          edit.range, with: edit.replacement, selecting: NSRange(location: edit.caret, length: 0))
+        return true
       case #selector(NSResponder.insertNewline(_:))
       where NSApp.currentEvent?.modifierFlags.contains(.shift) != true:
         // Return continues a list, task or quote, and ends it on an empty item.
@@ -1074,6 +1086,8 @@ private struct MarkdownEditor: NSViewRepresentable {
   /// Line heights, worked out once rather than for every line on every keystroke.
   private static let bodyLineHeight = NSLayoutManager().defaultLineHeight(
     for: .systemFont(ofSize: fontSize))
+  private static let codeLineHeight = NSLayoutManager().defaultLineHeight(
+    for: .monospacedSystemFont(ofSize: fontSize - 1, weight: .regular))
   private static let headingLineHeights = (1...3).map {
     NSLayoutManager().defaultLineHeight(for: headingFont($0))
   }
@@ -1092,9 +1106,27 @@ private struct MarkdownEditor: NSViewRepresentable {
     for span in spans where NSMaxRange(span.range) <= storage.length {
       storage.addAttributes(attributes(for: span, in: storage), range: span.range)
     }
-    // A closed block's hidden fence lines leave room above and below its background.
+    // A closed block's hidden fence lines leave room above and below its background, and each
+    // of its lines, an empty one too, is at least a line of code tall: an empty line's break is
+    // the closing fence's first, hidden character.
     let string = storage.string as NSString
     for span in spans where span.style == .fenced {
+      storage.addAttribute(
+        .paragraphStyle,
+        value: paragraph(
+          indent: codeInset, tail: -codeInset, minimumHeight: codeLineHeight, spacing: 0),
+        // Through the last line's break, so an empty last line is a code line too.
+        range: string.lineRange(
+          for: NSRange(location: span.range.location, length: span.range.length + 1)))
+      // The last line's break is the closing fence's first character; at code size rather than
+      // hidden size, so the caret on an empty last line is as tall as the code.
+      if let closing = span.marks.last, closing.length > 0,
+        string.character(at: closing.location) == 0x0A
+      {
+        storage.addAttribute(
+          .font, value: NSFont.monospacedSystemFont(ofSize: fontSize - 1, weight: .regular),
+          range: NSRange(location: closing.location, length: 1))
+      }
       for mark in span.marks {
         let fence = string.range(of: "```", range: mark)
         guard fence.location != NSNotFound else { continue }
@@ -1281,8 +1313,10 @@ final class NoteTextView: NSTextView {
         }
       case .fenced:
         // From the block's first line to its last, across the container, with room around.
+        // The last line is found by its line break, the closing fence's first character, so an
+        // empty last line is inside the box too.
         guard let first = lineRect(at: span.range.location),
-          let last = lineRect(at: max(span.range.location, NSMaxRange(span.range) - 1))
+          let last = lineRect(at: span.marks.last?.location ?? NSMaxRange(span.range))
         else { continue }
         let padding = textContainer.lineFragmentPadding
         let box = NSRect(
