@@ -185,6 +185,12 @@ private func temporaryDirectory() -> URL {
     // The same files copied again move up rather than adding another.
     try history.add(.files([file]))
     #expect(history.items.count == 1)
+    // Its path copied as text is another item.
+    try history.add(.text(file.path))
+    #expect(history.items.count == 2)
+    // A folder's record isn't the size of what's in it.
+    try history.add(.files([directory]))
+    #expect(history.items[0].size == nil)
   }
 
   @Test func listsCopiedFilesByNameOrCount() throws {

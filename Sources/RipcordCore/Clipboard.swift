@@ -125,7 +125,8 @@ public enum ClipCapture: Equatable, Sendable {
       switch self {
       case .text(let text): Data(text.utf8)
       case .image(let data, _, _, _, _): data
-      case .files(let urls): Data(urls.map(\.path).joined(separator: "\n").utf8)
+      // Marked, so a file and its path copied as text stay two items.
+      case .files(let urls): Data((["files"] + urls.map(\.path)).joined(separator: "\n").utf8)
       }
     return SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
   }
@@ -167,12 +168,18 @@ public struct ClipboardHistory: Sendable {
     switch capture {
     case .image(let data, _, _, _, let fileName): (name, size) = (fileName, data.count)
     case .files(let urls):
-      // Read from the file system's records, not the files, so a big one costs nothing.
-      let sizes = urls.compactMap {
-        try? $0.resourceValues(forKeys: [.totalFileSizeKey, .fileSizeKey])
+      // Read from the file system's records, not the files, so a big one costs nothing. A
+      // folder or an app's record isn't the size of what's in it, so then there's none.
+      let values = urls.map {
+        try? $0.resourceValues(forKeys: [.isDirectoryKey, .totalFileSizeKey, .fileSizeKey])
       }
-      .compactMap { $0.totalFileSize ?? $0.fileSize }
-      (name, size) = (urls.count == 1 ? urls[0].lastPathComponent : nil, sizes.reduce(0, +))
+      let sizes = values.compactMap { value in
+        value?.isDirectory == false ? value?.totalFileSize ?? value?.fileSize : nil
+      }
+      (name, size) = (
+        urls.count == 1 ? urls[0].lastPathComponent : nil,
+        sizes.count == urls.count ? sizes.reduce(0, +) : nil
+      )
     case .text: (name, size) = (nil, nil)
     }
     if let item = items.first(where: { $0.digest == digest }) {
