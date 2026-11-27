@@ -726,8 +726,8 @@ public enum Search {
   }
 
   /// Clipboard History's list: pinned items, then the rest by the day they were last copied,
-  /// newest first, each kept to items whose text contains the query. Images match "image" or
-  /// their file name.
+  /// newest first, each kept to items whose text contains the query. Images match "image",
+  /// their file name or the text read from them.
   public static func clipboardSections(
     for query: String, history: ClipboardHistory, type: ClipType? = nil, now: Date = .now,
     calendar: Calendar = .current
@@ -757,6 +757,8 @@ public enum Search {
         guard
           trimmed.isEmpty || "image".localizedStandardContains(trimmed)
             || title.localizedStandardContains(trimmed)
+            // The text read from it, as Raycast's Text Recognition finds an image by.
+            || item.recognizedText?.localizedStandardContains(trimmed) == true
         else { return nil }
         return (
           item,

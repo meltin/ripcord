@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import RipcordCore
+import Vision
 
 /// Records what's copied anywhere into the clipboard history, and puts history items back.
 @MainActor
@@ -49,6 +50,54 @@ final class ClipboardMonitor {
     // Disabled Applications: what they copy isn't recorded at all.
     if let source, history.settings.disabledApps.contains(source) { return }
     update { try $0.add(capture, from: source) }
+    recognizeImages()
+  }
+
+  /// The image whose text is being read, so none is read twice at once.
+  private var reading: UUID?
+
+  /// Reads the text in the images not read yet, newest first, one at a time off the main
+  /// thread, as Raycast's Text Recognition; a search then finds an image by it.
+  private func recognizeImages() {
+    guard history.settings.textRecognition, reading == nil,
+      let item = history.unreadImages.first, let url = history.imageURL(of: item)
+    else { return }
+    reading = item.id
+    // Marked read first: should Vision bring Ripcord down on this image, the next launch
+    // doesn't read it again.
+    update { try $0.setRecognizedText("", for: item.id) }
+    let accurate = history.settings.recognitionMode == .accurate
+    Task { [weak self] in
+      let text = await Task.detached(priority: .utility) {
+        // shortcut: Fast finds nothing at all on macOS 27, so an empty Fast read is read again
+        // as Accurate; drop the second read once Fast works again.
+        let fast = accurate ? nil : Self.text(in: url, accurate: false)
+        return fast?.isEmpty == false ? fast : Self.text(in: url, accurate: true)
+      }.value
+      guard let self else { return }
+      reading = nil
+      if let text, !text.isEmpty { update { try $0.setRecognizedText(text, for: item.id) } }
+      recognizeImages()
+    }
+  }
+
+  nonisolated private static func text(in url: URL, accurate: Bool) -> String? {
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = accurate ? .accurate : .fast
+    // Language correction stays on: off, Fast recognition crashes inside Vision on macOS 27.
+    // Accurate reads the languages the user reads first, Japanese among them; Fast knows only
+    // Latin scripts, its default.
+    if accurate, let supported = try? request.supportedRecognitionLanguages() {
+      let preferred = Locale.preferredLanguages.compactMap { language in
+        supported.first { $0.hasPrefix(language.prefix(2)) }
+      }
+      request.recognitionLanguages = Array(NSOrderedSet(array: preferred + ["en-US"])).compactMap {
+        $0 as? String
+      }
+    }
+    guard (try? VNImageRequestHandler(url: url).perform([request])) != nil else { return nil }
+    return request.results?.compactMap { $0.topCandidates(1).first?.string }
+      .joined(separator: "\n")
   }
 
   /// A menu bar app with a window above the screen saver level, as CleanShot X shows while and
@@ -73,6 +122,9 @@ final class ClipboardMonitor {
   func prune() { update { try $0.prune() } }
 
   func apply(_ settings: ClipboardSettings) {
+    // Turned on, or at launch: the images copied while it was off are read, settings changed
+    // or not.
+    defer { recognizeImages() }
     guard settings != history.settings else { return }
     update {
       $0.settings = settings

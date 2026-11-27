@@ -27,10 +27,11 @@
 - Clipboard History: copied text and images, including a copied image file such as a CleanShot X
   capture, and other copied files with their Finder icons, with a preview and details of the
   selected one (a file's kind, size and path). Return pastes into the app you were in (files paste
-  as files, into Finder too), ⇧⌘P pins an item to the top, ⌃X deletes it and ⇧⌘X deletes all but
-  the pinned ones; the All Types menu (⌘P) narrows the list to text, images, files, links, emails
-  or colors. Settings › Clipboard History can make Return copy instead, with paste on ⌘↵, and
-  list apps whose copies aren't recorded (Passwords and Keychain Access to start with). Copies a
+  as files, into Finder too), ⇧⌘P pins an item to the top, ⌃X deletes it and ⇧⌘X deletes all but the
+  pinned ones; the All Types menu (⌘P) narrows the list to text, images, files, links, emails or
+  colors. Text in copied images is read (Text Recognition, with Vision, on the Mac), so a search
+  finds an image by it. Settings › Clipboard History can make Return copy instead, with paste on ⌘↵,
+  and list apps whose copies aren't recorded (Passwords and Keychain Access to start with). Copies a
   password manager marks as concealed are never recorded, and switching the command off on its
   settings page stops recording
 - Snippets: Create Snippet saves text with a name, keyword, icon and tags from the panel, and
@@ -233,6 +234,9 @@ are kept by path, not copied, so one moved or deleted since can't be pasted. An 
 32 MB or a text over 1 MB isn't kept. Delete the folder to clear it. `disabledApps` lists the
 bundle IDs whose copies aren't recorded, `primaryAction` is `paste` or `copy` (what Return does),
 and `updateAfterAction` (on by default) moves an entry to the top once it's pasted or copied.
+`textRecognition` (on by default) reads the text in copied images for search, kept in
+`history.json`, and `recognitionMode` is `fast` or `accurate`; Accurate also reads Japanese and
+other non-Latin scripts. When Fast finds nothing in an image, Ripcord reads it again as Accurate.
 
 `items` holds the aliases, hotkeys and on/off switches set on the settings pages, for apps (by
 bundle ID) and Ripcord's commands; a Quicklink keeps its own `hotkey` and `disabled`, and its
