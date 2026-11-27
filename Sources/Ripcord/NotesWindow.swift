@@ -1127,12 +1127,23 @@ private struct MarkdownEditor: NSViewRepresentable {
           .font, value: NSFont.monospacedSystemFont(ofSize: fontSize - 1, weight: .regular),
           range: NSRange(location: closing.location, length: 1))
       }
-      for mark in span.marks {
+      for (index, mark) in span.marks.enumerated() {
         let fence = string.range(of: "```", range: mark)
         guard fence.location != NSNotFound else { continue }
+        let fenceLine = string.lineRange(for: NSRange(location: fence.location, length: 0))
+        // The closing fence's own break sets how tall an empty line after the block is, and
+        // its caret: at body size. The fence line itself stays thin, so the space after it
+        // stays too.
+        let isClosingWithBreak =
+          index == span.marks.count - 1 && NSMaxRange(mark) > 0
+          && string.character(at: NSMaxRange(mark) - 1) == 0x0A
+        if isClosingWithBreak {
+          storage.addAttribute(
+            .font, value: NSFont.systemFont(ofSize: fontSize),
+            range: NSRange(location: NSMaxRange(mark) - 1, length: 1))
+        }
         storage.addAttribute(
-          .paragraphStyle, value: paragraph(spacing: 14),
-          range: string.lineRange(for: NSRange(location: fence.location, length: 0)))
+          .paragraphStyle, value: paragraph(spacing: 14), range: fenceLine)
       }
     }
     storage.endEditing()
