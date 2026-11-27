@@ -65,4 +65,12 @@ struct SnippetExpansionTests {
     let data = Data(#"{"hotkey":"cmd+space","snippetExpansion":{"disabledApps":[]}}"#.utf8)
     #expect(try JSONDecoder().decode(Config.self, from: data).snippetExpansion.disabledApps == [])
   }
+
+  @Test func writesShortKeys() throws {
+    let data = try JSONEncoder().encode(
+      SnippetExpansion(isEnabled: false, expandsWithinWords: true))
+    let text = String(decoding: data, as: UTF8.self)
+    #expect(text.contains("\"enabled\":false") && text.contains("\"withinWords\":true"))
+    #expect(try JSONDecoder().decode(SnippetExpansion.self, from: data).isEnabled == false)
+  }
 }

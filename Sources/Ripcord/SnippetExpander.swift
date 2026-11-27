@@ -4,7 +4,8 @@ import RipcordCore
 
 /// Typing a snippet's keyword in any app replaces it with the snippet, as Raycast's Snippets do.
 /// It watches keys through AppKit's global monitor, which the Accessibility permission Ripcord
-/// already asks for covers; keys typed into password fields never reach it.
+/// already asks for covers, and stands aside while a password field has secure input on. Keys
+/// typed into Ripcord's own panel and Notes never reach the monitor, so they don't expand.
 @MainActor
 final class SnippetExpander {
   /// Pastes a snippet's text, then `trailing`, where the keyword was.
@@ -65,7 +66,8 @@ final class SnippetExpander {
   private func handle(_ event: NSEvent) {
     if event.cgEvent?.getIntegerValueField(.eventSourceUserData) == Self.marker { return }
     // Shortcuts, other apps' settings and kana input all leave the caret's text unknown.
-    guard event.modifierFlags.isDisjoint(with: [.command, .control]), Self.isTypingASCII,
+    guard event.modifierFlags.isDisjoint(with: [.command, .control]), !IsSecureEventInputEnabled(),
+      Self.isTypingASCII,
       let app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
       !settings.disabledApps.contains(app)
     else { return matcher.reset() }

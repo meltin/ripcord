@@ -34,6 +34,14 @@ public struct SnippetExpansion: Codable, Equatable, Sendable {
     self.disabledApps = disabledApps
   }
 
+  /// Short keys in config.json, as its other settings have.
+  enum CodingKeys: String, CodingKey {
+    case isEnabled = "enabled"
+    case mode
+    case expandsWithinWords = "withinWords"
+    case disabledApps
+  }
+
   /// Password managers, as Raycast starts with, so a keyword typed there is never replaced.
   public static let defaultDisabledApps = ["com.1password.1password", "com.apple.keychainaccess"]
 
