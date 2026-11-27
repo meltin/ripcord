@@ -107,7 +107,9 @@
   category, Frequently Used first; search in English or Japanese (`cat`, `ねこ`), Return pastes,
   ⌘↵ copies, and ⌘K picks a skin tone that's remembered. Settings › Emoji & Symbols sets the
   grid's Column Count (6 to 10), the Primary Action (Return copies instead, pasting on ⌘↵) and
-  the skin tone, as Raycast's does
+  the skin tone, as Raycast's does. Typing `:` and a word in Notes or Create Snippet's text box
+  lists the emoji it names, as Raycast's inline emoji picker does: ↑↓ choose, Return or Tab put
+  one in, Esc closes the list; Disable Inline Emoji Picker there turns it off
 - Script Commands: Raycast's Script Commands in the folders set under Settings › Script Commands
   are listed in the root search; `silent` ones show their last line over the screen, `compact`
   ones over the footer and `fullOutput` ones all of it in the panel, and a failure shows its exit
@@ -215,7 +217,7 @@ the settings window opens. The settings window writes every change back to it.
   },
   "colorFormat": "hex",
   "showColorName": false,
-  "emoji": { "columns": 8, "primaryAction": "paste" },
+  "emoji": { "columns": 8, "primaryAction": "paste", "disableInlinePicker": false },
   "favorites": ["com.apple.Safari", "command:search-snippets"],
   "snippetExpansion": {
     "enabled": true, "mode": "immediately", "withinWords": false,

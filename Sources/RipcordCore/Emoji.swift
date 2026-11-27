@@ -71,10 +71,17 @@ public struct EmojiSettings: Codable, Equatable, Sendable {
   public static let columnCounts = 6...10
   public var columns: Int
   public var primaryAction: ClipboardSettings.PrimaryAction
+  /// Typing `:` in Ripcord's text fields offers no emoji, as Raycast's "Disable Inline Emoji
+  /// Picker".
+  public var disableInlinePicker: Bool
 
-  public init(columns: Int = 8, primaryAction: ClipboardSettings.PrimaryAction = .paste) {
+  public init(
+    columns: Int = 8, primaryAction: ClipboardSettings.PrimaryAction = .paste,
+    disableInlinePicker: Bool = false
+  ) {
     self.columns = columns
     self.primaryAction = primaryAction
+    self.disableInlinePicker = disableInlinePicker
   }
 
   public init(from decoder: Decoder) throws {
@@ -83,7 +90,9 @@ public struct EmojiSettings: Codable, Equatable, Sendable {
     self.init(
       columns: min(max(columns, Self.columnCounts.lowerBound), Self.columnCounts.upperBound),
       primaryAction: (try? container.decodeIfPresent(
-        ClipboardSettings.PrimaryAction.self, forKey: .primaryAction)) ?? .paste)
+        ClipboardSettings.PrimaryAction.self, forKey: .primaryAction)) ?? .paste,
+      disableInlinePicker: try container.decodeIfPresent(Bool.self, forKey: .disableInlinePicker)
+        ?? false)
   }
 }
 

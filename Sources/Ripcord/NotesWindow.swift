@@ -899,6 +899,7 @@ private struct MarkdownEditor: NSViewRepresentable {
       width: 0, height: CGFloat.greatestFiniteMagnitude)
     scrollView.documentView = textView
     textView.delegate = context.coordinator
+    context.coordinator.emojiPicker.attach(to: textView)
     textView.drawsBackground = false
     textView.isRichText = false
     textView.allowsUndo = true
@@ -960,6 +961,8 @@ private struct MarkdownEditor: NSViewRepresentable {
   func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
   @MainActor final class Coordinator: NSObject, NSTextViewDelegate {
+    /// `:` and a word offer emoji, as Raycast's text fields do.
+    let emojiPicker = InlineEmojiPicker()
     var parent: MarkdownEditor
     var focusRequest: Int
     /// The editor is being given another note's text: no change of the user's to pass on.

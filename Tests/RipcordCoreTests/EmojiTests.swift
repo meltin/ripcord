@@ -107,4 +107,22 @@ import Testing
     #expect(first.actions.prefix(2).map(\.title) == ["Copy to Clipboard", "Paste"])
     #expect(first.actions.prefix(2).map(\.shortcut) == ["↵", "⌘↵"])
   }
+
+  /// `:` and two letters at the caret offer emoji; a colon inside a word or a time doesn't.
+  @Test func findsTheInlineEmojiWord() {
+    func word(_ text: String) -> String? {
+      InlineEmoji.token(in: text, caret: (text as NSString).length)?.word
+    }
+    #expect(word(":sm") == "sm")
+    #expect(word("hello :smile") == "smile")
+    #expect(word("(:thumbs_up") == "thumbs_up")
+    #expect(word(":s") == nil)
+    #expect(word("12:30") == nil)
+    #expect(word("http://") == nil)
+    #expect(word("a:bc") == nil)
+    #expect(word(":smile ") == nil)
+    let token = InlineEmoji.token(in: "hi :cat", caret: 7)
+    #expect(token?.range == NSRange(location: 3, length: 4))
+    #expect(InlineEmoji.suggestions(for: "cat", catalog: catalog).contains { $0.character == "🐱" })
+  }
 }
