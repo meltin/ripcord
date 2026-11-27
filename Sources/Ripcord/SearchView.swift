@@ -490,6 +490,8 @@ private struct ResultIcon: View {
       }
     case .toggleFavoriteColor:
       tile("star", .yellow)
+    case .setVolume:
+      tile("speaker.wave.3.fill", .gray)
     case .removeRepository, .trashRepository, .deleteQuicklink:
       tile("trash", .gray)
     case .editQuicklink:
@@ -610,6 +612,8 @@ extension SystemAction {
     case .toggleMute: "speaker.slash.fill"
     case .volumeUp: "speaker.wave.3.fill"
     case .volumeDown: "speaker.wave.1.fill"
+    case .setVolume, .setVolume25, .setVolume50, .setVolume75, .setVolume100: "speaker.wave.3.fill"
+    case .setVolume0: "speaker.slash.fill"
     case .hideOtherApps: "eye.slash.fill"
     case .unhideAllApps: "eye.fill"
     case .quitAllApps, .quitOtherApps: "xmark.app.fill"

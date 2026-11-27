@@ -58,4 +58,24 @@ import Testing
     #expect(top("volume down") == "Turn Volume Down")
     #expect(top("unhide") == "Unhide All Hidden Apps")
   }
+
+  /// Raycast's Set Volume and Set Volume to 0, 25, 50, 75 and 100%; a level typed after Set
+  /// Volume offers that level.
+  @Test func setsTheVolume() {
+    #expect(
+      SystemAction.allCases.compactMap(\.volumePercent) == [0, 25, 50, 75, 100])
+    #expect(SystemAction.setVolume50.title == "Set Volume to 50%")
+    #expect(SystemAction.volumePercent(from: "40") == 40)
+    #expect(SystemAction.volumePercent(from: " 40% ") == 40)
+    #expect(SystemAction.volumePercent(from: "140") == nil)
+    #expect(SystemAction.volumePercent(from: "loud") == nil)
+    func rows(_ query: String) -> [SearchResult] {
+      Search.sections(for: query, apps: [], running: [], quicklinks: [], items: [:])
+        .flatMap(\.results)
+    }
+    let typed = rows("set volume 40").first
+    #expect(typed?.title == "Set Volume to 40%")
+    #expect(typed?.action == .setVolume(40))
+    #expect(!rows("set volume 400").contains { $0.action == .setVolume(400) })
+  }
 }
