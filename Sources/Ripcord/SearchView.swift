@@ -46,6 +46,7 @@ struct SearchView: View {
           )
           // A new one takes the focus back from Set Alias…'s field.
           .id(model.searchFieldID)
+          .textInput()
           // As Raycast's: just as wide as what's typed, with the command's fields after it.
           .frame(width: argumentFieldsShown ? queryWidth : nil)
           if let path = model.argumentScript, let arguments = model.scriptArguments[path] {
@@ -734,6 +735,7 @@ private struct SnippetForm: View {
             .focused($focus, equals: .name)
             .tabs(from: .name, focus: $focus)
             .textFieldStyle(.plain)
+            .textInput()
             .padding(.horizontal, Metrics.formFieldPadding)
           Divider().frame(height: 20)
           Button {
@@ -1003,6 +1005,16 @@ private struct PlaceholderChip: View {
 }
 
 extension View {
+  /// For a text field on the panel's glass. SwiftUI gives the AppKit field under it a vibrant
+  /// appearance there, yet nothing blends it, so the query turned gray once the field lost the
+  /// keys and the placeholder dark while it had them. Without a material underneath, it takes
+  /// the window's appearance and draws in the system's colors, as Raycast's fields do.
+  func textInput() -> some View {
+    environment(\.backgroundMaterial, nil)
+      // Black as Raycast's typed text; SwiftUI's primary is a shade lighter.
+      .foregroundStyle(Color(nsColor: .textColor))
+  }
+
   /// Tab and ⇧Tab move through the form's fields in order, wrapping around: a panel that never
   /// activates its app gets no key view loop from AppKit, and the text box would type a tab.
   fileprivate func tabs<Field: CaseIterable & Hashable>(
@@ -1033,6 +1045,7 @@ extension View {
 
   fileprivate func inputField(isFocused: Bool) -> some View {
     textFieldStyle(.plain)
+      .textInput()
       .padding(.horizontal, Metrics.formFieldPadding)
       .frame(height: Metrics.formFieldHeight)
       .field(isFocused: isFocused)
@@ -1154,6 +1167,7 @@ private struct IconPicker: View {
           }
         }
       )
+      .textInput()
       .padding(.horizontal, 14)
       .frame(height: 40)
       Divider().opacity(0.5)
@@ -1208,9 +1222,6 @@ private struct ArgumentFields: View {
   let arguments: [ScriptCommand.Argument]
   let onCommand: (SearchCommand) -> Void
   @FocusState private var focus: Int?
-  /// Whether the focused field holds text an input method is composing, which hides its
-  /// placeholder.
-  @State private var composing = false
   /// ⇧Tab, which arrives as a key of its own.
   static let backTab = KeyEquivalent("\u{19}")
   /// Whether the focused field holds text an input method is still composing.
@@ -1248,13 +1259,7 @@ private struct ArgumentFields: View {
     .onChange(of: model.argumentDropdown) { _, dropdown in
       if dropdown != nil { focus = nil }
     }
-    // Composing text changes the field without reaching the binding until it's committed. Read
-    // once the change is through: cancelling with Esc still has the marked text when it notifies.
-    .onReceive(NotificationCenter.default.publisher(for: NSText.didChangeNotification)) { _ in
-      DispatchQueue.main.async { composing = Self.isComposing }
-    }
     .onChange(of: focus) { _, now in
-      composing = false
       guard now != nil else { return }
       model.isEditingArgument = true
       // A text field clicked while a dropdown had the keys takes them.
@@ -1274,21 +1279,13 @@ private struct ArgumentFields: View {
   private func textField(_ index: Int) -> some View {
     Group {
       if arguments[index].type == .password {
-        SecureField("", text: binding(index))
+        SecureField(arguments[index].placeholder, text: binding(index))
       } else {
-        TextField("", text: binding(index))
-      }
-    }
-    // Drawn here so it stays gray while the field has the keys, as Raycast's; the field's own
-    // placeholder turns black then.
-    .overlay(alignment: .leading) {
-      if chosen(at: index).isEmpty, !(composing && focus == index) {
-        Text(arguments[index].placeholder).foregroundStyle(.tertiary).lineLimit(1)
-          .allowsHitTesting(false).accessibilityHidden(true)
+        TextField(arguments[index].placeholder, text: binding(index))
       }
     }
     .textFieldStyle(.plain)
-    .accessibilityLabel(arguments[index].placeholder)
+    .textInput()
     .font(.system(size: Metrics.barFontSize))
     .padding(.horizontal, Metrics.barControlPadding)
     // As wide as its placeholder, typed into or not, as Raycast's; narrower when a command has
@@ -1382,8 +1379,12 @@ private struct ArgumentDropdown: View {
     let title = argument.data?.first { $0.value == value }?.title
     Button(action: onClick) {
       HStack(spacing: 4) {
+        // In the text fields' colors, so a dropdown's placeholder or choice reads as theirs do.
         Text(title ?? argument.placeholder)
-          .foregroundStyle(title == nil ? .tertiary : .primary)
+          .foregroundStyle(
+            title == nil ? Color(nsColor: .placeholderTextColor) : Color(nsColor: .textColor)
+          )
+          .textInput()
           .lineLimit(1)
           // A long choice is cut short rather than pushing the fields out of the panel.
           .frame(maxWidth: 160, alignment: .leading)
@@ -2028,6 +2029,7 @@ private struct ConfigureEditorCard: View {
             text: editor.alias, placeholder: "Enter Alias…", fontSize: Metrics.cardFieldFontSize,
             onChange: { onCommand(.editAlias($0)) }, onCommand: onCommand
           )
+          .textInput()
           .padding(.horizontal, Metrics.cardRowPadding)
           .frame(height: Metrics.cardRowHeight)
           .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.primary.opacity(0.25)))
@@ -2208,6 +2210,8 @@ struct SearchField: NSViewRepresentable {
     field.drawsBackground = false
     field.focusRingType = .none
     field.font = .systemFont(ofSize: fontSize)
+    // Black as Raycast's query; controlTextColor is a shade lighter.
+    field.textColor = .textColor
     field.cell?.isScrollable = true
     field.delegate = context.coordinator
     return field
