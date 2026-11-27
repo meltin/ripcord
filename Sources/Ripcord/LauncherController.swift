@@ -392,15 +392,20 @@ final class LauncherController: NSObject, NSWindowDelegate {
   var onLidAwake: (TimeInterval?) -> Void = { _ in }
   var onToggleLidAwake: () -> Void = {}
   var onStopLidAwake: () -> Void = {}
-  /// While Lid Awake is on, for the row pinned at the top of the root search.
+  /// While Lid Awake is on, for the row pinned at the top of the root search; the open panel
+  /// redraws it when its time left reads differently.
   var lidAwakeStatus: LidAwakeStatus? {
     didSet {
-      guard lidAwakeStatus != oldValue, panel.isVisible, model.mode == .root,
-        model.query.isEmpty
-      else { return }
+      let shown = Search.lidAwakeSection(lidAwakeStatus)?.results.first?.subtitle
+      guard shown != lidAwakeShown || (lidAwakeStatus == nil) != (oldValue == nil) else { return }
+      lidAwakeShown = shown
+      guard panel.isVisible, model.mode == .root, model.query.isEmpty else { return }
       refreshRows(selecting: model.selected?.id)
     }
   }
+  private var lidAwakeShown: String?
+  /// Before Sleep puts the Mac to sleep: Lid Awake would keep it awake.
+  var onBeforeSleep: () -> Void = {}
   /// Clean Keyboard: block the keyboard for this many seconds.
   var onCleanKeyboard: (TimeInterval) -> Void = { _ in }
   var onImportSnippets: () -> Void = {}
@@ -1784,6 +1789,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     let frontmost = NSWorkspace.shared.frontmostApplication
     // From a hotkey with the panel hidden, whatever was left open there stays to come back to.
     if panel.isVisible { hide() }
+    if action == .sleep { onBeforeSleep() }
     if let message = SystemActions.run(
       action, frontmost: frontmost, report: { [weak self] in self?.onError($0) })
     {

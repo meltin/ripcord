@@ -28,6 +28,8 @@ final class SettingsModel {
   var onClearClipboard: () -> Void = {}
   /// Why the chosen backdrop shader isn't drawing; nil when it is, or it's off.
   var backdropError: String?
+  /// Whether Lid Awake is on, so its permission isn't removed from under it.
+  var lidAwakeOn = false
   /// Bumped as the window opens, so the search field takes the keys every time, not only the
   /// first, when it's first put in the window.
   var sidebarFocusRequest = 0
@@ -528,7 +530,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .coffee:
       "Keep the Mac awake, until Decaffeinate or for a time typed after Caffeinate, as in “caffeinate 1h 30m”."
     case .lidAwake:
-      "Keep the Mac awake with the lid closed, on battery too, until turned off or for a time typed after Lid Awake, as in “lid awake 2h”."
+      "Keep the Mac from sleeping, lid closed and on battery too, until turned off or for a time typed after Lid Awake, as in “lid awake 2h”. While on, the Mac doesn't sleep at all; Ripcord's Sleep and Sleep Timer turn it off first."
     case .repositories:
       "Find the Git repositories in your folders and open each in the app you pick for its Return."
     case .httpStatusCodes:
@@ -2222,6 +2224,7 @@ private struct SettingRow<Control: View>: View {
 private struct LidAwakeSettings: View {
   @Bindable var model: SettingsModel
   @State private var allowed = false
+  @State private var hasRule = false
   @State private var working = false
 
   var body: some View {
@@ -2232,8 +2235,14 @@ private struct LidAwakeSettings: View {
       ) {
         HStack(spacing: 10) {
           Text(allowed ? "Allowed" : "Not allowed").foregroundStyle(.secondary)
-          Button(allowed ? "Remove…" : "Allow…") { change(allow: !allowed) }
-            .disabled(working)
+          // Remove… only for Ripcord's own rule; another app's may allow the same.
+          if hasRule {
+            Button("Remove…") { change(allow: false) }
+              .disabled(working || model.lidAwakeOn)
+              .help(model.lidAwakeOn ? "Turn Lid Awake off first." : "")
+          } else {
+            Button("Allow…") { change(allow: true) }.disabled(working)
+          }
         }
       }
       Divider()
@@ -2243,13 +2252,20 @@ private struct LidAwakeSettings: View {
       ) {
         Picker(SettingText.lidAwakeLowBattery.title, selection: $model.config.lidAwakeLowBattery) {
           Text("Never").tag(0)
-          ForEach([5, 10, 20, 30], id: \.self) { Text("\($0)%").tag($0) }
+          // One set in the file by hand stays listed, so the picker never goes blank.
+          let levels = Set([5, 10, 20, 30, model.config.lidAwakeLowBattery]).subtracting([0])
+          ForEach(levels.sorted(), id: \.self) { Text("\($0)%").tag($0) }
         }
         .labelsHidden()
         .fixedSize()
       }
     }
-    .task { allowed = await Task.detached { LidAwake.isAllowed }.value }
+    .task { await refresh() }
+  }
+
+  private func refresh() async {
+    allowed = await Task.detached { LidAwake.isAllowed }.value
+    hasRule = LidAwake.hasRule
   }
 
   /// Off the main thread: macOS's password prompt waits for the user.
@@ -2257,7 +2273,7 @@ private struct LidAwakeSettings: View {
     working = true
     Task {
       _ = await Task.detached { allow ? LidAwake.allow() : LidAwake.disallow() }.value
-      allowed = await Task.detached { LidAwake.isAllowed }.value
+      await refresh()
       working = false
     }
   }

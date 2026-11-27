@@ -51,6 +51,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     sleepTimer.onChange = { [weak self] in self?.showTimersInMenuBar() }
     sleepTimer.onFire = { [weak self] displayOnly in
+      // Lid Awake would keep the Mac awake through the sleep asked for.
+      if !displayOnly { self?.lidAwake.stop() }
       if let message = SystemActions.run(
         displayOnly ? .sleepDisplays : .sleep, frontmost: nil,
         report: { self?.showError($0) })
@@ -63,7 +65,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       guard let self else { return }
       showTimersInMenuBar()
       launcher.lidAwakeStatus = lidAwake.status
+      settings.model.lidAwakeOn = lidAwake.isActive
     }
+    lidAwake.onError = { [weak self] in self?.showError($0) }
+    launcher.onBeforeSleep = { [weak self] in self?.lidAwake.stop() }
     launcher.onLidAwake = { [weak self] seconds in
       if let message = self?.lidAwake.start(for: seconds) { self?.showError(message) }
     }

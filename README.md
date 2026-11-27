@@ -49,14 +49,16 @@
   it, as in `caffeinate 1h 30m`, to stop on its own. A cup with the time left shows in the menu bar
 - Sleep Timer: type a time after it, as in `sleep timer 30m`, then pick Sleep or Turn Off Display;
   a moon with the time left shows in the menu bar until it fires or Stop Sleep Timer
-- Lid Awake: keeps the Mac awake with the lid closed, on battery too, until turned off or for a
-  time typed after it, as in `lid awake 2h`; while on, it's pinned at the top of the search with
-  the time left, and its icon is in the menu bar. It turns itself off when its time is up, when
-  the battery falls to the level set in Settings › Lid Awake (10% unless changed), and when
-  Ripcord quits. macOS sleeps a closed Mac on battery unless `pmset -a disablesleep 1` is set,
-  which takes root, so Settings › Lid Awake asks once for an administrator password to add a
-  sudoers rule (`/etc/sudoers.d/ripcord-lid-awake`) allowing exactly `pmset -a disablesleep 0`
-  and `1`; Remove… there takes it out
+- Lid Awake: keeps the Mac from sleeping, with the lid closed and on battery too, until turned off
+  or for a time typed after it, as in `lid awake 2h`; while on, it's pinned at the top of the
+  search with the time left, and a sun shows in the menu bar. It sets `pmset -a disablesleep 1`,
+  so while on the Mac doesn't sleep at all; Ripcord's Sleep and Sleep Timer turn it off first. It
+  turns itself off when its time is up, when the battery falls to the level set in Settings › Lid
+  Awake (10% unless changed), when Ripcord quits, and, as the setting outlives a restart, the
+  next time Ripcord starts after a crash. `pmset -a disablesleep` takes root, so Settings › Lid
+  Awake asks once for an administrator password to add a sudoers rule
+  (`/etc/sudoers.d/ripcord-lid-awake`) allowing exactly `pmset -a disablesleep 0` and `1`;
+  Remove… there takes it out
 - Color Picker: Pick Color copies a color from anywhere on screen in the format set on its
   settings page (HEX, RGB, HSL, SwiftUI or NSColor); Color History lists the colors picked, to copy
   in any format
@@ -198,6 +200,7 @@ the settings window opens. The settings window writes every change back to it.
   "clipboardHistory": { "keepFor": "unlimited", "maxEntries": 300 },
   "backdrop": "off",
   "cycleHalves": true,
+  "lidAwakeLowBattery": 10,
   "snippets": [
     { "name": "Address", "keyword": "addr", "text": "1 Infinite Loop\nCupertino", "icon": "house",
       "tags": ["home"] }
