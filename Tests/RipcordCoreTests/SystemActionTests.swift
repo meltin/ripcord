@@ -80,4 +80,14 @@ import Testing
     // A preset's level isn't listed twice.
     #expect(rows("set volume 25").filter { $0.title == "Set Volume to 25%" }.count == 1)
   }
+
+  /// Raycast's Show Screen Saver, found by its name.
+  @Test func showsTheScreenSaver() {
+    #expect(SystemAction.showScreenSaver.title == "Show Screen Saver")
+    let top = Search.sections(
+      for: "screen saver", apps: [], running: [], quicklinks: [], items: [:]
+    )
+    .flatMap(\.results).first
+    #expect(top?.action == .system(.showScreenSaver))
+  }
 }
