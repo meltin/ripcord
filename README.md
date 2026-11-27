@@ -49,8 +49,9 @@
   and the like) and opens one in the app you assign to ↵, ⌘↵, ⌥↵, ⌃↵ or ⇧↵, an editor or a
   terminal; ⌘K adds Open on GitHub, Show in Finder and Copy Path. Clone Repo, as Raycast's Git
   Repos has it, takes a repository URL and one of those folders beside the search bar and runs
-  `git clone` there. Remove Repo lists them to move one to the Trash, asked first and refused
-  while it has uncommitted changes, untracked files or unpushed commits; ⇧⌘D force-removes
+  `git clone` there. Remove Repo lists them, worktrees and submodules aside, to move one to the
+  Trash, asked first and refused while it has uncommitted changes, untracked files or unpushed
+  commits; ⇧⌘D force-removes
 - Coffee: Caffeinate keeps the Mac and its display awake until Decaffeinate; type a time after
   it, as in `caffeinate 1h 30m`, to stop on its own. A cup with the time left shows in the menu bar.
   As Raycast's Coffee: Toggle Caffeinate; Caffeinate for ... takes hours, minutes and seconds in

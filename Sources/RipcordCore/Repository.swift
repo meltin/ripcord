@@ -5,6 +5,9 @@ public struct Repository: Equatable, Sendable {
   public let url: URL
   /// The web page of its `origin` remote, for Open on GitHub; nil without one.
   public let remote: URL?
+  /// A worktree or submodule, whose `.git` is a file: Remove Repo leaves these out, as
+  /// Raycast's does.
+  public var isLinkedCheckout = false
 
   public var name: String { url.lastPathComponent }
 }
@@ -59,7 +62,12 @@ public enum RepositoryIndex {
       var found: [Repository] = []
       func walk(_ folder: URL, level: Int) {
         if isRepository(folder) {
-          found.append(Repository(url: folder, remote: remote(of: folder)))
+          var isFolder: ObjCBool = false
+          FileManager.default.fileExists(
+            atPath: folder.appending(path: ".git").path, isDirectory: &isFolder)
+          found.append(
+            Repository(
+              url: folder, remote: remote(of: folder), isLinkedCheckout: !isFolder.boolValue))
           return
         }
         guard level < depth,
@@ -182,11 +190,53 @@ public enum CloneRepo {
     return ["clone", "--", url]
   }
 
+  /// The line of git's errors worth showing: the last `fatal:` one, as an SSH failure ends on
+  /// "and the repository exists.", or else the last line.
+  public static func failure(_ errors: String) -> String {
+    let lines = errors.split(whereSeparator: \.isNewline).map {
+      $0.trimmingCharacters(in: .whitespaces)
+    }.filter { !$0.isEmpty }
+    return lines.last(where: { $0.hasPrefix("fatal:") }) ?? lines.last ?? "git clone failed."
+  }
+
   /// The folder `git clone` makes for `url`: its last part without `.git`.
   public static func folderName(for url: String) -> String {
     let last =
       url.trimmingCharacters(in: .whitespacesAndNewlines)
       .split(whereSeparator: { $0 == "/" || $0 == ":" }).last.map(String.init) ?? url
     return last.hasSuffix(".git") ? String(last.dropLast(4)) : last
+  }
+}
+
+/// Remove Repo's check, as Raycast's: what isn't safe elsewhere yet.
+public enum RepositoryCheck {
+  /// Why `folder` can't go to the Trash as it is, or nil when everything in it is committed and,
+  /// where it has a remote, pushed.
+  public static func unsaved(in folder: URL) -> String? {
+    guard let status = git(["status", "--porcelain"], in: folder) else {
+      return "git couldn't read it."
+    }
+    if !status.isEmpty { return "There are uncommitted changes or untracked files" }
+    guard let remotes = git(["remote"], in: folder) else { return "git couldn't read it." }
+    guard !remotes.isEmpty else { return nil }
+    guard let local = git(["log", "--oneline", "--branches", "--not", "--remotes"], in: folder)
+    else { return "git couldn't read it." }
+    return local.isEmpty ? nil : "There are local commits that haven't been pushed"
+  }
+
+  /// git's output, trimmed; nil when it couldn't run or failed.
+  private static func git(_ arguments: [String], in folder: URL) -> String? {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+    process.arguments = arguments
+    process.currentDirectoryURL = folder
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = FileHandle.nullDevice
+    guard (try? process.run()) != nil else { return nil }
+    let output = pipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else { return nil }
+    return String(decoding: output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
   }
 }

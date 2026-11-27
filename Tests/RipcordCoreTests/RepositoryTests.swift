@@ -131,4 +131,70 @@ import Testing
     #expect(row?.action == .removeRepository(repository.url, force: false))
     #expect(row?.actions.last?.shortcut == "⇧⌘D")
   }
+
+  /// Clone Repo's error: git's `fatal:` line over the hint that follows it.
+  @Test func showsGitsFatalLine() {
+    let ssh = """
+      git@github.com: Permission denied (publickey).
+      fatal: Could not read from remote repository.
+
+      Please make sure you have the correct access rights
+      and the repository exists.
+      """
+    #expect(CloneRepo.failure(ssh) == "fatal: Could not read from remote repository.")
+    #expect(CloneRepo.failure("error: something\n") == "error: something")
+    #expect(CloneRepo.failure("") == "git clone failed.")
+  }
+
+  /// Remove Repo refuses what isn't safe elsewhere: uncommitted or untracked work, commits not
+  /// pushed, or a folder git can't read.
+  @Test func removeRepoChecksForUnsavedWork() throws {
+    let base = FileManager.default.temporaryDirectory.appending(
+      path: "ripcord-remove-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: base) }
+    func git(_ arguments: String..., in folder: URL) throws {
+      let process = Process()
+      process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+      process.arguments = ["-c", "user.name=t", "-c", "user.email=t@example.invalid"] + arguments
+      process.currentDirectoryURL = folder
+      process.standardOutput = FileHandle.nullDevice
+      process.standardError = FileHandle.nullDevice
+      try process.run()
+      process.waitUntilExit()
+      #expect(process.terminationStatus == 0, "git \(arguments)")
+    }
+    let remote = base.appending(path: "remote.git")
+    let repo = base.appending(path: "repo")
+    let plain = base.appending(path: "plain")
+    for folder in [remote, repo, plain] {
+      try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    }
+    try git("init", "-q", "--bare", in: remote)
+    try git("init", "-q", in: repo)
+    try Data("a".utf8).write(to: repo.appending(path: "a.txt"))
+    #expect(RepositoryCheck.unsaved(in: repo) == "There are uncommitted changes or untracked files")
+    try git("add", "a.txt", in: repo)
+    try git("commit", "-q", "-m", "a", in: repo)
+    #expect(RepositoryCheck.unsaved(in: repo) == nil)
+    try git("remote", "add", "origin", remote.path, in: repo)
+    #expect(RepositoryCheck.unsaved(in: repo) == "There are local commits that haven't been pushed")
+    try git("push", "-q", "origin", "HEAD", in: repo)
+    #expect(RepositoryCheck.unsaved(in: repo) == nil)
+    #expect(RepositoryCheck.unsaved(in: plain) != nil)
+  }
+
+  /// A worktree or submodule, its `.git` a file, is told apart for Remove Repo to leave out.
+  @Test func marksWorktreesAndSubmodules() throws {
+    let base = FileManager.default.temporaryDirectory.appending(
+      path: "ripcord-linked-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: base) }
+    let own = base.appending(path: "own/.git")
+    let linked = base.appending(path: "linked")
+    try FileManager.default.createDirectory(at: own, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: linked, withIntermediateDirectories: true)
+    try Data("gitdir: /nowhere\n".utf8).write(to: linked.appending(path: ".git"))
+    let found = RepositoryIndex.scan(roots: [base], depth: 1)
+    #expect(found.map(\.name).sorted() == ["linked", "own"])
+    #expect(found.filter(\.isLinkedCheckout).map(\.name) == ["linked"])
+  }
 }
