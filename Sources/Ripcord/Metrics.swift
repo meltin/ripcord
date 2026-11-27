@@ -20,8 +20,9 @@ enum Metrics {
   static let filterFontSize: CGFloat = 13
 
   /// Cards over the panel: the ⌘K menu, a dropdown's list, the icon picker, Set Alias… and
-  /// Set Hotkey…, and Notes' actions.
-  static let cardWidth: CGFloat = 340
+  /// Set Hotkey…, and Notes' actions. 350, as Raycast's ⌘K card, so its longest names fit beside
+  /// four keycaps.
+  static let cardWidth: CGFloat = 350
   static let cardRadius: CGFloat = 16
   /// Between the card's edge and its rows.
   static let cardPadding: CGFloat = 6

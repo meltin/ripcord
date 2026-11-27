@@ -170,6 +170,14 @@ import Testing
       ])
   }
 
+  /// Put Answer in Search Bar: the answer as written reads back, so the sum can go on.
+  @Test func answersReadBack() throws {
+    for value in [1234.5, -7, 0.1, 1e20, 2.0 / 3] {
+      let next = try #require(Calculator.evaluate(Calculator.format(value) + "+1"))
+      #expect(abs(next - (value + 1)) <= abs(value) * 1e-9 + 1e-9)
+    }
+  }
+
   @Test func keywordExpandsQuicklink() {
     let results = Search.results(for: "g swift testing", apps: apps, quicklinks: links)
     #expect(
