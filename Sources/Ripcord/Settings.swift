@@ -887,7 +887,8 @@ private struct Sidebar: View {
   @ViewBuilder
   private func found(_ results: [(page: SettingsPage, found: SettingsSearch.Page)]) -> some View {
     if results.isEmpty {
-      Text("No Results").font(.system(size: 13)).foregroundStyle(.secondary)
+      Text("No Results").font(.system(size: Metrics.settingsSidebarFontSize))
+        .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity).padding(.top, 12)
     }
     let rows = rows
@@ -905,7 +906,7 @@ private struct Sidebar: View {
   ) -> some View {
     if !items.isEmpty {
       Text(heading)
-        .font(.system(size: 11, weight: .medium))
+        .font(.system(size: Metrics.settingsSidebarSectionFontSize, weight: .medium))
         .foregroundStyle(.secondary)
         .padding(.horizontal, 18)
         .padding(.top, 2)
@@ -921,7 +922,7 @@ private struct Sidebar: View {
       HStack(spacing: 10) {
         PageIcon(page: row.page, size: row.title == nil ? 22 : 18)
         Text(highlighted(row.title ?? row.page.rawValue))
-          .font(.system(size: 13)).lineLimit(1)
+          .font(.system(size: Metrics.settingsSidebarFontSize)).lineLimit(1)
         Spacer(minLength: 0)
       }
       .padding(.leading, row.title == nil ? 8 : 18)
@@ -975,7 +976,7 @@ private struct Sidebar: View {
     } label: {
       HStack(spacing: 10) {
         PageIcon(page: item, size: 22)
-        Text(item.rawValue).font(.system(size: 13)).lineLimit(1)
+        Text(item.rawValue).font(.system(size: Metrics.settingsSidebarFontSize)).lineLimit(1)
         Spacer(minLength: 0)
       }
       .padding(.horizontal, 8)
@@ -1026,8 +1027,10 @@ private struct PageHeader: View {
     HStack(spacing: 12) {
       PageIcon(page: page, size: 36)
       VStack(alignment: .leading, spacing: 2) {
-        Text(page.rawValue).font(.system(size: 15, weight: .semibold))
-        Text(page.summary).font(.system(size: 12)).foregroundStyle(.secondary)
+        Text(page.rawValue).font(
+          .system(size: Metrics.settingsPageTitleFontSize, weight: .semibold))
+        Text(page.summary).font(.system(size: Metrics.settingsPageSummaryFontSize))
+          .foregroundStyle(.secondary)
       }
     }
   }
@@ -1065,7 +1068,7 @@ private struct LoadErrorBanner: View {
       } icon: {
         Glyph("exclamationmark.triangle.fill", pointSize: 12)
       }
-      .font(.system(size: 12))
+      .font(.system(size: Metrics.settingsBannerFontSize))
       .foregroundStyle(.red)
     }
   }
@@ -1141,7 +1144,7 @@ private struct GeneralPage: View {
     }
     if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") {
       Text("Ripcord \(String(describing: version))")
-        .font(.system(size: 12))
+        .font(.system(size: Metrics.settingsVersionFontSize))
         .foregroundStyle(.secondary)
     }
   }
@@ -1171,14 +1174,14 @@ private struct QuicklinksPage: View {
         Text("URL").frame(maxWidth: .infinity, alignment: .leading)
         Color.clear.frame(width: 24)
       }
-      .font(.system(size: 12))
+      .font(.system(size: Metrics.settingsColumnHeadingFontSize))
       .foregroundStyle(.secondary)
       .padding(.horizontal, 16)
       .padding(.vertical, 10)
       if model.config.quicklinks.isEmpty {
         Divider()
         Text("No Quicklinks yet. Add one to search a site from the panel.")
-          .font(.system(size: 13))
+          .font(.system(size: Metrics.settingsEmptyFontSize))
           .foregroundStyle(.secondary)
           .padding(16)
       }
@@ -1232,7 +1235,7 @@ private struct QuicklinkRow: View {
       )
       .frame(width: 90)
       TextField("https://example.com/search?q={query}", text: $link.url)
-        .font(.system(size: 12, design: .monospaced))
+        .font(.system(size: Metrics.settingsURLFontSize, design: .monospaced))
       Button(action: onDelete) {
         Glyph("minus.circle")
       }
@@ -1242,7 +1245,7 @@ private struct QuicklinkRow: View {
       .frame(width: 24)
     }
     .textFieldStyle(.roundedBorder)
-    .font(.system(size: 13))
+    .font(.system(size: Metrics.settingsRowFontSize))
     .padding(.horizontal, 16)
     .padding(.vertical, 8)
   }
@@ -1292,7 +1295,7 @@ private struct ShortcutsHeading: View {
       Text("Hotkey").frame(width: 170, alignment: .leading)
       Text("On").frame(width: 24)
     }
-    .font(.system(size: 12))
+    .font(.system(size: Metrics.settingsColumnHeadingFontSize))
     .foregroundStyle(.secondary)
     .padding(.horizontal, 14)
     .padding(.vertical, 8)
@@ -1371,7 +1374,7 @@ private struct ShortcutRow: View {
       }
       .frame(width: 24)
     }
-    .font(.system(size: 13))
+    .font(.system(size: Metrics.settingsRowFontSize))
     .padding(.horizontal, 14)
     .frame(height: 36)
   }
@@ -1514,7 +1517,8 @@ private struct HotkeyRecorder: View {
         }
       }
       if let message = model.recorderMessage, message.target == target {
-        Text(message.text).font(.system(size: 11)).foregroundStyle(.orange)
+        Text(message.text).font(.system(size: Metrics.hotkeyRecorderMessageFontSize))
+          .foregroundStyle(.orange)
       }
     }
   }
@@ -1688,7 +1692,7 @@ private struct SnippetExpansionSettings: View {
           if let url { Image(nsImage: appIcon(url)) }
           // An app that isn't installed shows by its bundle ID.
           Text(url.map { FileManager.default.displayName(atPath: $0.path) } ?? id)
-            .font(.system(size: 13))
+            .font(.system(size: Metrics.settingsRowFontSize))
           Spacer()
           Button {
             expansion.disabledApps = expansion.disabledApps.filter { $0 != id }
@@ -1735,7 +1739,7 @@ private struct FolderList: View {
       Divider()
       HStack {
         Glyph("folder").foregroundStyle(.secondary)
-        Text(folder).font(.system(size: 13, design: .monospaced))
+        Text(folder).font(.system(size: Metrics.settingsFolderFontSize, design: .monospaced))
         Spacer()
         Button {
           folders = folders.enumerated().filter { $0.offset != index }.map(\.element)
@@ -1842,7 +1846,7 @@ private struct OpenWithRow: View {
         .presentationBackground(.regularMaterial)
       }
     }
-    .font(.system(size: 13))
+    .font(.system(size: Metrics.settingsRowFontSize))
     .padding(.horizontal, 18)
     .padding(.vertical, 8)
   }
@@ -1907,7 +1911,7 @@ private struct AppPicker: View {
         }
         .onSubmit { if rows.indices.contains(highlighted) { onPick(rows[highlighted]?.url) } }
     }
-    .font(.system(size: 13))
+    .font(.system(size: Metrics.appPickerFontSize))
     .frame(width: 280, height: 320)
     .onAppear {
       if model.apps.isEmpty { model.loadApps() }
@@ -1965,7 +1969,7 @@ private struct PermissionsCard: View {
           Text(
             "Accessibility on but not working after an update? This resets only Accessibility and restarts Ripcord; then grant it again."
           )
-          .font(.system(size: 11))
+          .font(.system(size: Metrics.settingsFootnoteFontSize))
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
           Spacer(minLength: 12)
@@ -2000,8 +2004,9 @@ private struct PermissionRow: View {
         .frame(width: 26, height: 26)
         .background(Color.gray.gradient, in: RoundedRectangle(cornerRadius: 6))
       VStack(alignment: .leading, spacing: 2) {
-        Text(permission.title).font(.system(size: 13))
-        Text(permission.purpose).font(.system(size: 12)).foregroundStyle(.secondary)
+        Text(permission.title).font(.system(size: Metrics.settingsRowFontSize))
+        Text(permission.purpose).font(.system(size: Metrics.settingsRowDescriptionFontSize))
+          .foregroundStyle(.secondary)
       }
       Spacer(minLength: 12)
       control
@@ -2046,7 +2051,7 @@ private struct PermissionRow: View {
     } icon: {
       Glyph(symbol, pointSize: 12)
     }
-    .font(.system(size: 12))
+    .font(.system(size: Metrics.permissionStateFontSize))
     .foregroundStyle(color)
     .padding(.trailing, 4)
   }
@@ -2064,11 +2069,12 @@ struct WelcomeView: View {
       HStack(spacing: 14) {
         Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 56, height: 56)
         VStack(alignment: .leading, spacing: 3) {
-          Text("Welcome to Ripcord").font(.system(size: 20, weight: .semibold))
+          Text("Welcome to Ripcord").font(
+            .system(size: Metrics.welcomeTitleFontSize, weight: .semibold))
           Text(
             "Open apps, search, paste from your clipboard history and snippets, and move windows, from one hotkey."
           )
-          .font(.system(size: 13))
+          .font(.system(size: Metrics.welcomeBodyFontSize))
           .foregroundStyle(.secondary)
         }
       }
@@ -2086,11 +2092,11 @@ struct WelcomeView: View {
             .labelsHidden()
         }
       }
-      Text("Permissions").font(.system(size: 13, weight: .semibold))
+      Text("Permissions").font(.system(size: Metrics.welcomeHeadingFontSize, weight: .semibold))
       PermissionsCard(showsReset: false)
       HStack {
         Text("Everything here is in Settings (⌘,) later.")
-          .font(.system(size: 12))
+          .font(.system(size: Metrics.welcomeFootnoteFontSize))
           .foregroundStyle(.secondary)
         Spacer()
         Button("Get Started", action: onDone)
@@ -2128,11 +2134,12 @@ private struct SettingRow<Control: View>: View {
   var body: some View {
     HStack(spacing: 16) {
       VStack(alignment: .leading, spacing: 3) {
-        Text(title).font(.system(size: 13))
-        Text(description).font(.system(size: 12)).foregroundStyle(.secondary)
+        Text(title).font(.system(size: Metrics.settingsRowFontSize))
+        Text(description).font(.system(size: Metrics.settingsRowDescriptionFontSize))
+          .foregroundStyle(.secondary)
         if let detail {
           Text(detail)
-            .font(.system(size: 12, design: .monospaced))
+            .font(.system(size: Metrics.settingsRowDetailFontSize, design: .monospaced))
             .textSelection(.enabled)
             .padding(.top, 3)
         }

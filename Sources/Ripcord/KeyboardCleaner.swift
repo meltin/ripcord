@@ -203,16 +203,19 @@ private struct CleanKeyboardOverlay: View {
       Color.black.opacity(0.55)
       VStack(spacing: 14) {
         Glyph("keyboard", pointSize: 56)
-        Text("Cleaning Keyboard").font(.system(size: 28, weight: .semibold))
+        Text("Cleaning Keyboard").font(
+          .system(size: Metrics.cleanKeyboardTitleFontSize, weight: .semibold))
         Text(Coffee.format(countdown.remaining.rounded(.up)))
-          .font(.system(size: 48, weight: .medium).monospacedDigit())
+          .font(
+            .system(size: Metrics.cleanKeyboardCountdownFontSize, weight: .medium).monospacedDigit()
+          )
         if countdown.keysGetThrough {
           Text("Secure input is on in another app, so keys get through. Stop wiping.")
-            .font(.system(size: 15, weight: .semibold))
+            .font(.system(size: Metrics.cleanKeyboardWarningFontSize, weight: .semibold))
             .foregroundStyle(.yellow)
         } else {
           Text("Keys are off until then. ⌃⌥⌘↩ or the menu bar ends it now.")
-            .font(.system(size: 15))
+            .font(.system(size: Metrics.cleanKeyboardMessageFontSize))
             .foregroundStyle(.white.opacity(0.75))
         }
       }
