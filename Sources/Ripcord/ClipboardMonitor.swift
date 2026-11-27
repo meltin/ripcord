@@ -99,6 +99,13 @@ final class ClipboardMonitor {
         pasteboard.clearContents()
         written = pasteboard.writeObjects([image])
       }
+    case .files(let paths):
+      // Those still there, as Finder puts copied files: an app pastes the files themselves.
+      let urls = paths.filter { FileManager.default.fileExists(atPath: $0) }
+        .map { URL(fileURLWithPath: $0) as NSURL }
+      guard !urls.isEmpty else { return false }
+      pasteboard.clearContents()
+      written = pasteboard.writeObjects(urls)
     }
     // Ripcord's own write isn't a new copy; count it here instead of on the next poll.
     changeCount = pasteboard.changeCount
