@@ -98,6 +98,8 @@ struct SearchView: View {
         SnippetForm(model: model)
       } else if model.mode == .bookmarkForm {
         BookmarkForm(model: model)
+      } else if model.mode == .quicklinkForm {
+        QuicklinkForm(model: model)
       } else if model.mode == .scriptOutput {
         ScriptOutputView(output: model.scriptOutput)
       } else if model.mode == .colorWheel {
@@ -118,7 +120,7 @@ struct SearchView: View {
       } else if [
         .repositories, .removeRepos, .httpStatusCodes, .colors, .colorNames, .convertColor,
         .favoriteColors,
-        .bookmarks, .notes, .pick,
+        .bookmarks, .notes, .pick, .quicklinks,
       ].contains(
         model.mode)
       {
@@ -281,8 +283,12 @@ private struct EmptyState: View {
       "Save text you type again and again with Create Snippet."
     case .snippets:
       "No snippet contains “\(query)”."
-    case .snippetForm, .bookmarkForm, .scriptOutput:
+    case .snippetForm, .bookmarkForm, .quicklinkForm, .scriptOutput:
       ""
+    case .quicklinks where query.trimmingCharacters(in: .whitespaces).isEmpty:
+      "Make a link you open often, with a {query} for what's typed, with Create Quicklink."
+    case .quicklinks:
+      "No Quicklink matches “\(query)”."
     case .repositories where query.trimmingCharacters(in: .whitespaces).isEmpty:
       "Repositories in the folders set under Settings › Git Repositories show up here."
     case .removeRepos where query.trimmingCharacters(in: .whitespaces).isEmpty:
@@ -480,8 +486,10 @@ private struct ResultIcon: View {
       }
     case .toggleFavoriteColor:
       tile("star", .yellow)
-    case .removeRepository, .trashRepository:
+    case .removeRepository, .trashRepository, .deleteQuicklink:
       tile("trash", .gray)
+    case .editQuicklink:
+      tile("pencil", .gray)
     case .deleteColor, .deleteBookmark:
       tile("trash", .gray)
     case .editBookmark, .moveBookmarkMenu, .moveBookmark:
@@ -641,6 +649,8 @@ extension BuiltinCommand {
     case .colorWheel: "circle.lefthalf.filled"
     case .cleanKeyboard: "keyboard"
     case .searchBookmarks: "bookmark.fill"
+    case .createQuicklink: "plus"
+    case .searchQuicklinks: "link"
     case .searchEmoji: "face.smiling"
     case .ripcordNotes, .searchNotes: "note.text"
     case .generateDummyText: "textformat"
@@ -665,6 +675,7 @@ extension BuiltinCommand {
     case .pickColor, .colorHistory, .colorNames, .convertColor, .favoriteColors, .colorWheel: .pink
     case .cleanKeyboard: .cyan
     case .searchBookmarks, .addBookmark: .yellow
+    case .createQuicklink, .searchQuicklinks: .indigo
     case .searchEmoji: .orange
     case .ripcordNotes, .createNote, .searchNotes: .orange
     case .generateDummyText: .purple
@@ -903,6 +914,67 @@ private struct SnippetForm: View {
 
   private func label(_ text: String) -> some View {
     Text(text).font(.system(size: Metrics.formLabelFontSize)).foregroundStyle(.secondary)
+  }
+}
+
+/// Create Quicklink's form, as Raycast's lays it out: the link first, then its name, labels on
+/// the right of their column and every field the same width. ⌘↵ saves.
+private struct QuicklinkForm: View {
+  @Bindable var model: LauncherModel
+  @FocusState private var focus: Field?
+
+  enum Field: CaseIterable { case link, name, keyword }
+
+  private let fieldWidth: CGFloat = 380
+
+  var body: some View {
+    Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 18) {
+      GridRow {
+        label("Link")
+        TextField("https://www.google.com/search?q={query}", text: $model.quicklinkDraft.link)
+          .autocorrectionDisabled()
+          .focused($focus, equals: .link)
+          .tabs(from: .link, focus: $focus, among: Field.allCases)
+          .inputField(isFocused: focus == .link)
+          .frame(width: fieldWidth)
+      }
+      GridRow {
+        Color.clear.frame(width: 1, height: 1)
+        Text("Include {query} for what's typed after its name or keyword.")
+          .font(.system(size: Metrics.formLabelFontSize))
+          .foregroundStyle(.secondary)
+          .frame(width: fieldWidth, alignment: .leading)
+      }
+      GridRow {
+        label("Name")
+        TextField("Quicklink name", text: $model.quicklinkDraft.name)
+          .focused($focus, equals: .name)
+          .tabs(from: .name, focus: $focus, among: Field.allCases)
+          .inputField(isFocused: focus == .name)
+          .frame(width: fieldWidth)
+      }
+      GridRow {
+        label("Keyword")
+        TextField("Optional, as g for Google", text: $model.quicklinkDraft.keyword)
+          .autocorrectionDisabled()
+          .focused($focus, equals: .keyword)
+          .tabs(from: .keyword, focus: $focus, among: Field.allCases)
+          .inputField(isFocused: focus == .keyword)
+          .frame(width: fieldWidth)
+      }
+    }
+    .font(.system(size: Metrics.formFontSize))
+    .padding(.top, 28)
+    // Clear of the floating footer.
+    .padding(.bottom, LauncherController.footerHeight + 12)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    // On the next pass: the search field it replaces is still first responder as it appears.
+    .onAppear { DispatchQueue.main.async { focus = .link } }
+  }
+
+  private func label(_ text: String) -> some View {
+    Text(text).font(.system(size: Metrics.formLabelFontSize)).foregroundStyle(.secondary)
+      .gridColumnAlignment(.trailing)
   }
 }
 
@@ -1885,7 +1957,9 @@ private struct Footer: View {
             onCommand(.submit)
           } label: {
             HStack(spacing: 6) {
-              Text(mode == .bookmarkForm ? "Save Bookmark" : "Save Snippet")
+              Text(
+                mode == .bookmarkForm
+                  ? "Save Bookmark" : mode == .quicklinkForm ? "Save Quicklink" : "Save Snippet")
               HStack(spacing: 2) {
                 Keycap("⌘")
                 Keycap("↵")
@@ -2457,7 +2531,8 @@ extension LauncherMode {
     case .bookmarks: "Search Bookmarks…"
     case .emoji: "Search Emoji & Symbols…"
     case .notes: "Search Notes…"
-    case .snippetForm, .bookmarkForm: ""
+    case .snippetForm, .bookmarkForm, .quicklinkForm: ""
+    case .quicklinks: "Search Quicklinks…"
     case .scriptOutput: "Script Output"
     case .pick: "Pick a Line…"
     }

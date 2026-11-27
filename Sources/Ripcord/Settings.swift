@@ -563,12 +563,12 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     switch self {
     case .clipboardHistory, .snippets, .repositories, .coffee, .sleepTimer, .lidAwake,
       .httpStatusCodes,
-      .colorPicker, .cleanKeyboard, .bookmarks, .notes, .emoji, .ripcord, .dummyText:
+      .colorPicker, .cleanKeyboard, .bookmarks, .notes, .emoji, .ripcord, .dummyText, .quicklinks:
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
     case .cleanShot: Set(CleanShotCommand.allCases.map(\.settingsKey))
-    case .general, .permissions, .applications, .quicklinks, .scripts: nil
+    case .general, .permissions, .applications, .scripts: nil
     }
   }
 }
@@ -805,6 +805,7 @@ extension BuiltinCommand {
       .colorPicker
     case .cleanKeyboard: .cleanKeyboard
     case .searchBookmarks, .addBookmark: .bookmarks
+    case .createQuicklink, .searchQuicklinks: .quicklinks
     case .ripcordNotes, .createNote, .searchNotes: .notes
     case .generateDummyText: .dummyText
     case .searchEmoji: .emoji
@@ -838,6 +839,7 @@ struct SettingsView: View {
           PageScroll(model: model) {
             PageHeader(page: .quicklinks)
             QuicklinksPage(model: model)
+            CommandsList(model: model, page: .quicklinks)
           }
         case .colorPicker:
           PageScroll(model: model) {
