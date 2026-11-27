@@ -704,6 +704,10 @@ private enum SettingText {
     title: "Disable Inline Emoji Picker",
     detail:
       "When enabled, typing : in Ripcord's text fields no longer opens the inline emoji picker.")
+  static let escapeLosesFocus = SettingsSearch.Item(
+    title: "Escape Key Loses Focus",
+    detail:
+      "When enabled, pressing Escape in Notes makes the window lose focus instead of closing it.")
   static let windowGap = SettingsSearch.Item(
     title: "Window Gap", detail: "Gap between windows")
   static let screenGap = SettingsSearch.Item(
@@ -735,6 +739,7 @@ extension SettingsPage {
           ]
       case .colorPicker: [SettingText.colorFormat, SettingText.showColorName]
       case .httpStatusCodes: [SettingText.httpStatusPicture]
+      case .notes: [SettingText.escapeLosesFocus]
       case .scripts: [SettingText.scriptFolders]
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
       case .dummyText: [SettingText.dummyTextLanguage]
@@ -852,6 +857,23 @@ struct SettingsView: View {
               }
             }
             CommandsList(model: model, page: .colorPicker)
+          }
+        case .notes:
+          PageScroll(model: model) {
+            PageHeader(page: .notes)
+            Card {
+              SettingRow(
+                title: SettingText.escapeLosesFocus.title,
+                description: SettingText.escapeLosesFocus.detail
+              ) {
+                Toggle(
+                  SettingText.escapeLosesFocus.title, isOn: $model.config.notes.escapeLosesFocus
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+              }
+            }
+            CommandsList(model: model, page: .notes)
           }
         case .httpStatusCodes:
           PageScroll(model: model) {

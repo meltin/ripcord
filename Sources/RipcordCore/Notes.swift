@@ -150,3 +150,21 @@ extension Search {
       keyword: nil, kind: .note, action: menu[0].action, menu: menu)
   }
 }
+
+/// Ripcord Notes' settings, as Raycast Notes has them.
+public struct NotesSettings: Codable, Equatable, Sendable {
+  /// Esc hands the keys back to the app in front and leaves the window open, as Raycast's
+  /// "Escape Key Loses Focus"; off, Esc closes the window.
+  public var escapeLosesFocus: Bool
+
+  public init(escapeLosesFocus: Bool = false) {
+    self.escapeLosesFocus = escapeLosesFocus
+  }
+
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.init(
+      escapeLosesFocus: try container.decodeIfPresent(Bool.self, forKey: .escapeLosesFocus)
+        ?? false)
+  }
+}
