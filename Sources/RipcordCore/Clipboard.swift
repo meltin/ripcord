@@ -29,6 +29,8 @@ public struct ClipItem: Codable, Identifiable, Equatable, Sendable {
   public var name: String?
   /// An image's size in bytes, or copied files' together.
   public var size: Int?
+  /// The text read from an image, for search; empty once read and none found, nil until then.
+  public var recognizedText: String?
 
   public var copies: Int { timesCopied ?? 1 }
   public var firstDate: Date { firstCopied ?? date }
@@ -247,6 +249,21 @@ public struct ClipboardHistory: Sendable {
     item.timesCopied = item.copies + 1
     items = [item] + items.filter { $0.id != id }
     try save()
+  }
+
+  /// Keeps the text read from the image `id`, for search.
+  public mutating func setRecognizedText(_ text: String, for id: UUID) throws {
+    guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+    items[index].recognizedText = text
+    try save()
+  }
+
+  /// Images whose text hasn't been read yet, newest first.
+  public var unreadImages: [ClipItem] {
+    items.filter { item in
+      guard case .image = item.content else { return false }
+      return item.recognizedText == nil
+    }
   }
 
   public mutating func togglePin(_ id: UUID) throws {

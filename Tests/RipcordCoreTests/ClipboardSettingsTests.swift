@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 
@@ -89,6 +90,29 @@ struct ClipboardSettingsTests {
     let saved = try JSONEncoder().encode(history.settings)
     let read = try JSONDecoder().decode(ClipboardSettings.self, from: saved)
     #expect(read.maxEntries == .max)
+  }
+
+  /// An image is found by the text read from it, once read; until then it's waiting to be.
+  @Test func findsAnImageByItsRecognizedText() throws {
+    var (history, directory) = temporaryHistory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let png = try #require(
+      NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2, bitsPerSample: 8, samplesPerPixel: 4,
+        hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0,
+        bitsPerPixel: 0)?.representation(using: .png, properties: [:]))
+    try history.add(.image(png, fileExtension: "png", width: 2, height: 2))
+    let id = history.items[0].id
+    let found = { (query: String) in
+      Search.clipboardSections(for: query, history: history).flatMap(\.results).count
+    }
+    #expect(history.unreadImages.map(\.id) == [id])
+    #expect(found("invoice") == 0)
+    try history.setRecognizedText("Invoice 2026-11", for: id)
+    #expect(history.unreadImages.isEmpty)
+    #expect(found("invoice") == 1)
+    // Read back from disk too.
+    #expect(ClipboardHistory(directory: directory).items[0].recognizedText == "Invoice 2026-11")
   }
 
   /// Copy to Clipboard as the Primary Action puts copy on Return and paste on ⌘↵.

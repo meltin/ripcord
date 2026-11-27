@@ -619,6 +619,14 @@ private enum SettingText {
   )
   static let clearHistory = SettingsSearch.Item(
     title: "Clear History", detail: "Delete every entry but the pinned ones.")
+  static let textRecognition = SettingsSearch.Item(
+    title: "Text Recognition",
+    detail: "Text content in images will be automatically extracted and can be searched.")
+  static let recognitionMode = SettingsSearch.Item(
+    title: "Recognition Mode",
+    detail:
+      "Choose between faster processing or more accurate text recognition. Accurate mode uses more CPU resources."
+  )
   static let clipboardDisabledApps = SettingsSearch.Item(
     title: "Disabled Applications",
     detail: "Clipboard changes from these applications will not be recorded.")
@@ -676,6 +684,7 @@ extension SettingsPage {
       case .clipboardHistory:
         [
           SettingText.keepHistoryFor, SettingText.maxEntries, SettingText.clearHistory,
+          SettingText.textRecognition, SettingText.recognitionMode,
           SettingText.clipboardDisabledApps, SettingText.clipboardPrimaryAction,
           SettingText.updateAfterAction,
         ]
@@ -1717,6 +1726,33 @@ private struct ClipboardHistorySettings: View {
         title: SettingText.clearHistory.title, description: SettingText.clearHistory.detail
       ) {
         Button("Clear History…", role: .destructive, action: confirmClear)
+      }
+    }
+    Card {
+      SettingRow(
+        title: SettingText.textRecognition.title, description: SettingText.textRecognition.detail
+      ) {
+        Toggle(
+          SettingText.textRecognition.title, isOn: $model.config.clipboardHistory.textRecognition
+        )
+        .toggleStyle(.switch)
+        .labelsHidden()
+      }
+      Divider()
+      SettingRow(
+        title: SettingText.recognitionMode.title, description: SettingText.recognitionMode.detail
+      ) {
+        Picker(
+          SettingText.recognitionMode.title,
+          selection: $model.config.clipboardHistory.recognitionMode
+        ) {
+          ForEach(ClipboardSettings.RecognitionMode.allCases, id: \.self) {
+            Text($0.title).tag($0)
+          }
+        }
+        .labelsHidden()
+        .fixedSize()
+        .disabled(!model.config.clipboardHistory.textRecognition)
       }
     }
     Card {

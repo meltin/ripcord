@@ -15,6 +15,18 @@ public struct ClipboardSettings: Codable, Equatable, Sendable {
     }
   }
 
+  /// How Text Recognition reads images, as Raycast's Recognition Mode.
+  public enum RecognitionMode: String, Codable, CaseIterable, Sendable {
+    case fast, accurate
+
+    public var title: String {
+      switch self {
+      case .fast: "Fast"
+      case .accurate: "Accurate"
+      }
+    }
+  }
+
   public enum Retention: String, Codable, CaseIterable, Sendable {
     case day, week, month, threeMonths, sixMonths, year, unlimited
 
@@ -62,18 +74,24 @@ public struct ClipboardSettings: Codable, Equatable, Sendable {
   /// Whether pasting or copying an entry moves it to the top, as Raycast's "Update history
   /// after action".
   public var updateAfterAction: Bool
+  /// Whether text in copied images is read, so a search finds them by it.
+  public var textRecognition: Bool
+  public var recognitionMode: RecognitionMode
 
   /// Unlimited by age, as before this setting: none of what was kept goes until asked.
   public init(
     keepFor: Retention = .unlimited, maxEntries: Int = 300,
     disabledApps: [String] = defaultDisabledApps, primaryAction: PrimaryAction = .paste,
-    updateAfterAction: Bool = true
+    updateAfterAction: Bool = true, textRecognition: Bool = true,
+    recognitionMode: RecognitionMode = .fast
   ) {
     self.keepFor = keepFor
     self.maxEntries = maxEntries
     self.disabledApps = disabledApps
     self.primaryAction = primaryAction
     self.updateAfterAction = updateAfterAction
+    self.textRecognition = textRecognition
+    self.recognitionMode = recognitionMode
   }
 
   public init(from decoder: Decoder) throws {
@@ -87,6 +105,9 @@ public struct ClipboardSettings: Codable, Equatable, Sendable {
       (try? container.decodeIfPresent(PrimaryAction.self, forKey: .primaryAction)) ?? .paste
     updateAfterAction =
       try container.decodeIfPresent(Bool.self, forKey: .updateAfterAction) ?? true
+    textRecognition = try container.decodeIfPresent(Bool.self, forKey: .textRecognition) ?? true
+    recognitionMode =
+      (try? container.decodeIfPresent(RecognitionMode.self, forKey: .recognitionMode)) ?? .fast
   }
 }
 
