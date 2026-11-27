@@ -100,11 +100,24 @@ import Testing
 
   @Test func actionsPutPrimaryFirst() throws {
     let app = try #require(Search.results(for: "safari", apps: apps, quicklinks: []).first)
-    // Show in Finder on ⌘↵ and Add to Favorites on ⇧⌘F, as Raycast's.
-    #expect(app.actions.map(\.shortcut) == ["↵", "⌘↵", "⇧⌘C", "⇧⌘F", "⇧⌘,"])
-    #expect(app.actions[2].action == .copy("/Applications/Safari.app"))
+    // Raycast's actions, keys and order. Copy Bundle Identifier is there only when the app's
+    // bundle can be read, as on a Mac with Safari.
+    let hasBundle = Bundle(url: URL(fileURLWithPath: "/Applications/Safari.app")) != nil
+    #expect(
+      app.actions.map(\.title) == [
+        "Open Application", "Show in Finder", "Show Info in Finder", "Show Package Contents",
+        "Add to Favorites", "Copy Path", "Copy Name",
+      ] + (hasBundle ? ["Copy Bundle Identifier"] : []) + ["Configure Command…"])
+    #expect(
+      app.actions.map(\.shortcut)
+        == ["↵", "⌘↵", "⌘I", "⌥⌘I", "⇧⌘F", "⌥⌘C", "⌃⌘C"] + (hasBundle ? ["⇧⌘C"] : []) + ["⇧⌘,"])
+    #expect(
+      app.actions[3].action
+        == .open(URL(fileURLWithPath: "/Applications/Safari.app").appending(path: "Contents")))
+    #expect(app.actions[5].action == .copy("/Applications/Safari.app"))
+    #expect(app.actions[6].action == .copy("Safari"))
     // An app is configured by its settings key, as the Applications page lists it.
-    #expect(app.actions[4].action == .configureMenu(apps[0].settingsKey))
+    #expect(app.actions.last?.action == .configureMenu(apps[0].settingsKey))
     let link = try #require(Search.results(for: "google", apps: [], quicklinks: links).first)
     #expect(link.actions.map(\.title) == ["Open Command", "Copy URL", "Add to Favorites"])
   }

@@ -36,9 +36,10 @@ import Testing
       favorites[0].actions.map(\.title).suffix(3) == [
         "Remove from Favorites", "Move Favorite Down", "Configure Command…",
       ])
+    // An app's go before its Copy Path, as Raycast's.
     #expect(
-      favorites[1].actions.map(\.title).suffix(3) == [
-        "Remove from Favorites", "Move Favorite Up", "Configure Command…",
+      favorites[1].actions.map(\.title)[4...6] == [
+        "Remove from Favorites", "Move Favorite Up", "Copy Path",
       ])
     #expect(favorites[1].actions.first { $0.title == "Move Favorite Up" }?.shortcut == "⌥⌘↑")
   }
