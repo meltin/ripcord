@@ -2387,7 +2387,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private func perform(_ action: SearchResult.ClipAction, on id: UUID) {
     switch action {
     case .paste, .copy:
-      let copied = clipboard.copy(id)
+      // Prefer Pasting as Plain Text leaves the formatting out of a paste, not of a copy.
+      let copied = clipboard.copy(
+        id, plain: action == .paste && clipboard.history.settings.preferPlainText)
       hide()
       guard copied else { return NSSound.beep() }
       guard action == .paste else { return }

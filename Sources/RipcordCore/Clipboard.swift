@@ -31,6 +31,8 @@ public struct ClipItem: Codable, Identifiable, Equatable, Sendable {
   public var size: Int?
   /// The text read from an image, for search; empty once read and none found, nil until then.
   public var recognizedText: String?
+  /// A text's formatting, as copied: an RTF or HTML file in the history's `formats` folder.
+  public var formatFile: String?
 
   public var copies: Int { timesCopied ?? 1 }
   public var firstDate: Date { firstCopied ?? date }
@@ -114,6 +116,19 @@ public enum ClipCapture: Equatable, Sendable {
       data, fileExtension: fileExtension, width: image.width, height: image.height, name: name)
   }
 
+  /// The formatting copied with a text, RTF first, then HTML, as the copying app offered it; nil
+  /// for plain text or one over the size kept.
+  public static func formatting(_ pasteboard: NSPasteboard) -> (
+    data: Data, fileExtension: String
+  )? {
+    for (type, fileExtension) in [(NSPasteboard.PasteboardType.rtf, "rtf"), (.html, "html")] {
+      if let data = pasteboard.data(forType: type), data.count <= maxTextBytes {
+        return (data, fileExtension)
+      }
+    }
+    return nil
+  }
+
   /// The app that says it made the copy, by the nspasteboard.org convention; few apps do.
   public static func source(_ pasteboard: NSPasteboard) -> String? {
     pasteboard.string(forType: .init("org.nspasteboard.source")).flatMap { $0.isEmpty ? nil : $0 }
@@ -143,6 +158,7 @@ public struct ClipboardHistory: Sendable {
 
   private var fileURL: URL { directory.appending(path: "history.json") }
   public var imagesURL: URL { directory.appending(path: "images") }
+  public var formatsURL: URL { directory.appending(path: "formats") }
 
   /// Reads the history in `directory`, or starts empty. A file that can't be read is moved
   /// aside rather than overwritten by the next copy.
@@ -160,9 +176,11 @@ public struct ClipboardHistory: Sendable {
   /// Puts `capture` first, reusing the entry when the same text or image is already kept.
   // shortcut: hashing and saving run on the caller's (main) thread, a few ms for a screenshot;
   // move them off it if huge images or texts make copying stutter.
-  public mutating func add(_ capture: ClipCapture, at date: Date = .now, from source: String? = nil)
-    throws
-  {
+  /// A text's `formatting` is kept beside it, for pasting with its formats.
+  public mutating func add(
+    _ capture: ClipCapture, at date: Date = .now, from source: String? = nil,
+    formatting: (data: Data, fileExtension: String)? = nil
+  ) throws {
     let digest = capture.digest
     let name: String?
     let size: Int?
@@ -184,13 +202,21 @@ public struct ClipboardHistory: Sendable {
     case .text: (name, size) = (nil, nil)
     }
     if let item = items.first(where: { $0.digest == digest }) {
+      // The latest copy's formatting wins: a text copied plain, then styled, pastes styled.
+      if case .text = capture, let index = items.firstIndex(where: { $0.id == item.id }) {
+        if let url = formatURL(of: item) { try? FileManager.default.removeItem(at: url) }
+        let file = try formatting.map { try keep($0, for: item.id) }
+        items[index].formatFile = file
+      }
       return try touch(item.id, at: date, name: name)
     }
     let id = UUID()
     let content: ClipItem.Content
+    var formatFile: String?
     switch capture {
     case .text(let text):
       content = .text(text)
+      formatFile = try formatting.map { try keep($0, for: id) }
     case .image(let data, let fileExtension, let width, let height, _):
       let file = "\(id.uuidString).\(fileExtension)"
       try FileManager.default.createDirectory(at: imagesURL, withIntermediateDirectories: true)
@@ -202,7 +228,7 @@ public struct ClipboardHistory: Sendable {
     let added = [
       ClipItem(
         id: id, content: content, digest: digest, date: date, isPinned: false, source: source,
-        timesCopied: 1, firstCopied: date, name: name, size: size)
+        timesCopied: 1, firstCopied: date, name: name, size: size, formatFile: formatFile)
     ]
     items = added + items
     dropExpired(at: date)
@@ -289,8 +315,26 @@ public struct ClipboardHistory: Sendable {
     return imagesURL.appending(path: file)
   }
 
+  /// Writes a text's formatting to `formats`, returning its file name.
+  private func keep(_ formatting: (data: Data, fileExtension: String), for id: UUID) throws
+    -> String
+  {
+    // A new name each time, so the file being replaced is never the one just written.
+    let file = "\(id.uuidString)-\(UUID().uuidString.prefix(8)).\(formatting.fileExtension)"
+    try FileManager.default.createDirectory(at: formatsURL, withIntermediateDirectories: true)
+    try formatting.data.write(to: formatsURL.appending(path: file), options: .atomic)
+    return file
+  }
+
+  /// The formatting kept with a text, nil for one copied plain.
+  public func formatURL(of item: ClipItem) -> URL? {
+    item.formatFile.map { formatsURL.appending(path: $0) }
+  }
+
   private func removeFile(of item: ClipItem) {
-    if let url = imageURL(of: item) { try? FileManager.default.removeItem(at: url) }
+    for url in [imageURL(of: item), formatURL(of: item)].compactMap({ $0 }) {
+      try? FileManager.default.removeItem(at: url)
+    }
   }
 
   private func save() throws {

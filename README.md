@@ -234,6 +234,9 @@ are kept by path, not copied, so one moved or deleted since can't be pasted. An 
 32 MB or a text over 1 MB isn't kept. Delete the folder to clear it. `disabledApps` lists the
 bundle IDs whose copies aren't recorded, `primaryAction` is `paste` or `copy` (what Return does),
 and `updateAfterAction` (on by default) moves an entry to the top once it's pasted or copied.
+A text copied with formatting keeps it, as an RTF or HTML file in `formats`; `preferPlainText` (on
+by default, as Raycast's Prefer pasting as plain text) leaves it out of a paste, while Copy to
+Clipboard puts it back either way.
 `textRecognition` (on by default) reads the text in copied images for search, kept in
 `history.json`, and `recognitionMode` is `fast` or `accurate`; Accurate also reads Japanese and
 other non-Latin scripts. When Fast finds nothing in an image, Ripcord reads it again as Accurate.

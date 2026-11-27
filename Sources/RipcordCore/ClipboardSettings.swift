@@ -74,6 +74,9 @@ public struct ClipboardSettings: Codable, Equatable, Sendable {
   /// Whether pasting or copying an entry moves it to the top, as Raycast's "Update history
   /// after action".
   public var updateAfterAction: Bool
+  /// Whether a paste puts only the text, leaving out the formatting it was copied with, as
+  /// Raycast's "Prefer pasting as plain text"; Copy to Clipboard keeps it either way.
+  public var preferPlainText: Bool
   /// Whether text in copied images is read, so a search finds them by it.
   public var textRecognition: Bool
   public var recognitionMode: RecognitionMode
@@ -82,7 +85,7 @@ public struct ClipboardSettings: Codable, Equatable, Sendable {
   public init(
     keepFor: Retention = .unlimited, maxEntries: Int = 300,
     disabledApps: [String] = defaultDisabledApps, primaryAction: PrimaryAction = .paste,
-    updateAfterAction: Bool = true, textRecognition: Bool = true,
+    updateAfterAction: Bool = true, preferPlainText: Bool = true, textRecognition: Bool = true,
     recognitionMode: RecognitionMode = .fast
   ) {
     self.keepFor = keepFor
@@ -90,6 +93,7 @@ public struct ClipboardSettings: Codable, Equatable, Sendable {
     self.disabledApps = disabledApps
     self.primaryAction = primaryAction
     self.updateAfterAction = updateAfterAction
+    self.preferPlainText = preferPlainText
     self.textRecognition = textRecognition
     self.recognitionMode = recognitionMode
   }
@@ -105,6 +109,7 @@ public struct ClipboardSettings: Codable, Equatable, Sendable {
       (try? container.decodeIfPresent(PrimaryAction.self, forKey: .primaryAction)) ?? .paste
     updateAfterAction =
       try container.decodeIfPresent(Bool.self, forKey: .updateAfterAction) ?? true
+    preferPlainText = try container.decodeIfPresent(Bool.self, forKey: .preferPlainText) ?? true
     textRecognition = try container.decodeIfPresent(Bool.self, forKey: .textRecognition) ?? true
     recognitionMode =
       (try? container.decodeIfPresent(RecognitionMode.self, forKey: .recognitionMode)) ?? .fast
