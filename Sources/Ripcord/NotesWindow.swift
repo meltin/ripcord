@@ -40,6 +40,8 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   private var pendingSave: DispatchWorkItem?
   /// Reads the note again while the window shows, to pick up edits made in another editor.
   private var watch: Timer?
+  /// Clicks in other apps while the window shows.
+  private var clickWatch: Any?
   /// What the last tick read, so a file read halfway through being written isn't taken.
   private var lastSeen: String?
   private static let lastNoteKey = "lastNote"
@@ -493,6 +495,18 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   }
 
   private func startWatching() {
+    // A click in another app that leaves this window taking the keys: another app's floating
+    // window, such as Raycast Notes, doesn't bring its app forward, so nothing else would make
+    // this one give them up.
+    if clickWatch == nil {
+      clickWatch = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) {
+        [weak self] _ in
+        // After the click has had its effect, as a normal app coming forward takes the keys.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+          MainActor.assumeIsolated { self?.giveUpKeys() }
+        }
+      }
+    }
     guard watch == nil else { return }
     let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
       MainActor.assumeIsolated { self?.pickUpOutsideEdit() }
@@ -506,7 +520,41 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   private func stopWatching() {
     watch?.invalidate()
     watch = nil
+    if let clickWatch { NSEvent.removeMonitor(clickWatch) }
+    clickWatch = nil
   }
+
+  /// Still shown, no longer taking the keys.
+  private func giveUpKeys() {
+    guard window.isVisible, window.isKeyWindow else { return }
+    if actionsPanel.isVisible {
+      window.removeChildWindow(actionsPanel)
+      actionsPanel.orderOut(nil)
+    }
+    // Japanese still being composed is kept as typed, as moving to another app keeps it.
+    if let editor, editor.hasMarkedText() {
+      editor.unmarkText()
+      editor.inputContext?.discardMarkedText()
+      editor.didChangeText()
+    }
+    // The keys go to an unseen window for a moment, and on to the window that was clicked as
+    // it closes, so this one stays on screen without blinking.
+    window.refusesKey = true
+    defer { window.refusesKey = false }
+    keyHandoff.orderFrontRegardless()
+    keyHandoff.makeKey()
+    keyHandoff.orderOut(nil)
+  }
+
+  /// Off screen and clear, only ever key for the moment ``giveUpKeys()`` hands the keys over.
+  private lazy var keyHandoff: NotesPanel = {
+    let panel = NotesPanel(
+      contentRect: NSRect(x: -10_000, y: -10_000, width: 1, height: 1),
+      styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+    panel.alphaValue = 0
+    panel.isReleasedWhenClosed = false
+    return panel
+  }()
 
   /// Shows what another editor saved to this note, while nothing typed here is waiting to be
   /// saved; with something typed, saving refuses to write over it and says so instead.
@@ -569,8 +617,10 @@ final class NotesPanel: NSPanel {
   var onEscape: () -> Void = {}
   /// The note's actions' keys, as ⌘K lists them; true when one ran.
   var onKeyEquivalent: (NSEvent) -> Bool = { _ in false }
+  /// Set while the keys are handed away, so AppKit doesn't give them straight back.
+  var refusesKey = false
 
-  override var canBecomeKey: Bool { true }
+  override var canBecomeKey: Bool { !refusesKey }
 
   override func cancelOperation(_ sender: Any?) {
     onEscape()
