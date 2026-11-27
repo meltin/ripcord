@@ -2374,7 +2374,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// How long and how many Clipboard History keeps, from the settings.
   var clipboardSettings = ClipboardSettings() {
-    didSet { clipboard.apply(clipboardSettings) }
+    didSet {
+      clipboard.apply(clipboardSettings)
+      LinkPreviews.shared.isEnabled = clipboardSettings.showLinkPreviews
+    }
   }
 
   /// Every entry but the pinned ones gone, from Delete All Entries or Settings' Clear History.
