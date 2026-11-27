@@ -104,7 +104,9 @@ extension Search {
         ]
       return SearchResult(
         id: "quicklink-list:\(index)", title: link.name, subtitle: link.url,
-        keyword: link.keyword, kind: .quicklink, action: menu[0].action, menu: menu)
+        keyword: link.keyword, kind: .quicklink, action: menu[0].action, menu: menu,
+        // Its hotkey is kept under its row ID, as on the root search.
+        settingsKey: link.rowID)
     }
     return results.isEmpty ? [] : [SearchSection(title: "Quicklinks", results: results)]
   }

@@ -675,7 +675,7 @@ extension BuiltinCommand {
     case .pickColor, .colorHistory, .colorNames, .convertColor, .favoriteColors, .colorWheel: .pink
     case .cleanKeyboard: .cyan
     case .searchBookmarks, .addBookmark: .yellow
-    case .createQuicklink, .searchQuicklinks: .indigo
+    case .createQuicklink, .searchQuicklinks: .blue
     case .searchEmoji: .orange
     case .ripcordNotes, .createNote, .searchNotes: .orange
     case .generateDummyText: .purple

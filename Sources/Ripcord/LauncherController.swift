@@ -69,6 +69,8 @@ struct QuicklinkDraft {
   var keyword = ""
   /// Where the Quicklink being edited is, and its name then; nil for a new one.
   var original: (index: Int, name: String)?
+  /// Opened from Search Quicklinks, where Esc goes back to.
+  var fromList = false
 }
 
 /// Add Bookmark's or Edit Bookmark's form.
@@ -927,7 +929,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       // An edit always goes back to its list, even one its hotkey opened.
       if model.mode == .snippetForm, model.formSource != nil { return goBack() }
       if model.mode == .bookmarkForm, model.bookmarkDraft.original != nil { return goBack() }
-      if model.mode == .quicklinkForm, model.quicklinkDraft.original != nil { return goBack() }
+      if model.mode == .quicklinkForm, model.quicklinkDraft.fromList { return goBack() }
       // Like Raycast: Esc leaves a command's list for the root search first; a pick is left.
       guard model.mode != .root, model.mode != .pick, !closesOnCancel else { return hide() }
       goBack()
@@ -1803,9 +1805,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     if action == .run(.searchQuicklinks) { return open(.quicklinks) }
     if action == .run(.createQuicklink) {
-      // Its hotkey closes the form it opened; from the list, ⌘N starts a new one.
-      if !(panel.isVisible && model.mode == .quicklinkForm) {
-        model.quicklinkDraft = QuicklinkDraft()
+      // A new one left half typed stays, as Raycast's drafts do; an edit left open doesn't.
+      if model.quicklinkDraft.original != nil { model.quicklinkDraft = QuicklinkDraft() }
+      model.quicklinkDraft.fromList = panel.isVisible && model.mode == .quicklinks
+      if model.quicklinkDraft.fromList {
+        model.mode = .quicklinkForm
+        return update("")
       }
       return open(.quicklinkForm)
     }
@@ -1816,7 +1821,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       }
       let link = quicklinks[index]
       model.quicklinkDraft = QuicklinkDraft(
-        link: link.url, name: link.name, keyword: link.keyword ?? "", original: (index, name))
+        link: link.url, name: link.name, keyword: link.keyword ?? "", original: (index, name),
+        fromList: true)
       model.mode = .quicklinkForm
       return update("")
     }
@@ -2456,7 +2462,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if let problem = Quicklink.problem(
       name: name, link: draft.link, keyword: keyword, among: quicklinks, editing: editing)
     {
-      return HUD.show(problem, failed: true)
+      return onError(problem)
     }
     var link =
       editing.map { quicklinks[$0] }
@@ -2464,13 +2470,29 @@ final class LauncherController: NSObject, NSWindowDelegate {
     link.name = name
     link.url = draft.link.trimmingCharacters(in: .whitespacesAndNewlines)
     link.keyword = keyword.isEmpty ? nil : keyword
+    // Checked again against the settings as saved: Settings may have changed them meanwhile.
+    var refused: String?
     let saved = editSettings { settings in
-      if let editing, settings.config.quicklinks.indices.contains(editing) {
+      let current = settings.config.quicklinks
+      if let editing, let original = draft.original,
+        !(current.indices.contains(editing) && current[editing].name == original.name)
+      {
+        refused = "That Quicklink changed in Settings meanwhile. Open it from the list again."
+        return
+      }
+      if let problem = Quicklink.problem(
+        name: name, link: draft.link, keyword: keyword, among: current, editing: editing)
+      {
+        refused = problem
+        return
+      }
+      if let editing {
         settings.config.quicklinks[editing] = link
       } else {
         settings.config.quicklinks.append(link)
       }
     }
+    if let refused { return onError(refused) }
     guard saved else { return NSSound.beep() }
     model.quicklinkDraft = QuicklinkDraft()
     if editing == nil { closesOnCancel = false }
@@ -2541,7 +2563,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     if model.mode == .quicklinkForm {
       let editing = model.quicklinkDraft.original
-      model.mode = editing == nil ? .root : .quicklinks
+      model.mode = model.quicklinkDraft.fromList ? .quicklinks : .root
       update("")
       return refreshRows(selecting: editing.map { "quicklink-list:\($0.index)" })
     }
