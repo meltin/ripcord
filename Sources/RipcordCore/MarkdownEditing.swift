@@ -115,6 +115,22 @@ public enum MarkdownEditing {
     return (range, replacement, NSRange(location: start, length: max(0, end - start)))
   }
 
+  /// ⌘Return on a task, as in Raycast: its box checked or unchecked. Nil off a task.
+  public static func toggleTask(at caret: Int, in text: String, spans: [MarkdownSpan])
+    -> (range: NSRange, replacement: String)?
+  {
+    guard
+      let task = spans.first(where: {
+        guard case .task = $0.style else { return false }
+        return $0.range.location <= caret && caret <= NSMaxRange($0.range)
+      }),
+      case .task(let checked) = task.style, let mark = task.marks.first
+    else { return nil }
+    let box = (text as NSString).range(of: "[", range: mark)
+    guard box.location != NSNotFound else { return nil }
+    return (NSRange(location: box.location + 1, length: 1), checked ? " " : "x")
+  }
+
   /// `- [] ` typed at a line's start, as Raycast takes it, written as Markdown's `- [ ] ` so
   /// the file reads as a task anywhere. Nil when the caret isn't just after one.
   public static func taskShortcut(at caret: Int, in text: String)

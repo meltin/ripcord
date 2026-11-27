@@ -270,6 +270,10 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   /// ⌘K opens the actions; the others run theirs.
   private func runShortcut(_ event: NSEvent) -> Bool {
     let flags = event.modifierFlags.intersection([.command, .shift, .option, .control])
+    // ⌘Return checks or unchecks the task the caret is on, as in Raycast.
+    if flags == .command, event.keyCode == UInt16(kVK_Return), let editor {
+      return editor.toggleTaskAtCaret()
+    }
     if flags == .command, event.charactersIgnoringModifiers?.lowercased() == "k" {
       showActions()
       return true
@@ -1329,6 +1333,16 @@ final class NoteTextView: NSTextView {
   /// Set while an edit made here is checked, which is already tidy.
   private(set) var isTidying = false
 
+  /// Checks or unchecks the task the caret is on; false when it isn't on one.
+  func toggleTaskAtCaret() -> Bool {
+    guard
+      let toggle = MarkdownEditing.toggleTask(
+        at: selectedRange().location, in: string, spans: markdownSpans)
+    else { return false }
+    replace(toggle.range, with: toggle.replacement, selecting: selectedRange())
+    return true
+  }
+
   /// `- [] ` typed becomes `- [ ] `, and ``` a code block, as an undo step of its own.
   func applyShortcut() {
     let caret = selectedRange()
@@ -1510,14 +1524,14 @@ final class NoteTextView: NSTextView {
   override func mouseDown(with event: NSEvent) {
     let point = convert(event.locationInWindow, from: nil)
     for span in markdownSpans {
-      guard case .task(let checked) = span.style, let mark = span.marks.first,
+      guard case .task = span.style,
         checkbox(for: span)?.insetBy(dx: -3, dy: -3).contains(point) == true
       else { continue }
-      let box = (string as NSString).range(of: "[", range: mark)
-      guard box.location != NSNotFound else { continue }
-      replace(
-        NSRange(location: box.location + 1, length: 1), with: checked ? " " : "x",
-        selecting: selectedRange())
+      guard
+        let toggle = MarkdownEditing.toggleTask(
+          at: span.range.location, in: string, spans: markdownSpans)
+      else { continue }
+      replace(toggle.range, with: toggle.replacement, selecting: selectedRange())
       return
     }
     super.mouseDown(with: event)

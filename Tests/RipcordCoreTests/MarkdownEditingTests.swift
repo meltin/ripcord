@@ -227,6 +227,17 @@ import Testing
     #expect(caret?.selection == NSRange(location: 14, length: 0))
   }
 
+  @Test func togglesATaskWithCommandReturn() {
+    func toggle(_ text: String, at caret: Int) -> String? {
+      MarkdownEditing.toggleTask(at: caret, in: text, spans: MarkdownSpan.spans(in: text)).map {
+        (text as NSString).replacingCharacters(in: $0.range, with: $0.replacement)
+      }
+    }
+    #expect(toggle("- [ ] call", at: 10) == "- [x] call")
+    #expect(toggle("  - [x] call", at: 9) == "  - [ ] call")
+    #expect(toggle("- plain", at: 7) == nil)
+  }
+
   @Test func takesDashEmptyBracketsAsATask() {
     let edit = MarkdownEditing.taskShortcut(at: 5, in: "- [] ")
     #expect(
