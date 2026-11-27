@@ -66,4 +66,18 @@ import Testing
     // An emoji is two UTF-16 units; the bold after it must still land on its word.
     #expect(styled("😀 **ok**") == ["bold:ok", "hidden:**", "hidden:**"])
   }
+
+  @Test func readsALongNoteQuickly() {
+    let kinds = [
+      "- item **%d** with *emphasis*", "1. numbered `code` line %d",
+      "plain line %d with [link](http://x/_%d_)", "> quote %d", "- [ ] task %d",
+    ]
+    let text = (0..<3000).map { String(format: kinds[$0 % kinds.count], $0, $0) }
+      .joined(separator: "\n")
+    let clock = ContinuousClock()
+    let took = clock.measure { _ = MarkdownSpan.spans(in: text) }
+    // Read once per keystroke now, a few thousand lines must stay well under a frame's worth of
+    // lag in a release build; loose here for a debug build on a busy machine.
+    #expect(took < .milliseconds(500))
+  }
 }
