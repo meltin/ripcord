@@ -77,5 +77,7 @@ import Testing
     #expect(typed?.title == "Set Volume to 40%")
     #expect(typed?.action == .setVolume(40))
     #expect(!rows("set volume 400").contains { $0.action == .setVolume(400) })
+    // A preset's level isn't listed twice.
+    #expect(rows("set volume 25").filter { $0.title == "Set Volume to 25%" }.count == 1)
   }
 }

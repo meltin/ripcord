@@ -8,8 +8,8 @@ import RipcordCore
 /// ones that wait on another app or a disk run off the main thread and `report` a problem later.
 @MainActor
 enum SystemActions {
-  /// The default output's volume set to `percent`, unmuted above 0, as Raycast's Set Volume does;
-  /// a message when the device has no volume to set, as some do.
+  /// The default output's volume set to `percent`, and unmuted above 0; a message when the device
+  /// has no volume to set, as some do.
   static func setVolume(percent: Int) -> String? {
     var device = AudioObjectID(kAudioObjectUnknown)
     var size = UInt32(MemoryLayout<AudioObjectID>.size)

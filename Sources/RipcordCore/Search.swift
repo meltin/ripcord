@@ -718,11 +718,15 @@ public enum Search {
     let volume = typedArguments(
       after: SystemAction.setVolume.title, key: SystemAction.setVolume.settingsKey, in: trimmed,
       items: items
-    ).lazy.compactMap(SystemAction.volumePercent(from:)).first.map {
-      SearchResult(
-        id: "set-volume-typed", title: "Set Volume to \($0)%", subtitle: "System Actions",
-        keyword: nil, kind: .command, action: .setVolume($0))
-    }
+    ).lazy.compactMap(SystemAction.volumePercent(from:)).first
+      // A preset's level is its own row already.
+      .flatMap { percent in
+        SystemAction.allCases.contains { $0.volumePercent == percent } ? nil : percent
+      }.map {
+        SearchResult(
+          id: "set-volume-typed", title: "Set Volume to \($0)%", subtitle: "System Actions",
+          keyword: nil, kind: .command, action: .setVolume($0))
+      }
     let timed: [SearchResult] =
       [caffeinateFor, lidAwakeFor, volume].compactMap { $0 } + sleepIn + cleanFor
     return [calculation].compactMap { $0 } + expanded + timed
