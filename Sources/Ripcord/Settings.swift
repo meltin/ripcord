@@ -765,7 +765,7 @@ extension BuiltinCommand {
       .coffee
     case .sleepTimer, .stopSleepTimer: .sleepTimer
     case .lidAwake: .lidAwake
-    case .pickColor, .colorHistory, .colorNames, .convertColor: .colorPicker
+    case .pickColor, .colorHistory, .colorNames, .convertColor, .favoriteColors: .colorPicker
     case .cleanKeyboard: .cleanKeyboard
     case .searchBookmarks, .addBookmark: .bookmarks
     case .ripcordNotes, .createNote, .searchNotes: .notes

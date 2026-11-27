@@ -6,6 +6,8 @@ public struct PickedColor: Codable, Equatable, Sendable {
   public var green: Double
   public var blue: Double
   public var pickedAt: Date
+  /// In Favorite Colors; optional, so colors.json from before favorites still reads.
+  public var isFavorite: Bool?
 
   public init(red: Double, green: Double, blue: Double, pickedAt: Date = .now) {
     self.red = red
@@ -277,9 +279,29 @@ public struct ColorHistory: Sendable {
     }
   }
 
-  /// Puts `color` first; picking the same color again moves it up instead of listing it twice.
+  /// Puts `color` first; picking the same color again moves it up instead of listing it twice,
+  /// still a favorite if it was. Past the limit the oldest go, but never a favorite.
   public mutating func add(_ color: PickedColor) throws {
-    try save(Array(([color] + colors.filter { $0.hex != color.hex }).prefix(Self.limit)))
+    var picked = color
+    picked.isFavorite = colors.first { $0.hex == color.hex }?.isFavorite
+    let all = [picked] + colors.filter { $0.hex != color.hex }
+    var kept = 0
+    try save(
+      all.filter { each in
+        if each.isFavorite == true { return true }
+        kept += 1
+        return kept <= Self.limit
+      })
+  }
+
+  /// Adds the color `hex` to Favorite Colors, or takes it out.
+  public mutating func toggleFavorite(hex: String) throws {
+    try save(
+      colors.map { color in
+        var color = color
+        if color.hex == hex { color.isFavorite = color.isFavorite == true ? nil : true }
+        return color
+      })
   }
 
   public mutating func delete(hex: String) throws {
@@ -299,15 +321,16 @@ public struct ColorHistory: Sendable {
 extension Search {
   /// Picked colors, newest first: a query matches any of their formats.
   public static func colorSections(
-    for query: String, history: ColorHistory, format: ColorFormat
+    for query: String, history: ColorHistory, format: ColorFormat, favoritesOnly: Bool = false
   ) -> [SearchSection] {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
     // Six-digit hex (#FFFFFF, though HEX writes #FFF), RGB and HSL only: the code formats'
     // labels ("red:", "Color") would match every color.
     let searched: [ColorFormat] = [.rgb, .hsl]
     let results = history.colors.filter { color in
-      trimmed.isEmpty || color.hex.localizedStandardContains(trimmed)
-        || searched.contains { $0.string(for: color).localizedStandardContains(trimmed) }
+      (!favoritesOnly || color.isFavorite == true)
+        && (trimmed.isEmpty || color.hex.localizedStandardContains(trimmed)
+          || searched.contains { $0.string(for: color).localizedStandardContains(trimmed) })
     }
     .map { color in
       // The default format first, on Return; the others after it.
@@ -317,17 +340,31 @@ extension Search {
           title: "Copy \(each.title)", symbol: "doc.on.doc", shortcut: index == 0 ? "↵" : "",
           action: .copy(each.string(for: color)))
       }
+      let isFavorite = color.isFavorite == true
       let menu =
         copies + [
+          // ⇧⌘F, as Raycast's Organize Colors has it.
+          MenuAction(
+            title: isFavorite ? "Remove from Favorites" : "Add to Favorites",
+            symbol: "star", shortcut: "⇧⌘F",
+            action: .toggleFavoriteColor(color.hex), startsSection: true),
           MenuAction(
             title: "Delete Color", symbol: "trash", shortcut: "⌃X",
-            action: .deleteColor(color.hex), isDestructive: true, startsSection: true)
+            action: .deleteColor(color.hex), isDestructive: true),
         ]
       return SearchResult(
         id: "color:\(color.hex)", title: format.string(for: color),
         subtitle: format == .hex ? ColorFormat.rgb.string(for: color) : color.hex, keyword: nil,
         kind: .color, action: menu[0].action, menu: menu)
     }
-    return results.isEmpty ? [] : [SearchSection(title: "", results: results)]
+    // Favorites first, as Raycast's Organize Colors lists them; Favorite Colors only them.
+    let favorites = results.filter { result in
+      history.colors.contains { "color:\($0.hex)" == result.id && $0.isFavorite == true }
+    }
+    let rest = results.filter { !favorites.map(\.id).contains($0.id) }
+    return [
+      SearchSection(title: favoritesOnly || rest.isEmpty ? "" : "Favorites", results: favorites),
+      SearchSection(title: favorites.isEmpty ? "" : "History", results: rest),
+    ].filter { !$0.results.isEmpty }
   }
 }

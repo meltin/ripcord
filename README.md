@@ -71,10 +71,11 @@
   page: Raycast's (HEX, HEX Lower Case, HEX No Prefix, RGB, RGB %, RGBA, RGBA %, HSLA, HSVA, OKLCH,
   LCH, P3), written as the colorjs.io library Raycast calls writes them (HEX as #F00 where it can),
   or HSL, SwiftUI or NSColor. A message says what was copied, with the nearest named color if Show
-  Color Name After Picking is on. Color History lists the colors picked, to copy in any format;
-  Color Names lists the CSS color names nearest a hex typed, as #00ff00, or the names containing
-  what's typed; Convert Color writes a CSS color typed or pasted (hex, a name, rgb(), hsl(), oklch()
-  or color(display-p3 …)) in every format, the one copied last first
+  Color Name After Picking is on. Color History lists the colors picked, to copy in any format, its
+  favorites first (⇧⌘F adds or removes one, and Favorite Colors lists only them; a favorite stays
+  past the 100 kept); Color Names lists the CSS color names nearest a hex typed, as #00ff00, or the
+  names containing what's typed; Convert Color writes a CSS color typed or pasted (hex, a name,
+  rgb(), hsl(), oklch() or color(display-p3 …)) in every format, the one copied last first
 - Clean Keyboard: turns every key off, media keys included, for a time typed after it (15 seconds
   to 5 minutes) so the keyboard can be wiped, with the time left over the screen; ⌃⌥⌘↩ turns it
   back on early. As Raycast's, Settings › Clean Keyboard sets a Default Duration that starts it at
