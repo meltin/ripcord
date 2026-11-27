@@ -285,6 +285,23 @@ import Testing
     #expect(lines(.ordered, "  - item") == "  1. item")
   }
 
+  @Test func keepsAHeadingThroughReturnAndRetyping() {
+    // Return on an empty heading is a line break; it doesn't take the #.
+    #expect(MarkdownEditing.newline(at: 2, in: "# ", spans: MarkdownSpan.spans(in: "# ")) == nil)
+    // Retyping all of a heading's or item's words keeps its mark.
+    for text in ["# Title", "- milk"] {
+      let length = (text as NSString).length
+      let edit = MarkdownEditing.tidy(
+        NSRange(location: 2, length: length - 2), replacement: "x", in: text,
+        spans: MarkdownSpan.spans(in: text))
+      let result =
+        edit.map { (text as NSString).replacingCharacters(in: $0.range, with: $0.replacement) }
+        ?? (text as NSString).replacingCharacters(
+          in: NSRange(location: 2, length: length - 2), with: "x")
+      #expect(result == String(text.prefix(2)) + "x")
+    }
+  }
+
   @Test func countsWhatIsShown() {
     #expect(MarkdownEditing.shown("**ab** 😀") == "ab 😀")
     #expect(MarkdownEditing.shown("```\r\ncode\r\n```\r\n").count == 4)

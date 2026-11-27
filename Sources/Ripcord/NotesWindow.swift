@@ -916,12 +916,14 @@ private struct MarkdownEditor: NSViewRepresentable {
           new.location, from: old.location + old.length, in: text, hidden: hidden, stops: stops)
         return NSRange(location: location, length: 0)
       }
-      // A selection made in one go (⌘A, a drag) takes in a line's hidden mark; Shift and an
-      // arrow step over marks as the caret does.
+      // A selection made in one go (⌘A, a drag) across lines takes in the first line's hidden
+      // mark, so a copy keeps it; within a line it doesn't, so retyping a heading's words keeps
+      // the heading. Shift and an arrow step over marks as the caret does.
       let isStep =
         abs(new.location - old.location) <= 2 && abs(NSMaxRange(new) - NSMaxRange(old)) <= 2
       guard isStep else {
-        return MarkdownEditing.outward(new, spans: spans)
+        let acrossLines = (text as NSString).substring(with: new).contains("\n")
+        return acrossLines ? MarkdownEditing.outward(new, spans: spans) : new
       }
       var start = new.location
       var end = NSMaxRange(new)

@@ -4,6 +4,10 @@ import Foundation
 /// weren't in the text, as in Raycast Notes: the caret never rests inside one, and a delete takes
 /// visible text, or a whole heading or style once nothing of it is left.
 public enum MarkdownEditing {
+  static func isHeading(_ span: MarkdownSpan) -> Bool {
+    if case .heading = span.style { true } else { false }
+  }
+
   /// A heading, list item, task or quote: a style of the whole line, marked at its start.
   static func isLine(_ span: MarkdownSpan) -> Bool {
     switch span.style {
@@ -33,7 +37,8 @@ public enum MarkdownEditing {
     }
     guard
       let span = spans.first(where: {
-        isLine($0)
+        // A heading's Return is a plain line break.
+        isLine($0) && !isHeading($0)
           && NSLocationInRange(
             caret, NSRange(location: $0.range.location, length: $0.range.length + 1))
       }),
@@ -239,9 +244,13 @@ public enum MarkdownEditing {
       return NSRange(
         location: NSMaxRange(prefix), length: NSMaxRange(span.range) - NSMaxRange(prefix))
     }
+    // A line's mark goes only with the mark itself in the edit: retyping a heading's words keeps
+    // it a heading, as in Raycast.
     let gone = styled.filter {
       let text = content($0)
-      return text.length > 0 && NSIntersectionRange(text, range) == text
+      let markGoes =
+        !isLine($0) || $0.marks.first.map { NSIntersectionRange($0, range) == $0 } == true
+      return text.length > 0 && NSIntersectionRange(text, range) == text && markGoes
     }
     let kept = styled.filter { span in !gone.contains { $0.range == span.range } }
     let touched = { (mark: NSRange, region: NSRange) in
