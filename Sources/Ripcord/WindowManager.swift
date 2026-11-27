@@ -137,8 +137,8 @@ final class WindowManager {
     func flipped(_ rect: CGRect) -> CGRect {
       CGRect(x: rect.minX, y: primaryHeight - rect.maxY, width: rect.width, height: rect.height)
     }
-    // Left to right, then top to bottom, so Next Display goes the way the screens are laid out
-    // rather than in the order macOS lists them.
+    // Left to right, then top to bottom, so Move to Next Display goes the way the screens are
+    // laid out rather than in the order macOS lists them.
     return NSScreen.screens.map { (flipped($0.frame), flipped($0.visibleFrame)) }
       .sorted { ($0.full.minX, $0.full.minY) < ($1.full.minX, $1.full.minY) }
   }
