@@ -11,7 +11,8 @@
 - Calculator: `1+2*3`, `(1.5+2)^2`, full-width input too; Return copies the result
 - Quicklinks: `g swift testing` opens a search; with no match, the query goes to each Quicklink.
   Create Quicklink makes one in the panel (a link with `{query}`, a name and a keyword), and
-  Search Quicklinks lists them to open, edit (⌘E) or delete (⌃X, asked first), as Raycast's do.
+  Search Quicklinks lists them to open, edit (⌘E) or delete (⌃X, asked first unless Show Warning
+  Before Deleting Quicklinks is off), as Raycast's do.
   Import Quicklinks and Export Quicklinks read and write Raycast's JSON file, its `{argument}`
   taken as `{query}`; one already here is skipped. With Pass Selected Text as Argument on, a
   Quicklink's hotkey fills its `{query}` with the text selected in the app in front, as Raycast's
@@ -43,7 +44,8 @@
 - Snippets: Create Snippet saves text with a name, keyword, icon and tags from the panel, and
   Search Snippets pastes it into the app you were in. `{clipboard}`, `{date}`, `{time}`,
   `{datetime}`, `{day}` and `{uuid}` are filled in, and `{cursor}` is where the caret lands.
-  ⇧⌘C copies, ⌘E edits, ⌘D duplicates and ⌃X deletes; the tag menu filters the list. Export
+  ⇧⌘C copies, ⌘E edits, ⌘D duplicates and ⌃X deletes, asked first unless Show Warning Before
+  Deleting Snippets is off; the tag menu filters the list. Export
   Snippets and Import Snippets read and write the JSON Raycast uses. Typing a snippet's keyword
   (`;addr`) in another app replaces it with the snippet, while typing in English rather than kana
   and never in a password field or Ripcord's own panel and Notes; Settings › Snippets sets when
@@ -234,11 +236,12 @@ the settings window opens. The settings window writes every change back to it.
   "emoji": { "columns": 8, "primaryAction": "paste", "disableInlinePicker": false },
   "httpStatusPicture": "none",
   "notes": { "escapeLosesFocus": false, "moveCheckedTasksToBottom": false },
-  "quicklinkSettings": { "passSelectedText": false },
+  "quicklinkSettings": { "passSelectedText": false, "showDeleteWarning": true },
   "favorites": ["com.apple.Safari", "command:search-snippets"],
   "snippetExpansion": {
     "enabled": true, "mode": "immediately", "withinWords": false,
-    "disabledApps": ["com.1password.1password", "com.apple.keychainaccess"]
+    "disabledApps": ["com.1password.1password", "com.apple.keychainaccess"],
+    "showDeleteWarning": true
   },
   "dummyTextLanguage": "ja",
   "clipboardHistory": { "keepFor": "unlimited", "maxEntries": 300 },

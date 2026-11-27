@@ -177,15 +177,21 @@ public struct QuicklinkSettings: Codable, Equatable, Sendable {
   /// A Quicklink's hotkey fills its `{query}` with the text selected in the app in front, as
   /// Raycast's "Pass Selected Text as Argument"; off by default, as there.
   public var passSelectedText: Bool
+  /// Delete Quicklink asks first, as Raycast's "Show Warning Before Deleting Quicklinks"; on by
+  /// default.
+  public var showDeleteWarning: Bool
 
-  public init(passSelectedText: Bool = false) {
+  public init(passSelectedText: Bool = false, showDeleteWarning: Bool = true) {
     self.passSelectedText = passSelectedText
+    self.showDeleteWarning = showDeleteWarning
   }
 
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     self.init(
       passSelectedText: try container.decodeIfPresent(Bool.self, forKey: .passSelectedText)
-        ?? false)
+        ?? false,
+      showDeleteWarning: try container.decodeIfPresent(Bool.self, forKey: .showDeleteWarning)
+        ?? true)
   }
 }

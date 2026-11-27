@@ -718,6 +718,12 @@ private enum SettingText {
     detail:
       "When enabled, a Quicklink's hotkey fills its {query} with the text selected in the app in front."
   )
+  static let snippetDeleteWarning = SettingsSearch.Item(
+    title: "Show Warning Before Deleting Snippets",
+    detail: "Ask for confirmation before a snippet is deleted.")
+  static let quicklinkDeleteWarning = SettingsSearch.Item(
+    title: "Show Warning Before Deleting Quicklinks",
+    detail: "Ask for confirmation before a Quicklink is deleted.")
   static let windowGap = SettingsSearch.Item(
     title: "Window Gap", detail: "Gap between windows")
   static let screenGap = SettingsSearch.Item(
@@ -749,7 +755,7 @@ extension SettingsPage {
           ]
       case .colorPicker: [SettingText.colorFormat, SettingText.showColorName]
       case .httpStatusCodes: [SettingText.httpStatusPicture]
-      case .quicklinks: [SettingText.passSelectedText]
+      case .quicklinks: [SettingText.passSelectedText, SettingText.quicklinkDeleteWarning]
       case .notes:
         [SettingText.escapeLosesFocus, SettingText.moveCheckedTasks, SettingText.notesZoom]
       case .scripts: [SettingText.scriptFolders]
@@ -779,7 +785,7 @@ extension SettingsPage {
       case .snippets:
         [
           SettingText.snippetExpansion, SettingText.expansionMode, SettingText.expandWithinWords,
-          SettingText.disabledApps,
+          SettingText.disabledApps, SettingText.snippetDeleteWarning,
         ]
       // Its rows are the permissions, read from where they're drawn.
       case .permissions: Permission.allCases.map { .init(title: $0.title, detail: $0.purpose) }
@@ -852,6 +858,18 @@ struct SettingsView: View {
                 Toggle(
                   SettingText.passSelectedText.title,
                   isOn: $model.config.quicklinkSettings.passSelectedText
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+              }
+              Divider()
+              SettingRow(
+                title: SettingText.quicklinkDeleteWarning.title,
+                description: SettingText.quicklinkDeleteWarning.detail
+              ) {
+                Toggle(
+                  SettingText.quicklinkDeleteWarning.title,
+                  isOn: $model.config.quicklinkSettings.showDeleteWarning
                 )
                 .labelsHidden()
                 .toggleStyle(.switch)
@@ -2104,6 +2122,16 @@ private struct SnippetExpansionSettings: View {
     }
     DisabledAppsCard(item: SettingText.disabledApps, apps: $expansion.disabledApps)
       .disabled(!expansion.isEnabled)
+    Card {
+      SettingRow(
+        title: SettingText.snippetDeleteWarning.title,
+        description: SettingText.snippetDeleteWarning.detail
+      ) {
+        Toggle(SettingText.snippetDeleteWarning.title, isOn: $expansion.showDeleteWarning)
+          .labelsHidden()
+          .toggleStyle(.switch)
+      }
+    }
   }
 }
 
