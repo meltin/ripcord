@@ -667,6 +667,21 @@ private enum SettingText {
   static let coffeeOnLaunch = SettingsSearch.Item(
     title: "Start Caffeination When Ripcord Starts",
     detail: "Keep the Mac awake, until Decaffeinate, from the next time Ripcord starts.")
+  static let cleanDuration = SettingsSearch.Item(
+    title: "Default Duration",
+    detail:
+      "Lock the keyboard immediately for the chosen duration, or choose Always Ask to pick each time."
+  )
+  static let lockFunctionKeys = SettingsSearch.Item(
+    title: "Lock Function Row Keys",
+    detail:
+      "Also block the function row's keys, media and brightness keys among them, while cleaning."
+  )
+  static let lockMouseClicks = SettingsSearch.Item(
+    title: "Lock Mouse Clicks",
+    detail:
+      "Also block clicks and dragging while scrolling stays available. Only ⌃⌥⌘↩ or the time running out ends it then."
+  )
   static let windowGap = SettingsSearch.Item(
     title: "Window Gap", detail: "Gap between windows")
   static let screenGap = SettingsSearch.Item(
@@ -701,6 +716,8 @@ extension SettingsPage {
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
       case .dummyText: [SettingText.dummyTextLanguage]
       case .windowManagement: [SettingText.windowGap, SettingText.screenGap, SettingText.cycling]
+      case .cleanKeyboard:
+        [SettingText.cleanDuration, SettingText.lockFunctionKeys, SettingText.lockMouseClicks]
       case .coffee:
         [
           SettingText.preventDisplay, SettingText.preventSystem, SettingText.preventDisk,
@@ -851,6 +868,52 @@ struct SettingsView: View {
             PageHeader(page: .lidAwake)
             LidAwakeSettings(model: model)
             CommandsList(model: model, page: .lidAwake)
+          }
+        case .cleanKeyboard:
+          PageScroll(model: model) {
+            PageHeader(page: .cleanKeyboard)
+            Card {
+              SettingRow(
+                title: SettingText.cleanDuration.title,
+                description: SettingText.cleanDuration.detail
+              ) {
+                Picker(
+                  SettingText.cleanDuration.title,
+                  selection: $model.config.cleanKeyboard.defaultDuration
+                ) {
+                  ForEach(CleanKeyboardSettings.Duration.allCases, id: \.self) {
+                    Text($0.title).tag($0)
+                  }
+                }
+                .labelsHidden()
+                .fixedSize()
+              }
+              Divider()
+              SettingRow(
+                title: SettingText.lockFunctionKeys.title,
+                description: SettingText.lockFunctionKeys.detail
+              ) {
+                Toggle(
+                  SettingText.lockFunctionKeys.title,
+                  isOn: $model.config.cleanKeyboard.lockFunctionKeys
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+              }
+              Divider()
+              SettingRow(
+                title: SettingText.lockMouseClicks.title,
+                description: SettingText.lockMouseClicks.detail
+              ) {
+                Toggle(
+                  SettingText.lockMouseClicks.title,
+                  isOn: $model.config.cleanKeyboard.lockMouseClicks
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+              }
+            }
+            CommandsList(model: model, page: .cleanKeyboard)
           }
         case .coffee:
           PageScroll(model: model) {

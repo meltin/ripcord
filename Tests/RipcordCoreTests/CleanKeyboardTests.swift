@@ -69,4 +69,20 @@ import Testing
       !Search.results(for: "sleep timer", apps: [], quicklinks: []).contains { $0.id == "sleep-in" }
     )
   }
+
+  /// Always Ask and clicks left alone, as Raycast's; the function row locked, as before.
+  @Test func cleanKeyboardSettingsDefaults() throws {
+    let config = try JSONDecoder().decode(Config.self, from: Data(#"{"hotkey":"cmd+space"}"#.utf8))
+    #expect(config.cleanKeyboard == CleanKeyboardSettings())
+    #expect(config.cleanKeyboard.defaultDuration.seconds == nil)
+    #expect(config.cleanKeyboard.lockFunctionKeys)
+    #expect(CleanKeyboardSettings.Duration.minute1.seconds == 60)
+    #expect(CleanKeyboardSettings.Duration.forever.seconds == .infinity)
+    // An unknown duration from a newer build reads as Always Ask.
+    let read = try JSONDecoder().decode(
+      CleanKeyboardSettings.self,
+      from: Data(#"{"defaultDuration":"week","lockMouseClicks":true}"#.utf8))
+    #expect(read.defaultDuration == .ask)
+    #expect(read.lockMouseClicks)
+  }
 }

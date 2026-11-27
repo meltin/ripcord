@@ -713,7 +713,8 @@ public enum Search {
       + windowCandidates + cleanShotCandidates + scriptCandidates
   }
 
-  /// The longest Clean Keyboard: no keyboard for more than five minutes, typed or not.
+  /// The longest Clean Keyboard typed after its title: no keyboard for more than five minutes.
+  /// Settings › Clean Keyboard's Default Duration can be longer.
   public static let longestClean: TimeInterval = 300
 
   /// The time typed after `command`'s title or alias, as in "caffeinate 1h 30m"; nil when it's

@@ -70,8 +70,11 @@
 - Color Picker: Pick Color copies a color from anywhere on screen in the format set on its
   settings page (HEX, RGB, HSL, SwiftUI or NSColor); Color History lists the colors picked, to copy
   in any format
-- Clean Keyboard: turns every key off, media keys included, for 15 seconds to 5 minutes so the
-  keyboard can be wiped, with the time left over the screen; ⌃⌥⌘↩ turns it back on early
+- Clean Keyboard: turns every key off, media keys included, for a time typed after it (15 seconds
+  to 5 minutes) so the keyboard can be wiped, with the time left over the screen; ⌃⌥⌘↩ turns it
+  back on early. As Raycast's, Settings › Clean Keyboard sets a Default Duration that starts it at
+  once (up to 24 hours, or Forever, until ⌃⌥⌘↩) instead of asking, can leave the function row
+  (F-keys, media and brightness keys) working, and can lock mouse clicks too
 - Bookmarks: Search Bookmarks lists the Markdown links in `~/.config/ripcord/bookmarks.md`
   (`- [Title](URL) - description`) under their `#` headings; Return opens one, and ⌘K copies its
   URL or title, edits it, moves it to another group or deletes it. Add Bookmark opens a form for
@@ -208,6 +211,7 @@ the settings window opens. The settings window writes every change back to it.
   "clipboardHistory": { "keepFor": "unlimited", "maxEntries": 300 },
   "backdrop": "off",
   "cycleHalves": true,
+  "cleanKeyboard": { "defaultDuration": "ask", "lockFunctionKeys": true, "lockMouseClicks": false },
   "coffee": { "preventDisplay": true, "preventSystem": true, "preventDisk": true,
     "preventSleepOnAC": false, "startOnLaunch": false },
   "windowGap": 0,
