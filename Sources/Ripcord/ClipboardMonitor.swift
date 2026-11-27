@@ -166,10 +166,10 @@ final class ClipboardMonitor {
     restoreRequest += 1
     let request = restoreRequest
     DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [self] in
-      guard
-        pasteIntoFrontmostApp(
-          thenLeft: expansion.charactersAfterCursor + trailing.count)
-      else {
+      // The caret goes back to {cursor}, past the kept delimiter too; without one it stays at
+      // the end, after the delimiter.
+      let left = text.contains("{cursor}") ? expansion.charactersAfterCursor + trailing.count : 0
+      guard pasteIntoFrontmostApp(thenLeft: left) else {
         // Not pasted (no Accessibility yet): put back what was copied, or the retry after
         // granting it would fill {clipboard} with this snippet.
         pendingRestore = nil
