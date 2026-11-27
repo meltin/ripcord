@@ -18,6 +18,23 @@ public enum WindowLayout: String, CaseIterable, Sendable {
   case lastThird = "last-third"
   case firstTwoThirds = "first-two-thirds"
   case lastTwoThirds = "last-two-thirds"
+  case firstFourth = "first-fourth"
+  case secondFourth = "second-fourth"
+  case thirdFourth = "third-fourth"
+  case lastFourth = "last-fourth"
+  case firstThreeFourths = "first-three-fourths"
+  case lastThreeFourths = "last-three-fourths"
+  case topThird = "top-third"
+  case middleThird = "middle-third"
+  case bottomThird = "bottom-third"
+  case topTwoThirds = "top-two-thirds"
+  case bottomTwoThirds = "bottom-two-thirds"
+  case centerHalf = "center-half"
+  case centerTwoThirds = "center-two-thirds"
+  case centerThreeFourths = "center-three-fourths"
+  case maximizeHeight = "maximize-height"
+  case maximizeWidth = "maximize-width"
+  case reasonableSize = "reasonable-size"
   case maximize = "maximize"
   case almostMaximize = "almost-maximize"
   case center = "center"
@@ -40,6 +57,23 @@ public enum WindowLayout: String, CaseIterable, Sendable {
     case .lastThird: "Last Third"
     case .firstTwoThirds: "First Two Thirds"
     case .lastTwoThirds: "Last Two Thirds"
+    case .firstFourth: "First Fourth"
+    case .secondFourth: "Second Fourth"
+    case .thirdFourth: "Third Fourth"
+    case .lastFourth: "Last Fourth"
+    case .firstThreeFourths: "First Three Fourths"
+    case .lastThreeFourths: "Last Three Fourths"
+    case .topThird: "Top Third"
+    case .middleThird: "Middle Third"
+    case .bottomThird: "Bottom Third"
+    case .topTwoThirds: "Top Two Thirds"
+    case .bottomTwoThirds: "Bottom Two Thirds"
+    case .centerHalf: "Center Half"
+    case .centerTwoThirds: "Center Two Thirds"
+    case .centerThreeFourths: "Center Three Fourths"
+    case .maximizeHeight: "Maximize Height"
+    case .maximizeWidth: "Maximize Width"
+    case .reasonableSize: "Reasonable Size"
     case .maximize: "Maximize"
     case .almostMaximize: "Almost Maximize"
     case .center: "Center"
@@ -82,6 +116,32 @@ public enum WindowLayout: String, CaseIterable, Sendable {
     case .lastThird: return third(2.0 / 3, 1.0 / 3)
     case .firstTwoThirds: return third(0, 2.0 / 3)
     case .lastTwoThirds: return third(1.0 / 3, 2.0 / 3)
+    // Fourths and the centered sizes are columns, and these thirds rows, on any screen, as
+    // Raycast measured on a wide one puts them.
+    case .firstFourth: return part(0, 0, 0.25, 1)
+    case .secondFourth: return part(0.25, 0, 0.25, 1)
+    case .thirdFourth: return part(0.5, 0, 0.25, 1)
+    case .lastFourth: return part(0.75, 0, 0.25, 1)
+    case .firstThreeFourths: return part(0, 0, 0.75, 1)
+    case .lastThreeFourths: return part(0.25, 0, 0.75, 1)
+    case .topThird: return part(0, 0, 1, 1.0 / 3)
+    case .middleThird: return part(0, 1.0 / 3, 1, 1.0 / 3)
+    case .bottomThird: return part(0, 2.0 / 3, 1, 1.0 / 3)
+    case .topTwoThirds: return part(0, 0, 1, 2.0 / 3)
+    case .bottomTwoThirds: return part(0, 1.0 / 3, 1, 2.0 / 3)
+    case .centerHalf: return part(0.25, 0, 0.5, 1)
+    case .centerTwoThirds: return part(1.0 / 6, 0, 2.0 / 3, 1)
+    case .centerThreeFourths: return part(0.125, 0, 0.75, 1)
+    case .maximizeHeight:
+      return CGRect(x: window.minX, y: y, width: window.width, height: h).rounded
+    case .maximizeWidth:
+      return CGRect(x: x, y: window.minY, width: w, height: window.height).rounded
+    case .reasonableSize:
+      // 60% of the screen each way, centered, whatever the window was; Raycast rounds down.
+      let size = CGSize(width: (w * 0.6).rounded(.down), height: (h * 0.6).rounded(.down))
+      return CGRect(
+        x: x + ((w - size.width) / 2).rounded(.down), y: y + ((h - size.height) / 2).rounded(.down),
+        width: size.width, height: size.height)
     case .maximize: return visible.rounded
     case .almostMaximize: return part(0.05, 0.05, 0.9, 0.9)
     case .center:

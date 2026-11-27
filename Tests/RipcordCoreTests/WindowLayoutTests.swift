@@ -78,4 +78,33 @@ import Testing
     // The panel's forms save on ⌘↵.
     #expect(Hotkey("cmd+return") == nil)
   }
+
+  /// Each frame as Raycast's command put the same window on a 1512×948 screen under a 34pt menu
+  /// bar (Window Gap and Screen Gap none).
+  @Test func matchRaycastsLayouts() {
+    let screen = CGRect(x: 0, y: 34, width: 1512, height: 948)
+    let window = CGRect(x: 300, y: 200, width: 600, height: 500)
+    let expected: [(WindowLayout, CGRect)] = [
+      (.firstFourth, CGRect(x: 0, y: 34, width: 378, height: 948)),
+      (.secondFourth, CGRect(x: 378, y: 34, width: 378, height: 948)),
+      (.thirdFourth, CGRect(x: 756, y: 34, width: 378, height: 948)),
+      (.lastFourth, CGRect(x: 1134, y: 34, width: 378, height: 948)),
+      (.firstThreeFourths, CGRect(x: 0, y: 34, width: 1134, height: 948)),
+      (.lastThreeFourths, CGRect(x: 378, y: 34, width: 1134, height: 948)),
+      (.topThird, CGRect(x: 0, y: 34, width: 1512, height: 316)),
+      (.middleThird, CGRect(x: 0, y: 350, width: 1512, height: 316)),
+      (.bottomThird, CGRect(x: 0, y: 666, width: 1512, height: 316)),
+      (.topTwoThirds, CGRect(x: 0, y: 34, width: 1512, height: 632)),
+      (.bottomTwoThirds, CGRect(x: 0, y: 350, width: 1512, height: 632)),
+      (.centerHalf, CGRect(x: 378, y: 34, width: 756, height: 948)),
+      (.centerTwoThirds, CGRect(x: 252, y: 34, width: 1008, height: 948)),
+      (.centerThreeFourths, CGRect(x: 189, y: 34, width: 1134, height: 948)),
+      (.maximizeHeight, CGRect(x: 300, y: 34, width: 600, height: 948)),
+      (.maximizeWidth, CGRect(x: 0, y: 200, width: 1512, height: 500)),
+      (.reasonableSize, CGRect(x: 302, y: 224, width: 907, height: 568)),
+    ]
+    for (layout, frame) in expected {
+      #expect(layout.frame(for: window, in: screen) == frame, "\(layout.title)")
+    }
+  }
 }
