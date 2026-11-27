@@ -93,6 +93,7 @@ import Testing
   @Test func readsNotesSettings() throws {
     let empty = try JSONDecoder().decode(Config.self, from: Data(#"{"hotkey":"cmd+space"}"#.utf8))
     #expect(!empty.notes.escapeLosesFocus)
+    #expect(!empty.notes.moveCheckedTasksToBottom)
     let set = try JSONDecoder().decode(
       Config.self, from: Data(#"{"hotkey":"cmd+space","notes":{"escapeLosesFocus":true}}"#.utf8))
     #expect(set.notes.escapeLosesFocus)

@@ -26,6 +26,8 @@ final class NotesModel {
   var isToastHovered = false
   /// Zoom In and Zoom Out's scale of the text.
   var zoom: CGFloat = 1
+  /// Move Checked Tasks to Bottom, from the settings.
+  var sinksCheckedTasks = false
   /// "Moved to Trash", with Undo, after a note is deleted.
   var toast: NotesToast?
 
@@ -45,7 +47,9 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   var onBrowse: () -> Void = {}
   /// Settings' Notes page, for Open Notes Settings.
   var onSettings: () -> Void = {}
-  var settings = NotesSettings()
+  var settings = NotesSettings() {
+    didSet { model.sinksCheckedTasks = settings.moveCheckedTasksToBottom }
+  }
   /// Esc handed the keys away and the note hasn't had them back. The launcher closing makes the
   /// window key again by itself, so key status alone can't tell Ripcord Notes to come forward
   /// rather than close.
@@ -779,7 +783,8 @@ private struct NotesView: View {
       }
       MarkdownEditor(
         text: $model.text, noteURL: model.note.url, focusRequest: model.focusRequest,
-        zoom: model.zoom, onChange: onTextChange, onHeight: onTextHeight)
+        zoom: model.zoom, sinksCheckedTasks: model.sinksCheckedTasks, onChange: onTextChange,
+        onHeight: onTextHeight)
       ZStack {
         Text("\(Self.shownCount(of: model.text)) characters")
           .font(.system(size: Metrics.notesCountFontSize))
@@ -885,6 +890,7 @@ private struct MarkdownEditor: NSViewRepresentable {
   let focusRequest: Int
   /// Zoom In and Zoom Out's scale.
   let zoom: CGFloat
+  let sinksCheckedTasks: Bool
   let onChange: () -> Void
   /// How tall the text is laid out, for the window to fit it.
   let onHeight: (CGFloat) -> Void
@@ -955,6 +961,7 @@ private struct MarkdownEditor: NSViewRepresentable {
   func updateNSView(_ scrollView: NSScrollView, context: Context) {
     context.coordinator.parent = self
     guard let textView = scrollView.documentView as? NoteTextView else { return }
+    textView.sinksCheckedTasks = sinksCheckedTasks
     // Another note shown, or reloaded: what was being composed for the old one is dropped, and
     // so is its undo history, which would replay its edits on this text.
     if textView.string != text {
@@ -1415,6 +1422,8 @@ private struct MarkdownEditor: NSViewRepresentable {
 /// The note's text view: Raycast Notes' placeholders, its Format as… edits, and deletes that
 /// treat hidden marks as one with their text.
 final class NoteTextView: NSTextView {
+  /// Move Checked Tasks to Bottom: a task checked goes below its list's unchecked ones.
+  var sinksCheckedTasks = false
   /// The note's Markdown, read once per change of its text and shared by formatting, the
   /// editing rules and drawing.
   var markdownSpans: [MarkdownSpan] {
@@ -1496,8 +1505,31 @@ final class NoteTextView: NSTextView {
       let toggle = MarkdownEditing.toggleTask(
         at: selectedRange().location, in: string, spans: markdownSpans)
     else { return false }
-    replace(toggle.range, with: toggle.replacement, selecting: selectedRange())
+    apply(toggle)
     return true
+  }
+
+  /// A task's box checked or unchecked and, checked with Move Checked Tasks to Bottom on, the
+  /// task moved below its list's unchecked ones, the caret going with it: one undo step.
+  private func apply(_ toggle: (range: NSRange, replacement: String)) {
+    undoManager?.beginUndoGrouping()
+    defer { undoManager?.endUndoGrouping() }
+    replace(toggle.range, with: toggle.replacement, selecting: selectedRange())
+    guard sinksCheckedTasks, toggle.replacement == "x",
+      let sink = MarkdownEditing.sinkCheckedTask(at: toggle.range.location, in: string)
+    else { return }
+    let selection = selectedRange()
+    let caret: Int
+    if NSLocationInRange(selection.location, sink.item) {
+      caret = sink.to + selection.location - sink.item.location
+    } else if NSLocationInRange(selection.location, sink.range) {
+      caret = selection.location - sink.item.length
+    } else {
+      caret = selection.location
+    }
+    // The text is as long as before; a selection carried down mustn't run past its end.
+    let length = min(selection.length, (string as NSString).length - caret)
+    replace(sink.range, with: sink.replacement, selecting: NSRange(location: caret, length: length))
   }
 
   /// `- [] ` typed becomes `- [ ] `, and ``` a code block, as an undo step of its own.
@@ -1717,7 +1749,7 @@ final class NoteTextView: NSTextView {
         let toggle = MarkdownEditing.toggleTask(
           at: span.range.location, in: string, spans: markdownSpans)
       else { continue }
-      replace(toggle.range, with: toggle.replacement, selecting: selectedRange())
+      apply(toggle)
       return
     }
     super.mouseDown(with: event)

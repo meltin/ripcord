@@ -156,15 +156,21 @@ public struct NotesSettings: Codable, Equatable, Sendable {
   /// Esc hands the keys back to the app in front and leaves the window open, as Raycast's
   /// "Escape Key Loses Focus"; off, Esc closes the window.
   public var escapeLosesFocus: Bool
+  /// A task checked goes below the unchecked ones of its list, as Raycast's "Move Checked Tasks
+  /// to Bottom".
+  public var moveCheckedTasksToBottom: Bool
 
-  public init(escapeLosesFocus: Bool = false) {
+  public init(escapeLosesFocus: Bool = false, moveCheckedTasksToBottom: Bool = false) {
     self.escapeLosesFocus = escapeLosesFocus
+    self.moveCheckedTasksToBottom = moveCheckedTasksToBottom
   }
 
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     self.init(
       escapeLosesFocus: try container.decodeIfPresent(Bool.self, forKey: .escapeLosesFocus)
-        ?? false)
+        ?? false,
+      moveCheckedTasksToBottom: try container.decodeIfPresent(
+        Bool.self, forKey: .moveCheckedTasksToBottom) ?? false)
   }
 }

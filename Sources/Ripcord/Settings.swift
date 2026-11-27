@@ -708,6 +708,9 @@ private enum SettingText {
     title: "Escape Key Loses Focus",
     detail:
       "When enabled, pressing Escape in Notes makes the window lose focus instead of closing it.")
+  static let moveCheckedTasks = SettingsSearch.Item(
+    title: "Move Checked Tasks to Bottom",
+    detail: "When you check off a task, move it below the unchecked tasks in its list.")
   static let windowGap = SettingsSearch.Item(
     title: "Window Gap", detail: "Gap between windows")
   static let screenGap = SettingsSearch.Item(
@@ -739,7 +742,7 @@ extension SettingsPage {
           ]
       case .colorPicker: [SettingText.colorFormat, SettingText.showColorName]
       case .httpStatusCodes: [SettingText.httpStatusPicture]
-      case .notes: [SettingText.escapeLosesFocus]
+      case .notes: [SettingText.escapeLosesFocus, SettingText.moveCheckedTasks]
       case .scripts: [SettingText.scriptFolders]
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
       case .dummyText: [SettingText.dummyTextLanguage]
@@ -868,6 +871,18 @@ struct SettingsView: View {
               ) {
                 Toggle(
                   SettingText.escapeLosesFocus.title, isOn: $model.config.notes.escapeLosesFocus
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+              }
+              Divider()
+              SettingRow(
+                title: SettingText.moveCheckedTasks.title,
+                description: SettingText.moveCheckedTasks.detail
+              ) {
+                Toggle(
+                  SettingText.moveCheckedTasks.title,
+                  isOn: $model.config.notes.moveCheckedTasksToBottom
                 )
                 .labelsHidden()
                 .toggleStyle(.switch)
