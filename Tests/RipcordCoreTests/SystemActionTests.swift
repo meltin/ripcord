@@ -89,5 +89,12 @@ import Testing
     )
     .flatMap(\.results).first
     #expect(top?.action == .system(.showScreenSaver))
+    // The words it shares with older ones still find those first.
+    func first(_ query: String) -> SearchResult.Action? {
+      Search.sections(for: query, apps: [], running: [], quicklinks: [], items: [:])
+        .flatMap(\.results).first?.action
+    }
+    #expect(first("lock screen") == .system(.lockScreen))
+    #expect(first("show desktop") == .system(.showDesktop))
   }
 }
