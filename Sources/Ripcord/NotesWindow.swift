@@ -35,6 +35,8 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   /// Settings' Notes page, for Open Notes Settings.
   var onSettings: () -> Void = {}
   private let actionsModel = NotesActionsModel()
+  /// Set while Ripcord moves the window itself, so only the user's moves are remembered.
+  private var isMovingWindow = false
   /// The note's text as last laid out, for the window to fit when auto-sizing comes back on.
   private var textHeight: CGFloat = 0
   private var pendingSave: DispatchWorkItem?
@@ -469,6 +471,8 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? .main
     else { return }
     let size = window.frame.size
+    isMovingWindow = true
+    defer { isMovingWindow = false }
     // Where it was moved to, when that's on this screen; else this screen's top right.
     if let saved = UserDefaults.standard.string(forKey: Self.placeKey).map(NSPointFromString),
       // Moved against the menu bar, its top is the visible frame's edge, which `contains` leaves out.
@@ -486,12 +490,11 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
   private func resetPlace() {
     UserDefaults.standard.removeObject(forKey: Self.placeKey)
     place()
-    // Placing moves the window, which would save that spot; it's the default anyway.
-    UserDefaults.standard.removeObject(forKey: Self.placeKey)
   }
 
   func windowDidMove(_ notification: Notification) {
-    guard notification.object as? NSWindow === window else { return }
+    // Only where it's dragged to; Ripcord's own moves (placing, fitting) aren't kept.
+    guard notification.object as? NSWindow === window, !isMovingWindow else { return }
     let topLeft = NSPoint(x: window.frame.minX, y: window.frame.maxY)
     UserDefaults.standard.set(NSStringFromPoint(topLeft), forKey: Self.placeKey)
   }
@@ -510,6 +513,8 @@ final class NotesWindowController: NSObject, NSWindowDelegate {
     let width = Self.width
     guard abs(height - window.frame.height) > 0.5 || abs(width - window.frame.width) > 0.5
     else { return }
+    isMovingWindow = true
+    defer { isMovingWindow = false }
     window.setFrame(
       NSRect(x: window.frame.maxX - width, y: top - height, width: width, height: height),
       display: true)
@@ -783,6 +788,12 @@ private struct MarkdownEditor: NSViewRepresentable {
     ) { [weak scrollView] _ in
       MainActor.assumeIsolated { scrollView?.scrollerStyle = .overlay }
     }
+    // Marks are drawn in the accent colour; redrawn when it changes in System Settings.
+    context.coordinator.accentObserver = NotificationCenter.default.addObserver(
+      forName: NSColor.systemColorsDidChangeNotification, object: nil, queue: .main
+    ) { [weak scrollView] _ in
+      MainActor.assumeIsolated { scrollView?.documentView?.needsDisplay = true }
+    }
     // TextKit 1, whose layout manager places the empty headings' placeholders.
     let textView = NoteTextView(usingTextLayoutManager: false)
     textView.minSize = .zero
@@ -863,6 +874,7 @@ private struct MarkdownEditor: NSViewRepresentable {
     var isReplacing = false
     var noteURL: URL?
     var scrollerObserver: NSObjectProtocol?
+    var accentObserver: NSObjectProtocol?
     var findBarObservation: NSKeyValueObservation?
     /// Text is going in, so the caret that follows it may stay before a style's closing marks:
     /// what's typed after ⌘B with nothing selected stays bold.
@@ -870,6 +882,7 @@ private struct MarkdownEditor: NSViewRepresentable {
 
     isolated deinit {
       if let scrollerObserver { NotificationCenter.default.removeObserver(scrollerObserver) }
+      if let accentObserver { NotificationCenter.default.removeObserver(accentObserver) }
     }
 
     init(parent: MarkdownEditor) {
@@ -886,18 +899,15 @@ private struct MarkdownEditor: NSViewRepresentable {
         // Not formatted while composing, but redrawn, so a "Heading 1" placeholder doesn't
         // linger under the text being composed.
         textView.needsDisplay = true
-      } else if !textView.isTidying, textView.selectedRange().length == 0,
-        let edit = MarkdownEditing.taskShortcut(
-          at: textView.selectedRange().location, in: textView.string)
-          ?? MarkdownEditing.codeFenceShortcut(
-            at: textView.selectedRange().location, in: textView.string)
-      {
-        // `- [] ` becomes `- [ ] ` and ``` a code block; that edit comes back through here and
-        // is formatted then.
-        return textView.replace(
-          edit.range, with: edit.replacement, selecting: NSRange(location: edit.caret, length: 0))
       } else {
         MarkdownEditor.format(textView)
+        // Not while undoing or redoing, which would put back what was just taken away.
+        if !textView.isTidying, textView.undoManager?.isUndoing != true,
+          textView.undoManager?.isRedoing != true
+        {
+          // After the keystroke is done, so its typing is a closed undo step of its own.
+          DispatchQueue.main.async { [weak textView] in textView?.applyShortcut() }
+        }
       }
       // Typing isn't inside a SwiftUI update, so the window can grow in the same pass as the
       // text, without a frame where the new line doesn't fit yet.
@@ -965,7 +975,8 @@ private struct MarkdownEditor: NSViewRepresentable {
       let isStep =
         abs(new.location - old.location) <= 2 && abs(NSMaxRange(new) - NSMaxRange(old)) <= 2
       guard isStep else {
-        let acrossLines = (text as NSString).substring(with: new).contains("\n")
+        // UTF-16, so CRLF line ends count too.
+        let acrossLines = (text as NSString).range(of: "\n", range: new).location != NSNotFound
         return acrossLines ? MarkdownEditing.outward(new, spans: spans) : new
       }
       var start = new.location
@@ -992,6 +1003,8 @@ private struct MarkdownEditor: NSViewRepresentable {
       }
       guard !isReplacing, let replacementString, let textView = textView as? NoteTextView,
         !textView.isTidying, !textView.hasMarkedText(),
+        // Undo and redo put back exactly what was there; tidying them would garble the note.
+        textView.undoManager?.isUndoing != true, textView.undoManager?.isRedoing != true,
         let tidy = MarkdownEditing.tidy(
           range, replacement: replacementString, in: textView.string,
           spans: textView.markdownSpans)
@@ -1035,10 +1048,18 @@ private struct MarkdownEditor: NSViewRepresentable {
         textView.replace(edit.range, with: edit.replacement, selecting: edit.selection)
         return true
       case #selector(NSResponder.moveDown(_:)) where selection.length == 0:
-        // Out of a code block that ends the note, onto a line made for it.
+        // Out of a code block that ends the note, onto a line made for it; from its last row
+        // only, when its last line wraps.
         guard
           let edit = MarkdownEditing.leaveBlockDown(
-            at: selection.location, in: text, spans: spans)
+            at: selection.location, in: text, spans: spans),
+          let block = spans.first(where: {
+            $0.style == .fenced
+              && NSLocationInRange(
+                selection.location,
+                NSRange(location: $0.range.location, length: $0.range.length + 1))
+          }),
+          textView.isOnSameRow(selection.location, as: NSMaxRange(block.range))
         else { return false }
         textView.replace(
           edit.range, with: edit.replacement, selecting: NSRange(location: edit.caret, length: 0))
@@ -1291,10 +1312,23 @@ final class NoteTextView: NSTextView {
   /// Set while an edit made here is checked, which is already tidy.
   private(set) var isTidying = false
 
+  /// `- [] ` typed becomes `- [ ] `, and ``` a code block, as an undo step of its own.
+  func applyShortcut() {
+    let caret = selectedRange()
+    guard caret.length == 0, !hasMarkedText(),
+      let edit = MarkdownEditing.taskShortcut(at: caret.location, in: string)
+        ?? MarkdownEditing.codeFenceShortcut(at: caret.location, in: string)
+    else { return }
+    replace(edit.range, with: edit.replacement, selecting: NSRange(location: edit.caret, length: 0))
+  }
+
   /// An edit made as typing is, so it's undone with ⌘Z and saved.
   func replace(_ range: NSRange, with replacement: String, selecting selection: NSRange) {
     isTidying = true
     defer { isTidying = false }
+    // Typing so far is closed as one undo step first: an edit slipped into the middle of it
+    // would make ⌘Z put back the wrong characters.
+    breakUndoCoalescing()
     guard shouldChangeText(in: range, replacementString: replacement) else { return }
     textStorage?.replaceCharacters(in: range, with: replacement)
     didChangeText()
@@ -1304,6 +1338,16 @@ final class NoteTextView: NSTextView {
   /// The system accent colour, as the owner chose, for bullets, numbers, checkboxes and quote
   /// bars; it follows System Settings.
   private static var accent: NSColor { .controlAccentColor }
+
+  /// Whether two places in the text are laid out on the same row.
+  func isOnSameRow(_ a: Int, as b: Int) -> Bool {
+    guard let layoutManager else { return true }
+    let row = { (location: Int) in
+      layoutManager.lineFragmentRect(
+        forGlyphAt: layoutManager.glyphIndexForCharacter(at: location), effectiveRange: nil)
+    }
+    return row(a) == row(b)
+  }
 
   /// Where a line's first fragment sits, in the view: the marks drawn for it line up with it.
   private func lineRect(at location: Int) -> NSRect? {

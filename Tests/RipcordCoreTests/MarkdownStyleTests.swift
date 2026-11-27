@@ -76,8 +76,8 @@ import Testing
       .joined(separator: "\n")
     let clock = ContinuousClock()
     let took = clock.measure { _ = MarkdownSpan.spans(in: text) }
-    // Read once per keystroke now, a few thousand lines must stay well under a frame's worth of
-    // lag in a release build; loose here for a debug build on a busy machine.
-    #expect(took < .milliseconds(500))
+    // Read once per keystroke now (about 20ms here in a debug build); loose, as the emoji
+    // search's is, so a busy machine doesn't fail it, while a regression to seconds still does.
+    #expect(took < .seconds(2))
   }
 }

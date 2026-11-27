@@ -100,9 +100,15 @@ public enum MarkdownEditing {
       replacement += text
       location = NSMaxRange(line)
     }
-    // The selection moves with its own line's text.
+    // The selection moves with its own line's text; a point inside spaces taken away lands at
+    // its line's new start.
     func moved(_ point: Int) -> Int {
-      shifts.filter { $0.at <= point }.reduce(point) { max($0 + $1.by, $1.at) }
+      var offset = 0
+      for shift in shifts where shift.at <= point {
+        if shift.by < 0, point < shift.at - shift.by { return shift.at + offset }
+        offset += shift.by
+      }
+      return point + offset
     }
     let start = moved(selection.location)
     let end = moved(NSMaxRange(selection))
@@ -136,9 +142,11 @@ public enum MarkdownEditing {
         $0.style == .fenced && $0.range.location <= caret && caret <= NSMaxRange($0.range)
       }),
       let closing = block.marks.last, NSMaxRange(closing) == string.length,
-      !string.substring(with: NSRange(location: caret, length: NSMaxRange(block.range) - caret))
-        .contains("\n"),
-      !string.substring(with: closing).hasSuffix("\n")
+      // UTF-16, so a CRLF line end counts too: String sees "\r\n" as one character.
+      string.range(
+        of: "\n", range: NSRange(location: caret, length: NSMaxRange(block.range) - caret)
+      ).location == NSNotFound,
+      closing.length == 0 || string.character(at: NSMaxRange(closing) - 1) != 0x0A
     else { return nil }
     return (NSRange(location: string.length, length: 0), "\n", string.length + 1)
   }
@@ -155,10 +163,15 @@ public enum MarkdownEditing {
     guard lineText.trimmingCharacters(in: .whitespaces) == "```",
       caret == line.location + (lineText as NSString).length
     else { return nil }
-    // An odd number of fences above means this one closes a block.
-    let above = string.substring(to: line.location).components(separatedBy: "\n")
-      .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }
-    guard above.count % 2 == 0 else { return nil }
+    // An odd number of fences above means this one closes a block; an odd number below, that
+    // it pairs with one left open there. Either way it's a fence of its own, not a new block.
+    func fences(_ text: String) -> Int {
+      text.components(separatedBy: .newlines)
+        .filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }.count
+    }
+    guard fences(string.substring(to: line.location)) % 2 == 0,
+      fences(string.substring(from: NSMaxRange(line))) % 2 == 0
+    else { return nil }
     return (NSRange(location: caret, length: 0), "\n\n```", caret + 1)
   }
 

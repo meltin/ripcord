@@ -213,6 +213,20 @@ import Testing
     #expect(edit?.selection == NSRange(location: 5, length: 0))
   }
 
+  @Test func keepsTheSelectionInsideTheTextOnShiftTab() {
+    let text = "  - a\n  - b\n  - c"
+    let edit = MarkdownEditing.indentItems(
+      selection: NSRange(location: 0, length: 17), in: text, spans: MarkdownSpan.spans(in: text),
+      outdent: true)
+    #expect(edit?.replacement == "- a\n- b\n- c")
+    #expect(edit?.selection == NSRange(location: 0, length: 11))
+    // A caret in the third item moves that line only, and keeps its place in its text.
+    let caret = MarkdownEditing.indentItems(
+      selection: NSRange(location: 16, length: 0), in: text, spans: MarkdownSpan.spans(in: text),
+      outdent: true)
+    #expect(caret?.selection == NSRange(location: 14, length: 0))
+  }
+
   @Test func takesDashEmptyBracketsAsATask() {
     let edit = MarkdownEditing.taskShortcut(at: 5, in: "- [] ")
     #expect(
@@ -288,6 +302,20 @@ import Testing
     // Closing an open block, or with more on the line, it's left alone.
     #expect(MarkdownEditing.codeFenceShortcut(at: 9, in: "```\nx\n```") == nil)
     #expect(MarkdownEditing.codeFenceShortcut(at: 4, in: "a```") == nil)
+  }
+
+  @Test func leavesABlockOnlyFromItsLastLineWithCRLF() {
+    let text = "```\r\na\r\nb\r\n```"
+    // On "a" (5), "b" is still below: ↓ is left to the text view.
+    #expect(
+      MarkdownEditing.leaveBlockDown(at: 5, in: text, spans: MarkdownSpan.spans(in: text)) == nil)
+  }
+
+  @Test func leavesAnOpenFenceBelowAlone() {
+    // A ``` typed above an unpaired one pairs with it rather than opening a new block.
+    #expect(MarkdownEditing.codeFenceShortcut(at: 3, in: "```\ncode\n```") == nil)
+    // With nothing open below, it opens a block as usual.
+    #expect(MarkdownEditing.codeFenceShortcut(at: 3, in: "```\ncode") != nil)
   }
 
   @Test func leavesABlockThatEndsTheNoteDownward() {
