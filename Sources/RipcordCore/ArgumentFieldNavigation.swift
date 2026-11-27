@@ -30,6 +30,18 @@ public enum ArgumentFieldNavigation {
     }
   }
 
+  /// What's kept of `values` once the panel hides or the command runs: the dropdowns' choices,
+  /// as Raycast remembers them for next time, and nothing typed, passwords included. Nil when
+  /// nothing's left.
+  public static func keepingChoices(
+    _ values: [String], of arguments: [ScriptCommand.Argument]
+  ) -> [String]? {
+    let kept = values.indices.map { index in
+      arguments.indices.contains(index) && arguments[index].type == .dropdown ? values[index] : ""
+    }
+    return kept.allSatisfy(\.isEmpty) ? nil : kept
+  }
+
   /// Whether typing a space after `previous` should go into the first argument field instead:
   /// `previous` is exactly the selected command's alias, and that command takes arguments.
   public static func spaceEntersFields(

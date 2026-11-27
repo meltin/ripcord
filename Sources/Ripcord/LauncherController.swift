@@ -183,7 +183,8 @@ final class LauncherModel {
   var toast: (text: String, failed: Bool)?
   /// Each script's arguments by path, for the fields beside the search bar.
   var scriptArguments: [String: [ScriptCommand.Argument]] = [:]
-  /// What's typed in those fields, by script path; dropped as the panel hides, passwords too.
+  /// What's in those fields, by script path. What's typed goes as the panel hides or the command
+  /// runs, passwords too; a dropdown's choice stays for next time, as Raycast's.
   var argumentValues: [String: [String]] = [:]
   /// The argument field to focus, for the view to take and clear.
   var argumentFocusRequest: Int?
@@ -622,7 +623,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.backdrop?.stop()
     stashDraft()
     model.toast = nil
-    model.argumentValues = [:]
+    // What's typed goes, passwords too; a dropdown's choice stays for next time, as Raycast's.
+    for key in model.argumentValues.keys { forgetTyped(key) }
     model.argumentFocusRequest = nil
     model.argumentDropdown = nil
     model.argumentMenu = nil
@@ -943,8 +945,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private func generateDummyText(copyOnly: Bool) {
     let key = BuiltinCommand.generateDummyText.settingsKey
     let values = model.argumentValues[key] ?? []
-    // Typed for this run, as a script's fields empty once it runs.
-    model.argumentValues[key] = nil
+    // Typed for this run, as a script's fields empty once it runs; the language stays chosen.
+    forgetTyped(key)
     let length = DummyText.length(from: values.first ?? "")
     let language =
       values.count > 1
@@ -999,8 +1001,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if let missing = script.firstMissing(in: values) { return askForArgument(missing, of: script) }
     if script.needsConfirmation, confirmedScript != path { return askToRun(script) }
     confirmedScript = nil
-    // Typed for this run, as Raycast's fields empty once it runs; a password isn't kept.
-    model.argumentValues[path] = nil
+    // Typed for this run, as Raycast's fields empty once it runs; a password isn't kept, and a
+    // dropdown's choice is.
+    forgetTyped(path)
     // Opened only to ask, from a hotkey: it goes with the question, as System Actions' does,
     // unless the output is to show in it.
     if openedForQuestion {
@@ -1150,6 +1153,14 @@ final class LauncherController: NSObject, NSWindowDelegate {
     } else {
       model.argumentDropdown = nil
       model.argumentFocusRequest = index
+    }
+  }
+
+  /// Drops what's typed in the fields of `key` (a script's path, or a command's settings key),
+  /// keeping its dropdowns' choices for next time, as Raycast does.
+  private func forgetTyped(_ key: String) {
+    model.argumentValues[key] = model.argumentValues[key].flatMap {
+      ArgumentFieldNavigation.keepingChoices($0, of: model.scriptArguments[key] ?? [])
     }
   }
 

@@ -30,6 +30,19 @@ struct ArgumentFieldNavigationTests {
     #expect(ArgumentFieldNavigation.matches("x", in: titles).isEmpty)
   }
 
+  @Test func keepsOnlyTheDropdownsChoices() {
+    let arguments = [
+      ScriptCommand.Argument(type: .text, placeholder: "zqx"),
+      ScriptCommand.Argument(type: .password, placeholder: "zqx"),
+      ScriptCommand.Argument(type: .dropdown, placeholder: "zqx"),
+    ]
+    #expect(
+      ArgumentFieldNavigation.keepingChoices(["a", "secret", "en"], of: arguments) == [
+        "", "", "en",
+      ])
+    #expect(ArgumentFieldNavigation.keepingChoices(["a", "secret", ""], of: arguments) == nil)
+  }
+
   @Test func aSpaceAfterAnAliasEntersTheFields() {
     #expect(
       ArgumentFieldNavigation.spaceEntersFields(
