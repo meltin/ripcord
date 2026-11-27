@@ -37,8 +37,11 @@ struct SearchView: View {
             caretAtEnd: !model.searchSelectsAll,
             onChange: onQueryChange, onCommand: onCommand,
             onFocus: {
+              // Clicked too: a dropdown that had the keys gives them up.
               model.isEditingArgument = false
               model.searchSelectsAll = false
+              model.argumentDropdown = nil
+              model.argumentMenu = nil
             }
           )
           // A new one takes the focus back from Set Alias…'s field.
@@ -1229,7 +1232,11 @@ private struct ArgumentFields: View {
       if dropdown != nil { focus = nil }
     }
     .onChange(of: focus) { _, now in
-      if now != nil { model.isEditingArgument = true }
+      guard now != nil else { return }
+      model.isEditingArgument = true
+      // A text field clicked while a dropdown had the keys takes them.
+      model.argumentDropdown = nil
+      model.argumentMenu = nil
     }
     .onDisappear {
       // The row changed under a focused field: the search field takes it back.

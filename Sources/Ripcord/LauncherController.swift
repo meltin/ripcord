@@ -976,7 +976,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     // Only while the row is still there, or the request would wait for another script.
     DispatchQueue.main.async { [weak self] in
       guard let self, model.argumentScript == path else { return }
-      model.argumentFocusRequest = index
+      // A dropdown too, which takes its keys at the panel.
+      focusArgument(index)
     }
   }
 
