@@ -205,7 +205,9 @@ the settings window opens. The settings window writes every change back to it.
 ```
 
 `hotkey` is `cmd`, `option` or `ctrl` (plus `shift` if you like), then `space`, `return`, an
-arrow (`left`, `right`, `up`, `down`), a letter or a digit.
+arrow (`left`, `right`, `up`, `down`), a letter or a digit; or one modifier twice, as Raycast
+allows: `shift+shift` is ⇧ pressed twice on its own. A double tap needs Accessibility, as snippet
+keywords do, and stands aside while a password field has secure input on.
 Clipboard History keeps its last 300 unpinned items (plus every pinned one), for as long as
 Settings › Clipboard History says (`clipboardHistory`'s `keepFor` is `day`, `week`, `month`,
 `threeMonths`, `sixMonths`, `year` or `unlimited`, and `maxEntries` the most kept), in

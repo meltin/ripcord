@@ -1799,6 +1799,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     guard kind == .hotkey else { return }
     // Ripcord's hotkeys would fire instead of being recorded.
     settings.onRecordingChange(true)
+    settings.recordTaps = DoubleTapDetector()
     hotkeyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) {
       [weak self] event in
       self?.record(event, for: key)
@@ -1814,8 +1815,15 @@ final class LauncherController: NSObject, NSWindowDelegate {
     let modifiers = event.modifierFlags.intersection([.control, .option, .shift, .command])
     if event.type == .flagsChanged {
       model.configureEditor?.modifiers = modifiers
+      // ⇧⇧ and the like, as Raycast's recorder takes them.
+      guard let hotkey = settings.doubleTap(in: event) else { return }
+      model.configureEditor?.problem =
+        settings.setHotkey(hotkey, for: .item(key)) ?? settings.loadError
+      settings.load()
+      model.configureEditor?.hotkey = settings.hotkey(of: .item(key))
       return
     }
+    settings.recordTaps.keyPressed()
     // Return held from the menu item that opened the card.
     guard !event.isARepeat else { return }
     let bare = modifiers.isEmpty

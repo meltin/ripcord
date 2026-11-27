@@ -1,21 +1,42 @@
 import Carbon.HIToolbox
 
-/// A global shortcut such as "option+space", in the form Carbon's RegisterEventHotKey takes.
+/// A global shortcut such as "option+space", in the form Carbon's RegisterEventHotKey takes, or
+/// a modifier pressed twice on its own, such as ⇧⇧ ("shift+shift"), as Raycast allows.
 public struct Hotkey: Equatable, Sendable {
   public let keyCode: UInt32
   public let modifiers: UInt32
 
   /// Nil unless `spec` is modifiers including ⌘, ⌥ or ⌃, then "space", "return", an arrow
-  /// ("left", "right", "up", "down"), a letter or a digit.
+  /// ("left", "right", "up", "down"), a letter or a digit; or one modifier twice.
   public init?(_ spec: String) {
     let parts = spec.lowercased().split(separator: "+").map {
       $0.trimmingCharacters(in: .whitespaces)
     }
+    if parts.count == 2, let first = Self.modifierFlags[parts[0]],
+      first == Self.modifierFlags[parts[1]]
+    {
+      self.init(doubleTap: first)
+      return
+    }
     guard let key = parts.last, let code = Self.keyCodes[key] else { return nil }
     let flags = parts.dropLast().map { Self.modifierFlags[$0] }
-    guard flags.allSatisfy({ $0 != nil }) else { return nil }
+    // "shift+shift+k" names no hotkey.
+    guard flags.allSatisfy({ $0 != nil }), Set(flags).count == flags.count else { return nil }
     self.init(keyCode: code, modifiers: flags.compactMap { $0 }.reduce(0, |))
   }
+
+  /// ⌃⌃, ⌥⌥, ⇧⇧ or ⌘⌘: `modifier` pressed twice with nothing else. Carbon can't register it;
+  /// `DoubleTapDetector` spots it.
+  public init?(doubleTap modifier: UInt32) {
+    guard Self.ordered.contains(where: { $0.flag == modifier }) else { return nil }
+    keyCode = Self.doubleTapKeyCode
+    modifiers = modifier
+  }
+
+  public var isDoubleTap: Bool { keyCode == Self.doubleTapKeyCode }
+
+  /// No key on any keyboard has this code.
+  private static let doubleTapKeyCode: UInt32 = 0xFFFF
 
   /// A recorded key press; nil for keys a spec can't name or a press without ⌘, ⌥ or ⌃.
   public init?(keyCode: UInt32, modifiers: UInt32) {
@@ -32,6 +53,9 @@ public struct Hotkey: Equatable, Sendable {
 
   /// The form the config file stores, e.g. "cmd+shift+k".
   public var spec: String {
+    if isDoubleTap, let name = Self.ordered.first(where: { $0.flag == modifiers })?.name {
+      return name + "+" + name
+    }
     let key = Self.keyCodes.first { $0.value == keyCode }?.key ?? ""
     return (Self.ordered.filter { modifiers & $0.flag != 0 }.map(\.name) + [key])
       .joined(separator: "+")
@@ -39,6 +63,9 @@ public struct Hotkey: Equatable, Sendable {
 
   /// Keycaps as macOS menus show them, e.g. ["⇧", "⌘", "K"] or ["⌘", "Space"].
   public var keycaps: [String] {
+    if isDoubleTap, let symbol = Self.ordered.first(where: { $0.flag == modifiers })?.symbol {
+      return [symbol, symbol]
+    }
     let key = Self.keyCodes.first { $0.value == keyCode }?.key ?? ""
     return Self.ordered.filter { modifiers & $0.flag != 0 }.map(\.symbol)
       + [Self.keycapNames[key] ?? key.uppercased()]

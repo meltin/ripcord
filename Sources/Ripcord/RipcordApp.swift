@@ -306,11 +306,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private func applyHotkeys(_ config: Config) {
     var assignments = config.hotkeyAssignments
     let launcherHotkey = Hotkey(config.hotkey)
-    // A typo in config.json mustn't leave Ripcord with no way to open.
-    if launcherHotkey == nil, let workingLauncherHotkey {
+    let trusted = AXIsProcessTrusted()
+    // A typo in config.json, or ⇧⇧ without Accessibility, mustn't leave Ripcord with no way to
+    // open.
+    if launcherHotkey == nil || (launcherHotkey?.isDoubleTap == true && !trusted),
+      let workingLauncherHotkey, workingLauncherHotkey != launcherHotkey
+    {
       assignments.insert((target: .launcher, hotkey: workingLauncherHotkey), at: 0)
     }
-    let signature = [config.hotkey] + assignments.map { "\($0.target)=\($0.hotkey.spec)" }
+    // With a double tap among them, granting Accessibility has to register them again.
+    let doubleTaps = assignments.contains { $0.hotkey.isDoubleTap }
+    let signature =
+      [config.hotkey] + assignments.map { "\($0.target)=\($0.hotkey.spec)" }
+      + (doubleTaps ? ["accessibility=\(trusted)"] : [])
     guard signature != registeredHotkeys else { return }
     let failures = GlobalHotKey.set(
       assignments.map { assignment in
@@ -322,14 +330,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let launcherFailure = assignments.firstIndex { $0.target == .launcher }.flatMap { failures[$0] }
     if launcherHotkey == nil {
       registeredHotkeys = signature
-      showError("\"\(config.hotkey)\" is not a hotkey. Use a form like \"option+space\".")
+      showError(
+        "\"\(config.hotkey)\" is not a hotkey. Use a form like \"option+space\" or \"shift+shift\"."
+      )
     } else if let launcherFailure {
       // Left unrecorded, so the next panel open tries again.
       registeredHotkeys = nil
-      showError("Couldn't register the Ripcord hotkey (OSStatus \(launcherFailure)).")
+      showError(
+        launcherFailure == GlobalHotKey.needsAccessibility
+          ? "The Ripcord hotkey \(launcherHotkey?.keycaps.joined() ?? config.hotkey) needs Accessibility. Allow Ripcord under System Settings › Privacy & Security › Accessibility."
+          : "Couldn't register the Ripcord hotkey (OSStatus \(launcherFailure)).")
     } else {
       registeredHotkeys = signature
-      workingLauncherHotkey = launcherHotkey
+      // ⇧⇧ waiting for Accessibility isn't working yet; the one standing in for it stays.
+      if launcherHotkey?.isDoubleTap != true || trusted { workingLauncherHotkey = launcherHotkey }
     }
   }
 
