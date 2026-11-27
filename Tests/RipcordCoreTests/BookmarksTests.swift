@@ -341,6 +341,10 @@ import Testing
       BookmarkFileLocation.url(for: "~/Notes/links.md", home: home).path
         == "/Users/al/Notes/links.md")
     #expect(BookmarkFileLocation.url(for: "/tmp/links.md", home: home).path == "/tmp/links.md")
+    // Typed without "/" or "~/", from home.
+    #expect(
+      BookmarkFileLocation.url(for: "Notes/links.md", home: home).path
+        == "/Users/al/Notes/links.md")
     #expect(
       BookmarkFileLocation.path(for: URL(fileURLWithPath: "/Users/al/Notes/links.md"), home: home)
         == "~/Notes/links.md")
