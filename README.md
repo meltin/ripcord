@@ -105,7 +105,9 @@
   Generator JP sets the default language, Japanese unless changed
 - Emoji & Symbols: Search Emoji & Symbols shows emoji and symbols (→ ° ⌘ and the like) in a grid by
   category, Frequently Used first; search in English or Japanese (`cat`, `ねこ`), Return pastes,
-  ⌘↵ copies, and ⌘K picks a skin tone that's remembered
+  ⌘↵ copies, and ⌘K picks a skin tone that's remembered. Settings › Emoji & Symbols sets the
+  grid's Column Count (6 to 10), the Primary Action (Return copies instead, pasting on ⌘↵) and
+  the skin tone, as Raycast's does
 - Script Commands: Raycast's Script Commands in the folders set under Settings › Script Commands
   are listed in the root search; `silent` ones show their last line over the screen, `compact`
   ones over the footer and `fullOutput` ones all of it in the panel, and a failure shows its exit
@@ -213,6 +215,7 @@ the settings window opens. The settings window writes every change back to it.
   },
   "colorFormat": "hex",
   "showColorName": false,
+  "emoji": { "columns": 8, "primaryAction": "paste" },
   "favorites": ["com.apple.Safari", "command:search-snippets"],
   "snippetExpansion": {
     "enabled": true, "mode": "immediately", "withinWords": false,

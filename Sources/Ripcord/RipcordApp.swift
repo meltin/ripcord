@@ -131,6 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     launcher.onOpenSettings = { [weak self] in self?.openSettings() }
     launcher.onCheckForUpdates = { [weak self] in self?.checkForUpdates() }
     settings.model.onClearClipboard = { [weak self] in self?.launcher.clearClipboardHistory() }
+    settings.model.onSetEmojiSkinTone = { [weak self] in self?.launcher.setEmojiSkinTone($0) }
     launcher.onBackdropError = { [weak self] in self?.settings.model.backdropError = $0 }
     startControl()
     snippetExpander.onExpand = { [weak self] in self?.launcher.pasteExpansion($0, trailing: $1) }
@@ -314,6 +315,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   @objc private func openSettings() {
     // A shader saved since shows its error, or its fix, on the General page.
     launcher.loadBackdrop()
+    // Kept with the emoji used, not in config.json; ⌘K in the panel changes it too.
+    settings.model.emojiSkinTone = launcher.emojiSkinTone
     settings.show()
   }
 
@@ -334,6 +337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.repositorySettings = config.repositories
       launcher.colorFormat = config.colorFormat
       launcher.showColorName = config.showColorName
+      launcher.emojiSettings = config.emoji
       launcher.favorites = config.favorites
       launcher.scriptFolders = config.scriptFolders
       launcher.dummyTextLanguage = config.dummyTextLanguage
