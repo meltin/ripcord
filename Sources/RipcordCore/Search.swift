@@ -54,8 +54,9 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .searchBookmarks, .addBookmark: "Bookmarks"
     case .searchEmoji: "Emoji & Symbols"
     case .ripcordNotes, .createNote, .searchNotes: "Notes"
-    // Raycast's extension's own name, so "japanese" or "lorem" finds the command too.
-    case .generateDummyText: "Japanese Lorem Ipsum Generator"
+    // So "lorem" or "jp" finds the command too; Raycast's extension is "Japanese Lorem Ipsum
+    // Generator", shortened here.
+    case .generateDummyText: "Lorem Ipsum Generator JP"
     default: "Ripcord"
     }
   }

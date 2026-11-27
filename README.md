@@ -70,10 +70,10 @@
   another editor saves show up in the open note, and a note changed outside Ripcord is never saved
   over. Search Notes finds notes by their text, and ⌃X moves one to the Trash, with Undo for a
   few seconds
-- Japanese Lorem Ipsum Generator: Generate Dummy Text writes Japanese or English filler text of
-  the length typed in the field beside the search bar, as Raycast's extension of that name does;
-  Return pastes it into the app you were in and ⌘↵ copies it. Settings › Japanese Lorem Ipsum
-  Generator sets the default language, Japanese unless changed
+- Lorem Ipsum Generator JP: Generate Dummy Text writes Japanese or English filler text of the
+  length typed in the field beside the search bar, as Raycast's Japanese Lorem Ipsum Generator
+  does; Return pastes it into the app you were in and ⌘↵ copies it. Settings › Lorem Ipsum
+  Generator JP sets the default language, Japanese unless changed
 - Emoji & Symbols: Search Emoji & Symbols shows emoji and symbols (→ ° ⌘ and the like) in a grid by
   category, Frequently Used first; search in English or Japanese (`cat`, `ねこ`), Return pastes,
   ⌘↵ copies, and ⌘K picks a skin tone that's remembered
