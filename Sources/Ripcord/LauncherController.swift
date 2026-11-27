@@ -1881,28 +1881,23 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// Paste borrows the pasteboard and puts back what the user had copied; Copy replaces it.
   private func paste(_ text: String, copyOnly: Bool, keepingMode: Bool = false) {
-    let action: SearchResult.SnippetAction = copyOnly ? .copy : .paste
-    // Read before writing, which replaces what {clipboard} stands for.
+    guard copyOnly else {
+      hide(keepingMode: keepingMode)
+      // After the panel has given the key back to the app being pasted into.
+      return clipboard.pasteSnippet(text, after: 0.05)
+    }
     let copied = NSPasteboard.general.string(forType: .string) ?? ""
     let expansion = Snippet.expand(text, values: Snippet.values(at: .now), clipboard: copied)
     let concealed = clipboard.isConcealed && text.contains("{clipboard}")
-    let saved = action == .paste ? clipboard.snapshot() : []
-    let written = clipboard.write(
-      expansion.text, transient: action == .paste, concealed: concealed)
+    let written = clipboard.write(expansion.text, transient: false, concealed: concealed)
     hide(keepingMode: keepingMode)
-    guard written else { return NSSound.beep() }
-    guard action == .paste else { return }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [clipboard] in
-      guard clipboard.pasteIntoFrontmostApp(thenLeft: expansion.charactersAfterCursor) else {
-        // Not pasted (no Accessibility yet): put back what was copied, or the retry after
-        // granting it would fill {clipboard} with this snippet.
-        clipboard.restore(saved)
-        return NSSound.beep()
-      }
-      // shortcut: the app reads the pasteboard when it handles ⌘V, which 0.5 s covers for
-      // ordinary apps; a hung app would paste what was copied before. Wait for it if one does.
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { clipboard.restore(saved) }
-    }
+    if !written { NSSound.beep() }
+  }
+
+  /// A snippet whose keyword was typed in another app, pasted there in the keyword's place;
+  /// `trailing` is the delimiter kept after it.
+  func pasteExpansion(_ text: String, trailing: String) {
+    clipboard.pasteSnippet(text, trailing: trailing)
   }
 
   private func perform(_ action: SearchResult.ClipAction, on id: UUID) {

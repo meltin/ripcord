@@ -555,6 +555,17 @@ private enum SettingText {
     detail: "Every change here is saved to this file, and edits to the file show up here.")
   static let repositoryFolders = SettingsSearch.Item(
     title: "Folders", detail: "Where to look for repositories, and how many folders down.")
+  static let snippetExpansion = SettingsSearch.Item(
+    title: "Enable Snippet Expansion",
+    detail: "Typing a snippet's keyword in any app replaces it with the snippet.")
+  static let expansionMode = SettingsSearch.Item(
+    title: "Expansion Mode",
+    detail: "Expand as the keyword is typed, or once a space or punctuation follows it.")
+  static let expandWithinWords = SettingsSearch.Item(
+    title: "Expand within Words",
+    detail: "Off, a keyword expands only as a word of its own, not at the end of a longer one.")
+  static let disabledApps = SettingsSearch.Item(
+    title: "Disabled Applications", detail: "Apps where keywords are never expanded.")
   static let openWith = SettingsSearch.Item(
     title: "Open With",
     detail: "The app each Return opens a repository in; ↵ without one shows it in Finder.")
@@ -572,6 +583,11 @@ extension SettingsPage {
       case .colorPicker: [SettingText.colorFormat]
       case .scripts: [SettingText.scriptFolders]
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
+      case .snippets:
+        [
+          SettingText.snippetExpansion, SettingText.expansionMode, SettingText.expandWithinWords,
+          SettingText.disabledApps,
+        ]
       // Its rows are the permissions, read from where they're drawn.
       case .permissions: Permission.allCases.map { .init(title: $0.title, detail: $0.purpose) }
       default: []
@@ -646,6 +662,12 @@ struct SettingsView: View {
               }
             }
             CommandsList(model: model, page: .colorPicker)
+          }
+        case .snippets:
+          PageScroll(model: model) {
+            PageHeader(page: .snippets)
+            SnippetExpansionSettings(expansion: $model.config.snippetExpansion)
+            CommandsList(model: model, page: .snippets)
           }
         case .repositories:
           PageScroll(model: model) {
@@ -1463,6 +1485,93 @@ private struct RepositoriesSettings: View {
     }
   }
 
+}
+
+/// Keyword expansion, the main settings Raycast's Snippets have.
+private struct SnippetExpansionSettings: View {
+  @Binding var expansion: SnippetExpansion
+
+  var body: some View {
+    Card {
+      SettingRow(
+        title: SettingText.snippetExpansion.title,
+        description: SettingText.snippetExpansion.detail
+          // It needs the permission pasting does; said here, where it would silently do nothing.
+          + (AXIsProcessTrusted() ? "" : " Needs Accessibility, on the Permissions page.")
+      ) {
+        Toggle(SettingText.snippetExpansion.title, isOn: $expansion.isEnabled)
+          .toggleStyle(.switch)
+          .labelsHidden()
+      }
+      Group {
+        Divider()
+        SettingRow(
+          title: SettingText.expansionMode.title, description: SettingText.expansionMode.detail
+        ) {
+          Picker(SettingText.expansionMode.title, selection: $expansion.mode) {
+            ForEach(SnippetExpansion.Mode.allCases, id: \.self) { Text($0.title).tag($0) }
+          }
+          .labelsHidden()
+          .fixedSize()
+        }
+        Divider()
+        SettingRow(
+          title: SettingText.expandWithinWords.title,
+          description: SettingText.expandWithinWords.detail
+        ) {
+          Toggle(SettingText.expandWithinWords.title, isOn: $expansion.expandsWithinWords)
+            .toggleStyle(.switch)
+            .labelsHidden()
+        }
+      }
+      .disabled(!expansion.isEnabled)
+    }
+    Card {
+      SettingRow(
+        title: SettingText.disabledApps.title, description: SettingText.disabledApps.detail
+      ) { EmptyView() }
+      ForEach(expansion.disabledApps, id: \.self) { id in
+        let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id)
+        Divider()
+        HStack {
+          if let url { Image(nsImage: appIcon(url)) }
+          // An app that isn't installed shows by its bundle ID.
+          Text(url.map { FileManager.default.displayName(atPath: $0.path) } ?? id)
+            .font(.system(size: 13))
+          Spacer()
+          Button {
+            expansion.disabledApps = expansion.disabledApps.filter { $0 != id }
+          } label: {
+            Glyph("minus.circle")
+          }
+          .buttonStyle(.borderless)
+          .foregroundStyle(.secondary)
+          .accessibilityLabel("Remove \(id)")
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 8)
+      }
+      Divider()
+      HStack {
+        Spacer()
+        Button("Add Application…", action: addApp)
+      }
+      .padding(.horizontal, 18)
+      .padding(.vertical, 10)
+    }
+    .disabled(!expansion.isEnabled)
+  }
+
+  private func addApp() {
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.application]
+    panel.directoryURL = URL(filePath: "/Applications")
+    panel.prompt = "Add"
+    guard panel.runModal() == .OK, let url = panel.url,
+      let id = Bundle(url: url)?.bundleIdentifier, !expansion.disabledApps.contains(id)
+    else { return }
+    expansion.disabledApps = expansion.disabledApps + [id]
+  }
 }
 
 /// A card's folders, each removable, and Add Folder… under them: Git Repositories' and Script

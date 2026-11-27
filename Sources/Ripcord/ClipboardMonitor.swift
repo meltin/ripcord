@@ -143,6 +143,50 @@ final class ClipboardMonitor {
     changeCount = pasteboard.changeCount
   }
 
+  /// What was copied before a snippet's paste, put back once the app has read it. Kept while
+  /// another paste comes first, so the first snippet isn't taken for what was copied.
+  private var pendingRestore: [NSPasteboardItem]?
+  private var restoreRequest = 0
+
+  /// Pastes a snippet into the frontmost app after `delay`, its placeholders filled, without
+  /// recording it in the history; what was copied goes back once the app has read it.
+  /// `trailing` follows it, as a delimiter kept after a keyword. Beeps when it can't.
+  func pasteSnippet(_ text: String, trailing: String = "", after delay: TimeInterval = 0) {
+    let saved = pendingRestore ?? snapshot()
+    // Read before writing, which replaces what {clipboard} stands for.
+    let copied =
+      saved.lazy.compactMap { $0.string(forType: .string) }.first
+      ?? pasteboard.string(forType: .string) ?? ""
+    let expansion = Snippet.expand(text, values: Snippet.values(at: .now), clipboard: copied)
+    let concealed = isConcealed && text.contains("{clipboard}")
+    guard write(expansion.text + trailing, transient: true, concealed: concealed) else {
+      return NSSound.beep()
+    }
+    pendingRestore = saved
+    restoreRequest += 1
+    let request = restoreRequest
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [self] in
+      guard
+        pasteIntoFrontmostApp(
+          thenLeft: expansion.charactersAfterCursor + trailing.count)
+      else {
+        // Not pasted (no Accessibility yet): put back what was copied, or the retry after
+        // granting it would fill {clipboard} with this snippet.
+        pendingRestore = nil
+        restore(saved)
+        return NSSound.beep()
+      }
+      // shortcut: the app reads the pasteboard when it handles ⌘V, which 0.5 s covers for
+      // ordinary apps; a hung app would paste what was copied before. Wait for it if one does.
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
+        // A later paste puts it back instead.
+        guard request == restoreRequest else { return }
+        pendingRestore = nil
+        restore(saved)
+      }
+    }
+  }
+
   /// Presses ⌘V in the frontmost app. Without the Accessibility permission, asks for it and
   /// returns false, leaving the item copied.
   /// `left` presses ← that many times after, for a snippet's `{cursor}`.

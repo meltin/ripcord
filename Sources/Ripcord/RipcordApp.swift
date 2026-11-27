@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     .appending(path: ".config/ripcord/config.json")
   private let launcher = LauncherController()
   private let updater = Updater()
+  private let snippetExpander = SnippetExpander()
   private lazy var settings: SettingsWindowController = {
     let model = SettingsModel(configURL: configURL)
     model.updater = updater
@@ -86,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     launcher.onOpenSettings = { [weak self] in self?.openSettings() }
     launcher.onCheckForUpdates = { [weak self] in self?.checkForUpdates() }
+    snippetExpander.onExpand = { [weak self] in self?.launcher.pasteExpansion($0, trailing: $1) }
     launcher.onNotes = { [weak self] in self?.notes.handle($0) }
     notes.onBrowse = { [weak self] in self?.launcher.perform(.run(.searchNotes)) }
     notes.onSettings = { [weak self] in self?.settings.show(configuring: "command:ripcord-notes") }
@@ -230,6 +232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.items = config.items
       launcher.inputSource = config.inputSource
       launcher.snippets = config.snippets
+      snippetExpander.apply(config)
       launcher.repositorySettings = config.repositories
       launcher.colorFormat = config.colorFormat
       launcher.favorites = config.favorites
