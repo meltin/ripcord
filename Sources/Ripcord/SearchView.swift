@@ -1139,7 +1139,7 @@ private struct IconPicker: View {
       // The panel's own field, which leaves arrows and Return to the input method while it's
       // composing, and takes focus as it appears.
       SearchField(
-        text: query, placeholder: "Search…", fontSize: 14,
+        text: query, placeholder: "Search…", fontSize: Metrics.cardFieldFontSize,
         onChange: {
           query = $0
           highlighted = 0
@@ -1166,11 +1166,11 @@ private struct IconPicker: View {
                 Text(icon.name)
                 Spacer()
               }
-              .font(.system(size: 14))
-              .padding(.horizontal, 10)
-              .frame(height: 34)
+              .font(.system(size: Metrics.cardFontSize))
+              .padding(.horizontal, Metrics.cardRowPadding)
+              .frame(height: Metrics.cardRowHeight)
               .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: Metrics.cardRowRadius)
                   .fill(index == highlighted ? Color.primary.opacity(0.1) : .clear)
               )
               .contentShape(Rectangle())
@@ -1178,7 +1178,7 @@ private struct IconPicker: View {
               .onTapGesture { pick(index) }
             }
           }
-          .padding(6)
+          .padding(Metrics.cardPadding)
         }
         .scrollIndicators(.never)
         .onChange(of: highlighted) {
@@ -1187,7 +1187,7 @@ private struct IconPicker: View {
       }
     }
     .frame(width: 240, height: 300)
-    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
     .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
   }
 
@@ -1412,7 +1412,7 @@ private struct ArgumentMenuCard: View {
     let filter = model.argumentMenu?.filter ?? ""
     let highlight = model.argumentMenu?.highlight ?? 0
     let choices = model.argumentChoices
-    VStack(alignment: .leading, spacing: 2) {
+    VStack(alignment: .leading, spacing: Metrics.cardRowSpacing) {
       HStack(spacing: 0) {
         Text(filter.isEmpty ? "Search…" : filter)
           .foregroundStyle(filter.isEmpty ? .tertiary : .primary)
@@ -1423,29 +1423,31 @@ private struct ArgumentMenuCard: View {
           .padding(.leading, filter.isEmpty ? 0 : 1)
         Spacer()
       }
-      .font(.system(size: 13))
-      .padding(.horizontal, 10)
-      .frame(height: 34)
+      .font(.system(size: Metrics.cardFontSize))
+      .padding(.horizontal, Metrics.cardRowPadding)
+      .frame(height: Metrics.cardRowHeight)
       Divider().opacity(0.5).padding(.bottom, 4)
       if choices.isEmpty {
-        Text("No Results").font(.system(size: 13)).foregroundStyle(.secondary)
-          .frame(maxWidth: .infinity).frame(height: 34)
+        Text("No Results").font(.system(size: Metrics.cardFontSize)).foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity).frame(height: Metrics.cardRowHeight)
       }
       if choices.count > Self.visibleRows {
         // Long lists scroll, following the highlight, so the card stays inside the panel.
         ScrollViewReader { proxy in
           ScrollView { rows(choices, highlight: highlight) }
             .thinScroller()
-            .frame(height: CGFloat(Self.visibleRows) * 34)
+            .frame(
+              height: CGFloat(Self.visibleRows) * (Metrics.cardRowHeight + Metrics.cardRowSpacing)
+            )
             .onChange(of: highlight) { _, now in proxy.scrollTo(now) }
         }
       } else {
         rows(choices, highlight: highlight)
       }
     }
-    .padding(6)
+    .padding(Metrics.cardPadding)
     .frame(width: Self.width)
-    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
   }
 
   static let width: CGFloat = 200
@@ -1453,21 +1455,21 @@ private struct ArgumentMenuCard: View {
   private static let visibleRows = 9
 
   private func rows(_ choices: [(value: String, title: String)], highlight: Int) -> some View {
-    VStack(spacing: 2) {
+    VStack(spacing: Metrics.cardRowSpacing) {
       ForEach(Array(choices.enumerated()), id: \.offset) { index, choice in
         Button {
           onCommand(.chooseArgument(index))
         } label: {
           Text(choice.title)
-            .font(.system(size: 13))
+            .font(.system(size: Metrics.cardFontSize))
             .lineLimit(1)
-            .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+            .padding(.horizontal, Metrics.cardRowPadding)
+            .frame(maxWidth: .infinity, minHeight: Metrics.cardRowHeight, alignment: .leading)
             .background(
-              RoundedRectangle(cornerRadius: 8)
+              RoundedRectangle(cornerRadius: Metrics.cardRowRadius)
                 .fill(Color.primary.opacity(index == highlight ? 0.1 : 0))
             )
-            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .contentShape(RoundedRectangle(cornerRadius: Metrics.cardRowRadius))
         }
         .buttonStyle(.plain)
         .id(index)
@@ -1915,24 +1917,25 @@ private struct MenuCard: View {
   let onCommand: (SearchCommand) -> Void
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 2) {
+    VStack(alignment: .leading, spacing: Metrics.cardRowSpacing) {
       Text(menu.title)
-        .font(.system(size: 12, weight: .medium))
+        .font(.system(size: Metrics.cardTitleFontSize, weight: .medium))
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 10)
+        .padding(.horizontal, Metrics.cardRowPadding)
         .padding(.vertical, 6)
       // Long menus scroll, so the card stays inside the panel with its search line.
       let rows = menu.shown
       Group {
         if rows.count > Self.visibleRows {
-          ScrollView { items(rows) }.thinScroller().frame(height: CGFloat(Self.visibleRows) * 36)
+          ScrollView { items(rows) }.thinScroller().frame(
+            height: CGFloat(Self.visibleRows) * (Metrics.cardRowHeight + Metrics.cardRowSpacing))
         } else {
           items(rows)
         }
       }
       if rows.isEmpty {
-        Text("No Results").font(.system(size: 13)).foregroundStyle(.secondary)
-          .frame(maxWidth: .infinity).frame(height: 34)
+        Text("No Results").font(.system(size: Metrics.cardFontSize)).foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity).frame(height: Metrics.cardRowHeight)
       }
       // Raycast's "Search for actions…": typing while the menu is open lands here.
       Divider().opacity(0.5).padding(.top, 4)
@@ -1947,21 +1950,21 @@ private struct MenuCard: View {
         }
         Spacer()
       }
-      .font(.system(size: 13))
-      .padding(.horizontal, 10)
-      .frame(height: 34)
+      .font(.system(size: Metrics.cardFontSize))
+      .padding(.horizontal, Metrics.cardRowPadding)
+      .frame(height: Metrics.cardRowHeight)
     }
-    .padding(6)
+    .padding(Metrics.cardPadding)
     // Room for "Open in Visual Studio Code" and its keys on one line.
-    .frame(width: 340)
-    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+    .frame(width: Metrics.cardWidth)
+    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
   }
 
   /// Rows before the list scrolls: what fits over the panel's list with the search line.
   private static let visibleRows = 9
 
   private func items(_ rows: [MenuAction]) -> some View {
-    VStack(alignment: .leading, spacing: 2) {
+    VStack(alignment: .leading, spacing: Metrics.cardRowSpacing) {
       ForEach(Array(rows.enumerated()), id: \.offset) { index, item in
         if item.startsSection, index > 0 {
           Divider().opacity(0.5).padding(.vertical, 4)
@@ -1987,12 +1990,12 @@ private struct MenuCard: View {
               }
             }
           }
-          .font(.system(size: 13))
+          .font(.system(size: Metrics.cardFontSize))
           .foregroundStyle(item.isDestructive ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
-          .padding(.horizontal, 10)
-          .frame(height: 34)
+          .padding(.horizontal, Metrics.cardRowPadding)
+          .frame(height: Metrics.cardRowHeight)
           .background(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: Metrics.cardRowRadius)
               .fill(index == menu.selection ? Color.primary.opacity(0.1) : .clear)
           )
           .contentShape(Rectangle())
@@ -2014,7 +2017,7 @@ private struct ConfigureEditorCard: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       Text(editor.kind == .hotkey ? "Set Hotkey…" : "Set Alias…")
-        .font(.system(size: 12, weight: .medium))
+        .font(.system(size: Metrics.cardTitleFontSize, weight: .medium))
         .foregroundStyle(.secondary)
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -2022,11 +2025,11 @@ private struct ConfigureEditorCard: View {
         switch editor.kind {
         case .alias:
           SearchField(
-            text: editor.alias, placeholder: "Enter Alias…", fontSize: 14,
+            text: editor.alias, placeholder: "Enter Alias…", fontSize: Metrics.cardFieldFontSize,
             onChange: { onCommand(.editAlias($0)) }, onCommand: onCommand
           )
-          .padding(.horizontal, 10)
-          .frame(height: 34)
+          .padding(.horizontal, Metrics.cardRowPadding)
+          .frame(height: Metrics.cardRowHeight)
           .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.primary.opacity(0.25)))
           .padding(16)
         case .hotkey:
@@ -2069,8 +2072,8 @@ private struct ConfigureEditorCard: View {
       .padding(.horizontal, 14)
       .frame(height: 40)
     }
-    .frame(width: 340)
-    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
+    .frame(width: Metrics.cardWidth)
+    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: Metrics.cardRadius))
   }
 
   /// The modifiers held, in macOS's order.
