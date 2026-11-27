@@ -62,6 +62,17 @@ struct OpenMenu {
   }
 }
 
+/// Create Quicklink's form: what's typed, and the Quicklink being edited, if one is.
+struct QuicklinkDraft {
+  var link = ""
+  var name = ""
+  var keyword = ""
+  /// Where the Quicklink being edited is, and its name then; nil for a new one.
+  var original: (index: Int, name: String)?
+  /// Opened from Search Quicklinks, where Esc goes back to.
+  var fromList = false
+}
+
 /// Add Bookmark's or Edit Bookmark's form.
 struct BookmarkDraft {
   var title = ""
@@ -104,12 +115,12 @@ enum LauncherMode {
   case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, colorNames
   case convertColor, favoriteColors, colorWheel, removeRepos
   case bookmarks
-  case bookmarkForm, emoji, scriptOutput, notes
+  case bookmarkForm, emoji, scriptOutput, notes, quicklinks, quicklinkForm
   /// `ripcord pick`: lines handed in, one to choose.
   case pick
 
   /// A form, with no query or rows: the footer names it, and ⌘↵ saves it.
-  var isForm: Bool { self == .snippetForm || self == .bookmarkForm }
+  var isForm: Bool { [.snippetForm, .bookmarkForm, .quicklinkForm].contains(self) }
 
   /// The command whose list this is; nil for the root search.
   var command: BuiltinCommand? {
@@ -128,6 +139,8 @@ enum LauncherMode {
     case .removeRepos: .removeRepo
     case .bookmarks: .searchBookmarks
     case .bookmarkForm: .addBookmark
+    case .quicklinks: .searchQuicklinks
+    case .quicklinkForm: .createQuicklink
     case .emoji: .searchEmoji
     case .scriptOutput: nil
     case .notes: .searchNotes
@@ -232,11 +245,13 @@ final class LauncherModel {
   }
   /// A new bookmark's draft, kept while an edit has the form.
   var addDraft: BookmarkDraft?
+  var quicklinkDraft = QuicklinkDraft()
 
   /// The command the footer names: an edit's form is the list's, where it came from.
   var footerCommand: BuiltinCommand? {
     switch mode {
     case .bookmarkForm where bookmarkDraft.original != nil: .searchBookmarks
+    case .quicklinkForm where quicklinkDraft.original != nil: .searchQuicklinks
     case .snippetForm where editing != nil: .searchSnippets
     default: mode.command
     }
@@ -769,6 +784,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if model.mode == .httpStatusCodes { return Search.httpStatusSections(for: query) }
     if model.mode == .pick { return Search.pickSections(for: query, items: pickItems) }
     if model.mode == .bookmarks { return Search.bookmarkSections(for: query, file: bookmarks) }
+    if model.mode == .quicklinks {
+      return Search.quicklinkSections(for: query, quicklinks: quicklinks)
+    }
     if model.mode == .notes { return Search.noteSections(for: query, notes: notes) }
     if model.mode == .emoji, let emojiCatalog {
       return Search.emojiSections(
@@ -911,6 +929,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       // An edit always goes back to its list, even one its hotkey opened.
       if model.mode == .snippetForm, model.formSource != nil { return goBack() }
       if model.mode == .bookmarkForm, model.bookmarkDraft.original != nil { return goBack() }
+      if model.mode == .quicklinkForm, model.quicklinkDraft.fromList { return goBack() }
       // Like Raycast: Esc leaves a command's list for the root search first; a pick is left.
       guard model.mode != .root, model.mode != .pick, !closesOnCancel else { return hide() }
       goBack()
@@ -1784,6 +1803,53 @@ final class LauncherController: NSObject, NSWindowDelegate {
       if loadBookmarks() { open(.bookmarks) }
       return
     }
+    if action == .run(.searchQuicklinks) { return open(.quicklinks) }
+    if action == .run(.createQuicklink) {
+      // A new one left half typed stays, as Raycast's drafts do; an edit left open doesn't.
+      if model.quicklinkDraft.original != nil { model.quicklinkDraft = QuicklinkDraft() }
+      model.quicklinkDraft.fromList = panel.isVisible && model.mode == .quicklinks
+      if model.quicklinkDraft.fromList {
+        model.mode = .quicklinkForm
+        return update("")
+      }
+      return open(.quicklinkForm)
+    }
+    if case .editQuicklink(let index, let name) = action {
+      model.menu = nil
+      guard quicklinks.indices.contains(index), quicklinks[index].name == name else {
+        return NSSound.beep()
+      }
+      let link = quicklinks[index]
+      model.quicklinkDraft = QuicklinkDraft(
+        link: link.url, name: link.name, keyword: link.keyword ?? "", original: (index, name),
+        fromList: true)
+      model.mode = .quicklinkForm
+      return update("")
+    }
+    if case .deleteQuicklink(let index, let name, let confirmed) = action {
+      model.menu = nil
+      guard quicklinks.indices.contains(index), quicklinks[index].name == name else {
+        return NSSound.beep()
+      }
+      guard confirmed else {
+        // Asked first, as Raycast does: a deleted Quicklink has no undo.
+        model.confirmation = Confirmation(
+          icon: .command(.searchQuicklinks), title: "Delete “\(name)”?",
+          message: "Warning: this can't be undone.", confirmTitle: "Delete",
+          action: .deleteQuicklink(index: index, name: name, confirmed: true))
+        return
+      }
+      model.confirmation = nil
+      let saved = editSettings { settings in
+        // Only the Quicklink that was shown, never one that took its place.
+        guard settings.config.quicklinks.indices.contains(index),
+          settings.config.quicklinks[index].name == name
+        else { return }
+        settings.config.quicklinks.remove(at: index)
+      }
+      if !saved { NSSound.beep() }
+      return refreshRows(selecting: nil)
+    }
     if case .deleteBookmark(let line, let text) = action {
       model.menu = nil
       return deleteBookmark(line: line, text: text)
@@ -2070,6 +2136,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       .run(.colorNames), .run(.convertColor), .run(.favoriteColors), .run(.colorWheel),
       .run(.cloneRepo), .run(.removeRepo), .removeRepository, .trashRepository,
       .run(.cleanKeyboard), .run(.searchBookmarks), .run(.addBookmark), .deleteBookmark,
+      .run(.searchQuicklinks), .run(.createQuicklink), .editQuicklink, .deleteQuicklink,
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,
       .openDraft, .discardDraft, .runScript, .run(.searchNotes), .deleteNote,
@@ -2357,6 +2424,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Saves the form that's open.
   private func saveForm() {
     if model.mode == .snippetForm { return saveDraft() }
+    if model.mode == .quicklinkForm { return saveQuicklink() }
     let draft = model.bookmarkDraft
     let destination: BookmarkFile.Destination =
       draft.heading.map { .heading($0) } ?? .newHeading(draft.newGroup)
@@ -2375,6 +2443,63 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.mode = .bookmarks
     update("")
     refreshRows(selecting: id)
+  }
+
+  /// Create Quicklink's ⌘↵: the Quicklink added, or the one edited changed, then the list on it,
+  /// as Raycast shows it after saving.
+  private func saveQuicklink() {
+    let draft = model.quicklinkDraft
+    let name = draft.name.trimmingCharacters(in: .whitespaces)
+    let keyword = draft.keyword.trimmingCharacters(in: .whitespaces)
+    let editing = draft.original.flatMap { original in
+      quicklinks.indices.contains(original.index)
+        && quicklinks[original.index].name == original.name
+        ? original.index : nil
+    }
+    if draft.original != nil, editing == nil {
+      return onError("That Quicklink changed in Settings meanwhile. Open it from the list again.")
+    }
+    if let problem = Quicklink.problem(
+      name: name, link: draft.link, keyword: keyword, among: quicklinks, editing: editing)
+    {
+      return onError(problem)
+    }
+    var link =
+      editing.map { quicklinks[$0] }
+      ?? Quicklink(name: name, url: "")
+    link.name = name
+    link.url = draft.link.trimmingCharacters(in: .whitespacesAndNewlines)
+    link.keyword = keyword.isEmpty ? nil : keyword
+    // Checked again against the settings as saved: Settings may have changed them meanwhile.
+    var refused: String?
+    let saved = editSettings { settings in
+      let current = settings.config.quicklinks
+      if let editing, let original = draft.original,
+        !(current.indices.contains(editing) && current[editing].name == original.name)
+      {
+        refused = "That Quicklink changed in Settings meanwhile. Open it from the list again."
+        return
+      }
+      if let problem = Quicklink.problem(
+        name: name, link: draft.link, keyword: keyword, among: current, editing: editing)
+      {
+        refused = problem
+        return
+      }
+      if let editing {
+        settings.config.quicklinks[editing] = link
+      } else {
+        settings.config.quicklinks.append(link)
+      }
+    }
+    if let refused { return onError(refused) }
+    guard saved else { return NSSound.beep() }
+    model.quicklinkDraft = QuicklinkDraft()
+    if editing == nil { closesOnCancel = false }
+    model.mode = .quicklinks
+    update("")
+    let index = editing ?? quicklinks.firstIndex { $0.name == name }
+    refreshRows(selecting: index.map { "quicklink-list:\($0)" })
   }
 
   /// Shows macOS's loupe; the color clicked is copied in the default format and kept in Color
@@ -2435,6 +2560,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
       model.mode = .bookmarks
       update("")
       return refreshRows(selecting: "bookmark:\(original.line):\(original.text)")
+    }
+    if model.mode == .quicklinkForm {
+      let editing = model.quicklinkDraft.original
+      model.mode = model.quicklinkDraft.fromList ? .quicklinks : .root
+      update("")
+      return refreshRows(selecting: editing.map { "quicklink-list:\($0.index)" })
     }
     let source = model.mode == .snippetForm ? model.formSource : nil
     model.mode = source == nil ? .root : .snippets

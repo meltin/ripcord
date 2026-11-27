@@ -11,6 +11,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case pickColor, colorHistory, colorNames, convertColor, favoriteColors, colorWheel
   case cleanKeyboard
   case searchBookmarks, addBookmark
+  case createQuicklink, searchQuicklinks
   case searchEmoji
   case ripcordNotes, createNote, searchNotes
   case generateDummyText
@@ -47,6 +48,8 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .colorWheel: "Color Wheel"
     case .cleanKeyboard: "Clean Keyboard"
     case .searchBookmarks: "Search Bookmarks"
+    case .createQuicklink: "Create Quicklink"
+    case .searchQuicklinks: "Search Quicklinks"
     case .addBookmark: "Add Bookmark"
     case .searchEmoji: "Search Emoji & Symbols"
     case .ripcordNotes: "Ripcord Notes"
@@ -73,6 +76,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     // Raycast's extension's name.
     case .searchRepositories, .cloneRepo, .removeRepo: "Git Repos"
     case .searchBookmarks, .addBookmark: "Bookmarks"
+    case .createQuicklink, .searchQuicklinks: "Quicklinks"
     case .searchEmoji: "Emoji & Symbols"
     case .ripcordNotes, .createNote, .searchNotes: "Notes"
     // So "lorem" or "jp" finds the command too; Raycast's extension is "Japanese Lorem Ipsum
@@ -113,6 +117,8 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .colorWheel: "command:color-wheel"
     case .cleanKeyboard: "command:clean-keyboard"
     case .searchBookmarks: "command:search-bookmarks"
+    case .createQuicklink: "command:create-quicklink"
+    case .searchQuicklinks: "command:search-quicklinks"
     case .addBookmark: "command:add-bookmark"
     case .searchEmoji: "command:search-emoji"
     case .ripcordNotes: "command:ripcord-notes"
@@ -240,6 +246,10 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case toggleFavoriteColor(String)
     /// Blocks the keyboard for this many seconds, to wipe it.
     case cleanKeyboard(TimeInterval)
+    /// Opens Create Quicklink's form on the Quicklink at `index`, if it's still named `name`.
+    case editQuicklink(index: Int, name: String)
+    /// Deletes the Quicklink at `index`, if it's still named `name`: asked first, then done.
+    case deleteQuicklink(index: Int, name: String, confirmed: Bool)
     /// Removes a bookmark's line from bookmarks.md, if it still holds `text`.
     case deleteBookmark(line: Int, text: String)
     /// Opens the form on the bookmark on `line`, if it still holds `text`.
