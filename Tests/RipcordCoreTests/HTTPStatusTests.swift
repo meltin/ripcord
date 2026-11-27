@@ -62,4 +62,13 @@ import Testing
     #expect(row.actions.map(\.action).dropFirst() == [.copy("404"), .copy("Not Found")])
     #expect(row.subtitle == "The server can't find the resource.")
   }
+
+  /// Raycast's cat or dog person: none by default, http.cat's or http.dog's JPEG otherwise.
+  @Test func picksACatOrDogPicture() throws {
+    let config = try JSONDecoder().decode(Config.self, from: Data(#"{"hotkey":"cmd+space"}"#.utf8))
+    #expect(config.httpStatusPicture == .none)
+    #expect(HTTPStatusPicture.none.url(for: 404) == nil)
+    #expect(HTTPStatusPicture.cat.url(for: 404)?.absoluteString == "https://http.cat/404.jpg")
+    #expect(HTTPStatusPicture.dog.url(for: 418)?.absoluteString == "https://http.dog/418.jpg")
+  }
 }

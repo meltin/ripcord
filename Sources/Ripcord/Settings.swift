@@ -687,6 +687,9 @@ private enum SettingText {
     detail:
       "Also block clicks and dragging while scrolling stays available. Only ⌃⌥⌘↩ or the time running out ends it then."
   )
+  static let httpStatusPicture = SettingsSearch.Item(
+    title: "Are you a cat or a dog person?",
+    detail: "Show http.cat's or http.dog's picture of the selected code beside the list.")
   static let showColorName = SettingsSearch.Item(
     title: "Show Color Name After Picking",
     detail: "Pick Color's message names the nearest named color too.")
@@ -731,6 +734,7 @@ extension SettingsPage {
             SettingText.configFile,
           ]
       case .colorPicker: [SettingText.colorFormat, SettingText.showColorName]
+      case .httpStatusCodes: [SettingText.httpStatusPicture]
       case .scripts: [SettingText.scriptFolders]
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
       case .dummyText: [SettingText.dummyTextLanguage]
@@ -848,6 +852,25 @@ struct SettingsView: View {
               }
             }
             CommandsList(model: model, page: .colorPicker)
+          }
+        case .httpStatusCodes:
+          PageScroll(model: model) {
+            PageHeader(page: .httpStatusCodes)
+            Card {
+              SettingRow(
+                title: SettingText.httpStatusPicture.title,
+                description: SettingText.httpStatusPicture.detail
+              ) {
+                Picker(
+                  SettingText.httpStatusPicture.title, selection: $model.config.httpStatusPicture
+                ) {
+                  ForEach(HTTPStatusPicture.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .labelsHidden()
+                .fixedSize()
+              }
+            }
+            CommandsList(model: model, page: .httpStatusCodes)
           }
         case .snippets:
           PageScroll(model: model) {

@@ -106,6 +106,15 @@ struct SearchView: View {
         EmptyState(query: model.query, mode: model.mode)
       } else if model.mode == .emoji {
         EmojiGrid(model: model, onCommand: onCommand)
+      } else if model.mode == .httpStatusCodes, model.httpStatusPicture != .none {
+        // Raycast's detail pane: the selected code's picture.
+        HStack(spacing: 0) {
+          resultList.frame(width: 300)
+          Divider().opacity(0.5)
+          HTTPStatusPictureView(
+            url: model.selected.flatMap { Int($0.id.dropFirst("http:".count)) }.flatMap(
+              model.httpStatusPicture.url(for:)))
+        }
       } else if [
         .repositories, .removeRepos, .httpStatusCodes, .colors, .colorNames, .convertColor,
         .favoriteColors,
@@ -1669,6 +1678,40 @@ private struct FilterMenu<Item: Hashable>: View {
       .fixedSize()
       .font(.system(size: Metrics.filterFontSize))
       .foregroundStyle(.secondary)
+    }
+  }
+}
+
+/// http.cat's or http.dog's picture of the selected status code. Read by hand rather than with
+/// AsyncImage: for a code it has no picture of, http.cat answers 404 with its own 404 picture.
+private struct HTTPStatusPictureView: View {
+  let url: URL?
+  @State private var loaded: (url: URL, image: NSImage?)?
+
+  var body: some View {
+    Group {
+      if let loaded, loaded.url == url {
+        if let image = loaded.image {
+          Image(nsImage: image).resizable().scaledToFit()
+        } else {
+          Text("No picture for this code.").foregroundStyle(.secondary)
+        }
+      } else {
+        ProgressView().controlSize(.small)
+      }
+    }
+    .padding(12)
+    // Clear of the floating footer, where these pictures print the code.
+    .padding(.bottom, LauncherController.footerHeight)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .task(id: url) {
+      guard let url else { return }
+      let response = try? await URLSession.shared.data(from: url)
+      guard !Task.isCancelled else { return }
+      let image = response.flatMap { data, response in
+        (response as? HTTPURLResponse)?.statusCode == 200 ? NSImage(data: data) : nil
+      }
+      loaded = (url, image)
     }
   }
 }

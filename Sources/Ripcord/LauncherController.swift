@@ -142,6 +142,8 @@ final class LauncherModel {
   var mode = LauncherMode.root
   /// Search Emoji & Symbols' grid width.
   var emojiColumns = 8
+  /// HTTP Status Codes' picture of the selected code, beside the list.
+  var httpStatusPicture = HTTPStatusPicture.none
   /// The history the clipboard rows were built from, for the preview of the selected one.
   var clipboard: ClipboardHistory?
   /// Clipboard History's type filter; nil lists every type.
@@ -456,6 +458,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private var emojiCatalog: EmojiCatalog?
   private var emojiHistory = EmojiHistory(
     fileURL: URL.applicationSupportDirectory.appending(path: "Ripcord/emoji.json"))
+  /// HTTP Status Codes' cat or dog picture, from the settings.
+  var httpStatusPicture = HTTPStatusPicture.none {
+    didSet { model.httpStatusPicture = httpStatusPicture }
+  }
   /// Search Emoji & Symbols' grid: rows of this many.
   /// Search Emoji & Symbols' columns and Return, from the settings.
   var emojiSettings = EmojiSettings() {
