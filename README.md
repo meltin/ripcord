@@ -11,7 +11,9 @@
 - Calculator: `1+2*3`, `(1.5+2)^2`, full-width input too; Return copies the result
 - Quicklinks: `g swift testing` opens a search; with no match, the query goes to each Quicklink.
   Create Quicklink makes one in the panel (a link with `{query}`, a name and a keyword), and
-  Search Quicklinks lists them to open, edit (⌘E) or delete (⌃X, asked first), as Raycast's do
+  Search Quicklinks lists them to open, edit (⌘E) or delete (⌃X, asked first), as Raycast's do.
+  Import Quicklinks and Export Quicklinks read and write Raycast's JSON file, its `{argument}`
+  taken as `{query}`; one already here is skipped
 - Drafts: Create Snippet or Add Bookmark left with something typed waits under Drafts at the top
   of the empty search, across relaunches; Return opens it again and ⌃X discards it
 - Favorites: ⇧⌘F on an app, command or Quicklink pins it to the top of the empty search, in

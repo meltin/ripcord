@@ -651,6 +651,8 @@ extension BuiltinCommand {
     case .searchBookmarks: "bookmark.fill"
     case .createQuicklink: "plus"
     case .searchQuicklinks: "link"
+    case .exportQuicklinks: "square.and.arrow.up"
+    case .importQuicklinks: "square.and.arrow.down"
     case .searchEmoji: "face.smiling"
     case .ripcordNotes, .searchNotes: "note.text"
     case .generateDummyText: "textformat"
@@ -675,7 +677,7 @@ extension BuiltinCommand {
     case .pickColor, .colorHistory, .colorNames, .convertColor, .favoriteColors, .colorWheel: .pink
     case .cleanKeyboard: .cyan
     case .searchBookmarks, .addBookmark: .yellow
-    case .createQuicklink, .searchQuicklinks: .blue
+    case .createQuicklink, .searchQuicklinks, .importQuicklinks, .exportQuicklinks: .blue
     case .searchEmoji: .orange
     case .ripcordNotes, .createNote, .searchNotes: .orange
     case .generateDummyText: .purple

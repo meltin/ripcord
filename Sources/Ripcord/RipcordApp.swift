@@ -145,6 +145,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     launcher.editSettings = { [weak self] change in self?.editSettings(change) ?? false }
     launcher.onExportSnippets = { [weak self] in self?.exportSnippets() }
     launcher.onImportSnippets = { [weak self] in self?.importSnippets() }
+    launcher.onImportQuicklinks = { [weak self] in self?.importQuicklinks() }
+    launcher.onExportQuicklinks = { [weak self] in self?.exportQuicklinks() }
     settings.model.onSave = { [weak self] in self?.applyConfig() }
     settings.model.onRecordingChange = { [weak self] isRecording in
       self?.isRecording = isRecording
@@ -259,6 +261,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       if let failure { throw failure }
       if saved {
         showMessage(added == 1 ? "Imported 1 snippet." : "Imported \(added) snippets.")
+      }
+    } catch {
+      showError("Couldn't import \(url.lastPathComponent): \(error.localizedDescription)")
+    }
+  }
+
+  /// Writes every Quicklink to a JSON file Raycast's Import Quicklinks reads.
+  private func exportQuicklinks() {
+    NSApp.activate()
+    let panel = NSSavePanel()
+    panel.nameFieldStringValue = "quicklinks.json"
+    panel.allowedContentTypes = [.json]
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    do {
+      let links = try Config.load(from: configURL).quicklinks
+      try Quicklink.exportData(links).write(to: url, options: .atomic)
+    } catch {
+      showError("Couldn't export the Quicklinks: \(error.localizedDescription)")
+    }
+  }
+
+  /// Adds the Quicklinks in a JSON file, such as one Raycast exported, skipping ones already here.
+  private func importQuicklinks() {
+    NSApp.activate()
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.json]
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    do {
+      let data = try Data(contentsOf: url)
+      var result: (added: Int, skipped: Int)?
+      var failure: Error?
+      let saved = editSettings { settings in
+        do {
+          let merged = try Quicklink.merging(data, into: settings.config.quicklinks)
+          settings.config.quicklinks = merged.links
+          result = (merged.added, merged.skipped)
+        } catch {
+          failure = error
+        }
+      }
+      if let failure { throw failure }
+      if saved, let result {
+        let added =
+          result.added == 1 ? "Imported 1 Quicklink" : "Imported \(result.added) Quicklinks"
+        showMessage(result.skipped == 0 ? "\(added)." : "\(added); \(result.skipped) already here.")
       }
     } catch {
       showError("Couldn't import \(url.lastPathComponent): \(error.localizedDescription)")

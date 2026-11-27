@@ -454,6 +454,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// What Clean Keyboard runs for with no time typed; Always Ask asks for one.
   var cleanKeyboardDuration = CleanKeyboardSettings.Duration.ask
   var onImportSnippets: () -> Void = {}
+  var onImportQuicklinks: () -> Void = {}
+  var onExportQuicklinks: () -> Void = {}
   var isVisible: Bool { panel.isVisible }
 
   private let model = LauncherModel()
@@ -2105,6 +2107,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onNotes(.open(url))
     case .run(.importSnippets):
       onImportSnippets()
+    case .run(.importQuicklinks):
+      onImportQuicklinks()
+    case .run(.exportQuicklinks):
+      onExportQuicklinks()
     case .run(.caffeinate):
       onCaffeinate(nil)
     case .caffeinate(let seconds):
