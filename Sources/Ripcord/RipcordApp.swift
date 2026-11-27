@@ -338,6 +338,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.colorFormat = config.colorFormat
       launcher.showColorName = config.showColorName
       launcher.emojiSettings = config.emoji
+      launcher.httpStatusPicture = config.httpStatusPicture
       InlineEmojiPicker.isEnabled = !config.emoji.disableInlinePicker
       launcher.favorites = config.favorites
       launcher.scriptFolders = config.scriptFolders

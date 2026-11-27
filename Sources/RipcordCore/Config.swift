@@ -41,6 +41,8 @@ public struct Config: Codable, Equatable, Sendable {
   /// picking".
   public var showColorName: Bool
   public var emoji: EmojiSettings
+  /// HTTP Status Codes' picture beside each code.
+  public var httpStatusPicture: HTTPStatusPicture
 
   public init(
     hotkey: String, launchAtLogin: Bool = false, quicklinks: [Quicklink],
@@ -53,7 +55,7 @@ public struct Config: Codable, Equatable, Sendable {
     backdrop: String = Backdrop.off, cycleHalves: Bool = true, lidAwakeLowBattery: Int = 10,
     windowGap: Int = 0, screenGap: Int = 0, coffee: CoffeeSettings = CoffeeSettings(),
     cleanKeyboard: CleanKeyboardSettings = CleanKeyboardSettings(), showColorName: Bool = false,
-    emoji: EmojiSettings = EmojiSettings()
+    emoji: EmojiSettings = EmojiSettings(), httpStatusPicture: HTTPStatusPicture = .none
   ) {
     self.hotkey = hotkey
     self.launchAtLogin = launchAtLogin
@@ -77,6 +79,7 @@ public struct Config: Codable, Equatable, Sendable {
     self.cleanKeyboard = cleanKeyboard
     self.showColorName = showColorName
     self.emoji = emoji
+    self.httpStatusPicture = httpStatusPicture
   }
 
   // Files written before a key existed still load, with that key's default.
@@ -117,6 +120,8 @@ public struct Config: Codable, Equatable, Sendable {
       ?? CleanKeyboardSettings()
     showColorName = try container.decodeIfPresent(Bool.self, forKey: .showColorName) ?? false
     emoji = try container.decodeIfPresent(EmojiSettings.self, forKey: .emoji) ?? EmojiSettings()
+    httpStatusPicture =
+      (try? container.decodeIfPresent(HTTPStatusPicture.self, forKey: .httpStatusPicture)) ?? .none
   }
 
   public static let `default` = Config(

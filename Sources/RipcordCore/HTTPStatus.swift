@@ -95,6 +95,25 @@ public struct HTTPStatus: Equatable, Sendable {
   }
 }
 
+/// Raycast's "Are you a cat or a dog person?": http.cat's or http.dog's picture of each code
+/// beside the list, or none.
+public enum HTTPStatusPicture: String, Codable, CaseIterable, Sendable {
+  case none, cat, dog
+
+  public var title: String {
+    switch self {
+    case .none: "None"
+    case .cat: "🐈 Cat"
+    case .dog: "🐕 Dog"
+    }
+  }
+
+  /// The picture of `code`, nil for none.
+  public func url(for code: Int) -> URL? {
+    self == .none ? nil : URL(string: "https://http.\(rawValue)/\(code).jpg")
+  }
+}
+
 extension Search {
   /// The codes by hundred, as Raycast lists them. A query lists the matches best first instead:
   /// digits from the start of the code, words in the name or its hundred's heading.

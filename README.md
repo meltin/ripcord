@@ -123,7 +123,8 @@
   Return runs the script once the required ones are filled, after asking first when it sets
   `needsConfirmation`. A refreshing `inline` isn't run yet
 - HTTP Status Codes: look a code up by number or name, grouped by hundred; Return opens its MDN
-  page and ⌘K copies the code or its name
+  page and ⌘K copies the code or its name. As Raycast's "Are you a cat or a dog person?", its
+  settings can show http.cat's or http.dog's picture of the selected code beside the list
 - CleanShot X: Capture Area, Window, Fullscreen and Previous Area, Scrolling Capture, Record
   Screen, Capture Text (OCR), Self Timer, Pin, Annotate, History and the rest of its URL scheme,
   named as Raycast's extension names them and listed when CleanShot X is installed; the captures

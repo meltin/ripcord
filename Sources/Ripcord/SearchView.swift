@@ -106,6 +106,15 @@ struct SearchView: View {
         EmptyState(query: model.query, mode: model.mode)
       } else if model.mode == .emoji {
         EmojiGrid(model: model, onCommand: onCommand)
+      } else if model.mode == .httpStatusCodes, model.httpStatusPicture != .none {
+        // Raycast's detail pane: the selected code's picture.
+        HStack(spacing: 0) {
+          resultList.frame(width: 300)
+          Divider().opacity(0.5)
+          HTTPStatusPictureView(
+            url: model.selected.flatMap { Int($0.id.dropFirst("http:".count)) }.flatMap(
+              model.httpStatusPicture.url(for:)))
+        }
       } else if [
         .repositories, .removeRepos, .httpStatusCodes, .colors, .colorNames, .convertColor,
         .favoriteColors,
@@ -1670,6 +1679,24 @@ private struct FilterMenu<Item: Hashable>: View {
       .font(.system(size: Metrics.filterFontSize))
       .foregroundStyle(.secondary)
     }
+  }
+}
+
+/// http.cat's or http.dog's picture of the selected status code.
+private struct HTTPStatusPictureView: View {
+  let url: URL?
+
+  var body: some View {
+    AsyncImage(url: url) { phase in
+      switch phase {
+      case .success(let image): image.resizable().scaledToFit()
+      case .failure: Text("No picture for this code.").foregroundStyle(.secondary)
+      default: ProgressView().controlSize(.small)
+      }
+    }
+    .id(url)
+    .padding(12)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }
 
