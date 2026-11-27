@@ -29,7 +29,8 @@ struct SearchView: View {
         } else {
           SearchField(
             text: model.query,
-            placeholder: model.mode.placeholder,
+            placeholder: model.mode == .pick
+              ? model.pickPlaceholder ?? model.mode.placeholder : model.mode.placeholder,
             sidewaysArrows: model.mode == .emoji,
             takesTab: model.argumentScript != nil, caretAtEnd: true,
             onChange: onQueryChange, onCommand: onCommand,
@@ -77,7 +78,8 @@ struct SearchView: View {
         EmptyState(query: model.query, mode: model.mode)
       } else if model.mode == .emoji {
         EmojiGrid(model: model, onCommand: onCommand)
-      } else if [.repositories, .httpStatusCodes, .colors, .bookmarks, .notes].contains(model.mode)
+      } else if [.repositories, .httpStatusCodes, .colors, .bookmarks, .notes, .pick].contains(
+        model.mode)
       {
         resultList
       } else if model.mode != .root {
@@ -229,6 +231,8 @@ private struct EmptyState: View {
       "No bookmark matches “\(query)”."
     case .emoji:
       "No emoji or symbol matches “\(query)”."
+    case .pick:
+      "No line matches “\(query)”."
     }
   }
 
@@ -357,6 +361,8 @@ private struct ResultIcon: View {
       tile("plus.forwardslash.minus", .orange)
     case .copyDummyText:
       tile("textformat", .purple)
+    case .pick:
+      tile("list.bullet", .gray)
     case .open:
       tile("link", .blue)
     case .run(let command):
@@ -1990,6 +1996,7 @@ extension SearchResult.Kind {
     case .draft: "Draft"
     case .script: "Script Command"
     case .note: "Note"
+    case .line: "Line"
     }
   }
 }
@@ -2138,6 +2145,7 @@ extension LauncherMode {
     case .notes: "Search Notes…"
     case .snippetForm, .bookmarkForm: ""
     case .scriptOutput: "Script Output"
+    case .pick: "Pick a Line…"
     }
   }
 }

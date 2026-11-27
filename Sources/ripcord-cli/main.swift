@@ -43,8 +43,6 @@ do {
 } catch {
   fail("ripcord: \(error.localizedDescription)", code: 2)
 }
-// Done writing: the app reads the request to its end, then answers.
-shutdown(socketFD, SHUT_WR)
 // One line back, once the app has done it: for a pick, once something is chosen.
 var reply = Data()
 while let chunk = try? handle.read(upToCount: 65_536), !chunk.isEmpty {

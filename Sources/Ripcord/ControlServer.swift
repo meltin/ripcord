@@ -91,15 +91,19 @@ final class ControlServer: @unchecked Sendable {
   }
 
   private func serve(_ client: Int32) {
-    let connection = FileHandle(fileDescriptor: client, closeOnDealloc: true)
+    defer { close(client) }
     // Only this user's processes: the socket's mode says so, and the peer is checked too.
     var uid: uid_t = 0
     var gid: gid_t = 0
     guard getpeereid(client, &uid, &gid) == 0, uid == getuid() else { return }
+    // The request is one line; read what's there as it comes, not to the end of the stream,
+    // which stays open for the answer.
     var line = Data()
-    while let chunk = try? connection.read(upToCount: 65_536), !chunk.isEmpty {
-      line.append(chunk)
-      if chunk.contains(UInt8(ascii: "\n")) { break }
+    var buffer = [UInt8](repeating: 0, count: 65_536)
+    while !line.contains(UInt8(ascii: "\n")) {
+      let count = read(client, &buffer, buffer.count)
+      guard count > 0 else { break }
+      line.append(contentsOf: buffer.prefix(count))
       // A pick's lines, at most, and some room: anything bigger is turned away.
       if line.count > 16 << 20 { return }
     }
@@ -107,17 +111,26 @@ final class ControlServer: @unchecked Sendable {
     if let request = try? JSONDecoder().decode(ControlRequest.self, from: line) {
       let answer = Answer()
       let done = DispatchSemaphore(value: 0)
-      Task { [handle] in
+      let task = Task { [handle] in
         answer.response = await handle(request)
         done.signal()
       }
-      done.wait()
+      // A command that goes away (Ctrl-C on a pick) closes its end: the request is cancelled.
+      while done.wait(timeout: .now() + 0.25) == .timedOut {
+        var peer = pollfd(fd: client, events: Int16(POLLIN), revents: 0)
+        if poll(&peer, 1, 0) > 0 {
+          task.cancel()
+          done.wait()
+          return
+        }
+      }
       response = answer.response ?? ControlResponse(error: "ripcord: no answer.")
     } else {
       response = ControlResponse(error: "ripcord: a request this Ripcord doesn't understand.")
     }
     if let data = try? JSONEncoder().encode(response) {
-      try? connection.write(contentsOf: data + Data("\n".utf8))
+      let bytes = [UInt8](data) + [UInt8(ascii: "\n")]
+      _ = bytes.withUnsafeBytes { write(client, $0.baseAddress, $0.count) }
     }
   }
 

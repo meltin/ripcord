@@ -224,8 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   /// The socket the `ripcord` command talks to; without it the app works as before.
   private func startControl() {
     let server = ControlServer { [weak self] request in
-      await MainActor.run { self?.answer(request) }
-        ?? ControlResponse(error: "Ripcord is quitting.")
+      await self?.answer(request) ?? ControlResponse(error: "Ripcord is quitting.")
     }
     do {
       try server.start()
@@ -235,7 +234,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  private func answer(_ request: ControlRequest) -> ControlResponse {
+  private func answer(_ request: ControlRequest) async -> ControlResponse {
     switch request {
     case .open(let query):
       if !launcher.isVisible { applyConfig() }
@@ -260,8 +259,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       }
       model.saveIfChanged()
       return model.loadError.map { ControlResponse(error: "ripcord: \($0)") } ?? ControlResponse()
-    case .pick:
-      return ControlResponse(error: "ripcord: not yet.")
+    case .pick(let items, let placeholder):
+      if !launcher.isVisible { applyConfig() }
+      return await launcher.pick(items: items, placeholder: placeholder)
     }
   }
 

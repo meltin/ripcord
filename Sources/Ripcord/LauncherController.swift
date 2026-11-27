@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import RipcordControl
 import RipcordCore
 import SwiftUI
 
@@ -102,6 +103,8 @@ enum NotesRequest {
 enum LauncherMode {
   case root, clipboard, snippets, snippetForm, repositories, httpStatusCodes, colors, bookmarks
   case bookmarkForm, emoji, scriptOutput, notes
+  /// `ripcord pick`: lines handed in, one to choose.
+  case pick
 
   /// A form, with no query or rows: the footer names it, and ⌘↵ saves it.
   var isForm: Bool { self == .snippetForm || self == .bookmarkForm }
@@ -121,6 +124,7 @@ enum LauncherMode {
     case .emoji: .searchEmoji
     case .scriptOutput: nil
     case .notes: .searchNotes
+    case .pick: nil
     }
   }
 }
@@ -137,6 +141,8 @@ final class LauncherModel {
   var backdrop: BackdropRenderer?
   /// The app a paste lands in: the one in front when the panel opened, as it never activates.
   var pasteTarget: String?
+  /// `ripcord pick --placeholder`, shown in the search field.
+  var pickPlaceholder: String?
   var query = ""
   var sections: [SearchSection] = []
   var selection = 0
@@ -564,6 +570,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// `keepingMode` leaves a command's list or form as it is, to come back to (`leftOpen`).
   private func hide(keepingMode: Bool = false) {
+    // A pick isn't come back to: hidden any way, it's cancelled.
+    let keepingMode = keepingMode && model.mode != .pick
+    finishPick(nil)
     model.backdrop?.stop()
     stashDraft()
     model.toast = nil
@@ -634,6 +643,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
         for: query, history: clipboard.history, type: model.clipType)
     }
     if model.mode == .httpStatusCodes { return Search.httpStatusSections(for: query) }
+    if model.mode == .pick { return Search.pickSections(for: query, items: pickItems) }
     if model.mode == .bookmarks { return Search.bookmarkSections(for: query, file: bookmarks) }
     if model.mode == .notes { return Search.noteSections(for: query, notes: notes) }
     if model.mode == .emoji, let emojiCatalog {
@@ -763,10 +773,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
       // An edit always goes back to its list, even one its hotkey opened.
       if model.mode == .snippetForm, model.formSource != nil { return goBack() }
       if model.mode == .bookmarkForm, model.bookmarkDraft.original != nil { return goBack() }
-      // Like Raycast: Esc leaves a command's list for the root search first.
-      guard model.mode != .root, !closesOnCancel else { return hide() }
+      // Like Raycast: Esc leaves a command's list for the root search first; a pick is left.
+      guard model.mode != .root, model.mode != .pick, !closesOnCancel else { return hide() }
       goBack()
     case .back:
+      if model.mode == .pick { return hide() }
       goBack()
     case .nextField:
       // Not behind an open menu.
@@ -1204,6 +1215,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
   func perform(_ action: SearchResult.Action) {
     // Like Raycast, the panel stays open and glides home, so the reset is visible at once.
     if action == .run(.resetWindowPosition) { return resetPosition() }
+    if case .pick(let index) = action {
+      guard pickItems.indices.contains(index) else { return NSSound.beep() }
+      finishPick(pickItems[index])
+      return hide()
+    }
     if action == .run(.generateDummyText) || action == .copyDummyText {
       return generateDummyText(copyOnly: action == .copyDummyText)
     }
@@ -1491,6 +1507,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onCheckForUpdates()
     case .run(.generateDummyText), .copyDummyText:
       break  // Handled above, where it reads the fields before hide() empties them.
+    case .pick:
+      break  // Handled above, before hide() would cancel it.
     case .run(.quit):
       NSApp.terminate(nil)
     }
@@ -1801,6 +1819,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// Opens a command's own list, from its row or its hotkey.
   private func open(_ mode: LauncherMode) {
+    // Another command's list in its place cancels a pick.
+    if mode != .pick { finishPick(nil) }
     // A form left for another command's list keeps what was typed.
     if model.mode != mode { stashDraft() }
     // A command's hotkey would change the list under Set Alias…'s card.
@@ -1956,6 +1976,44 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// `trailing` is the delimiter kept after it.
   func pasteExpansion(_ text: String, trailing: String) {
     clipboard.pasteSnippet(text, trailing: trailing)
+  }
+
+  /// `ripcord pick`'s lines, and the command waiting for one of them.
+  private var pickItems: [String] = []
+  private var pickWaiter: (token: UUID, continuation: CheckedContinuation<ControlResponse, Never>)?
+
+  /// `ripcord pick`: the panel lists `items` and answers with the one chosen, or as cancelled
+  /// once the panel hides, another pick comes, or the command goes away (its task cancelled).
+  func pick(items: [String], placeholder: String?) async -> ControlResponse {
+    guard !items.isEmpty else { return ControlResponse(error: "ripcord: no lines to pick from.") }
+    let token = UUID()
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        finishPick(nil)
+        pickWaiter = (token, continuation)
+        pickItems = items
+        model.pickPlaceholder = placeholder
+        if panel.isVisible, model.mode == .pick {
+          update("")
+        } else {
+          open(.pick)
+        }
+      }
+    } onCancel: {
+      Task { @MainActor in
+        guard self.pickWaiter?.token == token else { return }
+        self.hide()
+      }
+    }
+  }
+
+  /// Answers the waiting command with `chosen`, or as cancelled when nil.
+  private func finishPick(_ chosen: String?) {
+    guard let waiter = pickWaiter else { return }
+    pickWaiter = nil
+    pickItems = []
+    waiter.continuation.resume(
+      returning: chosen.map { ControlResponse(output: $0) } ?? ControlResponse(cancelled: true))
   }
 
   /// `ripcord open`: the panel, with `query` typed if given; one already open stays open.
