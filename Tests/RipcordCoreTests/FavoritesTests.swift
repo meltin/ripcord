@@ -28,7 +28,12 @@ import Testing
     let rex = try #require(root([]).first?.results.first)
     let add = try #require(rex.actions.first { $0.title == "Add to Favorites" })
     #expect(add.shortcut == "⇧⌘F")
-    #expect(rex.actions.suffix(2).map(\.title) == ["Configure Command…", "Disable Command"])
+    // A Running row's: Configure Command…, then its Hide to Restart, then Disable Command.
+    #expect(
+      rex.actions.suffix(6).map(\.title) == [
+        "Configure Command…", "Hide Application", "Quit Application", "Force Quit Application",
+        "Restart Application", "Disable Command",
+      ])
     #expect(rex.actions.first { $0.title == "Show in Finder" }?.shortcut == "⌘↵")
     let snippets = BuiltinCommand.searchSnippets.settingsKey
     let favorites = try #require(root([snippets, app.settingsKey]).first?.results)

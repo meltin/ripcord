@@ -855,9 +855,15 @@ final class LauncherController: NSObject, NSWindowDelegate {
             bundleID: app.bundleIdentifier)
         }
       }
+    // Menu bar apps too, as Raycast offers them Quit; not Ripcord, which Restart would wait inside.
+    let runningKeys = Set(
+      NSWorkspace.shared.runningApplications.filter { $0 != .current }.compactMap {
+        $0.bundleIdentifier ?? $0.bundleURL?.path
+      })
     return Search.sections(
       for: query, apps: apps, running: running, quicklinks: quicklinks, items: items,
-      favorites: favorites, drafts: draftStore.drafts, scripts: scripts, lidAwake: lidAwakeStatus)
+      favorites: favorites, drafts: draftStore.drafts, scripts: scripts, lidAwake: lidAwakeStatus,
+      runningKeys: runningKeys)
   }
 
   private func handle(_ command: SearchCommand) {
@@ -1749,6 +1755,31 @@ final class LauncherController: NSObject, NSWindowDelegate {
     return true
   }
 
+  /// A running app's Hide, Quit, Force Quit or Restart, with Raycast's messages. Looked up now:
+  /// the row was made when the panel opened, and the app may have quit since.
+  private func control(_ key: String, _ control: SearchResult.AppControl) {
+    guard
+      let app = NSWorkspace.shared.runningApplications.first(where: {
+        $0 != .current && ($0.bundleIdentifier ?? $0.bundleURL?.path) == key
+      })
+    else { return NSSound.beep() }
+    let name = app.localizedName ?? "the app"
+    switch control {
+    case .hide:
+      if !app.hide() { NSSound.beep() }
+    case .quit:
+      app.terminate() ? HUD.show("Quit \(name)") : NSSound.beep()
+    case .forceQuit:
+      app.forceTerminate() ? HUD.show("Force quit \(name)") : NSSound.beep()
+    case .restart:
+      if let message = SystemActions.relaunch(app) {
+        HUD.show(message, failed: true)
+      } else {
+        HUD.show("Restarted \(name)")
+      }
+    }
+  }
+
   /// What the open filter menu's items pick, by their tag.
   private var filterChoices: [() -> Void] = []
 
@@ -2247,6 +2278,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       NSWorkspace.shared.activateFileViewerSelecting([url])
     case .revealBookmarksFile:
       NSWorkspace.shared.activateFileViewerSelecting([Self.bookmarksURL])
+    case .controlApp(let key, let control):
+      self.control(key, control)
     case .showInfo(let url):
       // Finder's own Show Info service: no Apple Events, so no Automation prompt.
       let board = NSPasteboard(name: .init("io.github.meltin.ripcord.show-info"))
