@@ -116,6 +116,7 @@ enum LauncherMode {
   case convertColor, favoriteColors, colorWheel, removeRepos
   case bookmarks
   case bookmarkForm, emoji, scriptOutput, notes, quicklinks, quicklinkForm, scriptCommands
+  case runningApps
   /// `ripcord pick`: lines handed in, one to choose.
   case pick
 
@@ -142,6 +143,7 @@ enum LauncherMode {
     case .quicklinks: .searchQuicklinks
     case .quicklinkForm: .createQuicklink
     case .scriptCommands: .searchScriptCommands
+    case .runningApps: .runningApplications
     case .emoji: .searchEmoji
     case .scriptOutput: nil
     case .notes: .searchNotes
@@ -804,6 +806,26 @@ final class LauncherController: NSObject, NSWindowDelegate {
         for: query, history: clipboard.history, type: model.clipType)
     }
     if model.mode == .httpStatusCodes { return Search.httpStatusSections(for: query) }
+    if model.mode == .runningApps {
+      // As the root search names them; an app it never scanned by its own name and file name.
+      let indexed = Dictionary(apps.map { ($0.settingsKey, $0) }) { first, _ in first }
+      // Apps in the Dock, and menu bar apps the root search lists, as CodexBar: not the system's
+      // helpers, nor Ripcord, which can't restart or quit itself from here.
+      let running = NSWorkspace.shared.runningApplications
+        .filter { $0 != .current }
+        .compactMap { app -> AppEntry? in
+          guard let url = app.bundleURL else { return nil }
+          if let entry = indexed[app.bundleIdentifier ?? url.path] { return entry }
+          guard app.activationPolicy == .regular else { return nil }
+          let file = url.deletingPathExtension().lastPathComponent
+          let names = app.localizedName.map { $0 == file ? [file] : [$0, file] } ?? [file]
+          return AppEntry(url: url, names: names, bundleID: app.bundleIdentifier)
+        }
+        .sorted { $0.names[0].localizedStandardCompare($1.names[0]) == .orderedAscending }
+      return Search.runningSections(
+        for: query, running: running, scanned: Set(apps.map(\.settingsKey)), items: items,
+        favorites: favorites)
+    }
     if model.mode == .pick { return Search.pickSections(for: query, items: pickItems) }
     if model.mode == .bookmarks { return Search.bookmarkSections(for: query, file: bookmarks) }
     if model.mode == .quicklinks {
@@ -1875,6 +1897,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     if action == .run(.searchSnippets) { return open(.snippets) }
     if action == .run(.httpStatusCodes) { return open(.httpStatusCodes) }
+    if action == .run(.runningApplications) { return open(.runningApps) }
     if action == .run(.colorHistory) { return open(.colors) }
     if action == .run(.colorNames) { return open(.colorNames) }
     if action == .run(.convertColor) { return open(.convertColor) }
@@ -2356,7 +2379,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .cleanKeyboard(let seconds):
       onCleanKeyboard(seconds)
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
-      .run(.searchRepositories), .run(.httpStatusCodes), .run(.sleepTimer), .run(.colorHistory),
+      .run(.searchRepositories), .run(.httpStatusCodes), .run(.runningApplications),
+      .run(.sleepTimer), .run(.colorHistory),
       .run(.colorNames), .run(.convertColor), .run(.favoriteColors), .run(.colorWheel),
       .run(.cloneRepo), .run(.removeRepo), .removeRepository, .trashRepository,
       .run(.cleanKeyboard), .run(.searchBookmarks), .run(.addBookmark), .deleteBookmark,

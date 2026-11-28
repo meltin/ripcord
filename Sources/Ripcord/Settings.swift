@@ -566,7 +566,9 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       .colorPicker, .cleanKeyboard, .bookmarks, .notes, .emoji, .ripcord, .dummyText, .quicklinks,
       .scripts:
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
-    case .systemActions: Set(SystemAction.allCases.map(\.settingsKey))
+    case .systemActions:
+      Set(SystemAction.allCases.map(\.settingsKey)).union(
+        BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .windowManagement: Set(WindowLayout.allCases.map(\.settingsKey))
     case .cleanShot: Set(CleanShotCommand.allCases.map(\.settingsKey))
     case .general, .permissions, .applications: nil
@@ -848,6 +850,7 @@ extension BuiltinCommand {
     case .createQuicklink, .searchQuicklinks, .importQuicklinks, .exportQuicklinks: .quicklinks
     case .ripcordNotes, .createNote, .searchNotes: .notes
     case .generateDummyText: .dummyText
+    case .runningApplications: .systemActions
     case .searchEmoji: .emoji
     case .searchScriptCommands: .scripts
     case .httpStatusCodes: .httpStatusCodes

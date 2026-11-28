@@ -120,7 +120,7 @@ struct SearchView: View {
       } else if [
         .repositories, .removeRepos, .httpStatusCodes, .colors, .colorNames, .convertColor,
         .favoriteColors,
-        .bookmarks, .notes, .pick, .quicklinks, .scriptCommands,
+        .bookmarks, .notes, .pick, .quicklinks, .scriptCommands, .runningApps,
       ].contains(
         model.mode)
       {
@@ -307,6 +307,8 @@ private struct EmptyState: View {
       "No note contains “\(query)”."
     case .httpStatusCodes:
       "No status code matches “\(query)”."
+    case .runningApps:
+      "No running app matches “\(query)”."
     case .colors where query.trimmingCharacters(in: .whitespaces).isEmpty:
       "Colors you pick with Pick Color show up here."
     case .colors:
@@ -676,6 +678,7 @@ extension BuiltinCommand {
     case .searchScriptCommands: "terminal"
     case .ripcordNotes, .searchNotes: "note.text"
     case .generateDummyText: "textformat"
+    case .runningApplications: "square.grid.2x2.fill"
     case .createNote: "doc.badge.plus"
     case .addBookmark: "bookmark.circle.fill"
     case .resetWindowPosition: "macwindow"
@@ -704,6 +707,7 @@ extension BuiltinCommand {
     case .searchScriptCommands: .gray
     case .ripcordNotes, .createNote, .searchNotes: .orange
     case .generateDummyText: .purple
+    case .runningApplications: .blue
     case .httpStatusCodes: .teal
     case .settings, .resetWindowPosition, .checkForUpdates: .gray
     }
@@ -2563,6 +2567,7 @@ extension LauncherMode {
     case .snippetForm, .bookmarkForm, .quicklinkForm: ""
     case .quicklinks: "Search Quicklinks…"
     case .scriptCommands: "Search Script Commands…"
+    case .runningApps: "Search running apps…"
     case .scriptOutput: "Script Output"
     case .pick: "Pick a Line…"
     }

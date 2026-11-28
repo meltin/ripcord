@@ -17,6 +17,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case searchScriptCommands
   case ripcordNotes, createNote, searchNotes
   case generateDummyText
+  case runningApplications
   case resetWindowPosition, checkForUpdates, quit
 
   /// Raycast's Start 15, 30, 45, 60 and 90 Minute Sleep Timer: how long each waits.
@@ -75,6 +76,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .createNote: "Create Note"
     case .searchNotes: "Search Notes"
     case .generateDummyText: "Generate Dummy Text"
+    case .runningApplications: "Running Applications"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .checkForUpdates: "Check for Updates"
     case .quit: "Quit Ripcord"
@@ -104,6 +106,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     // So "lorem" or "jp" finds the command too; Raycast's extension is "Japanese Lorem Ipsum
     // Generator", shortened here.
     case .generateDummyText: "Lorem Ipsum Generator JP"
+    case .runningApplications: "System Actions"
     default: "Ripcord"
     }
   }
@@ -152,6 +155,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .createNote: "command:create-note"
     case .searchNotes: "command:search-notes"
     case .generateDummyText: "command:generate-dummy-text"
+    case .runningApplications: "command:running-applications"
     case .resetWindowPosition: "command:reset-window-position"
     case .checkForUpdates: "command:check-for-updates"
     case .quit: "command:quit"
@@ -739,6 +743,31 @@ public enum Search {
             !shown.contains($0.itemKey ?? "") && !suggested.contains($0.itemKey ?? "")
           }.map(decorate)),
       ].filter { !$0.results.isEmpty }
+  }
+
+  /// Running Applications' list: the apps running now, by name, matched as the root search
+  /// matches apps. An app the index never scanned can't be a favorite or turned off: Settings
+  /// doesn't list it to undo either.
+  public static func runningSections(
+    for query: String, running: [AppEntry], scanned: Set<String>,
+    items: [String: ItemSettings] = [:], favorites: [String] = []
+  ) -> [SearchSection] {
+    let trimmed = query.trimmingCharacters(in: .whitespaces)
+    let shown = shownFavorites(favorites, among: scanned)
+    let rows = running.enumerated().compactMap { index, app -> (Int, Int, SearchResult)? in
+      let alias = items[app.settingsKey]?.alias
+      let names = app.names + [alias].compactMap { $0 }
+      let score = trimmed.isEmpty ? 0 : names.compactMap { Fuzzy.score(trimmed, in: $0) }.max()
+      guard let score else { return nil }
+      let row = result(for: app, alias: alias, isRunning: true)
+      return (
+        score, index,
+        scanned.contains(app.settingsKey) ? withFavoriteActions(row, favorites: shown) : row
+      )
+    }
+    .sorted { ($0.0, -$0.1) > ($1.0, -$1.1) }
+    .map(\.2)
+    return rows.isEmpty ? [] : [SearchSection(title: "Running", results: rows)]
   }
 
   /// The favorites that can be listed, once each, in the user's order: one for an app that's
