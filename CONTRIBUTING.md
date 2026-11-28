@@ -4,8 +4,11 @@ Build and run Ripcord as in the README's [Build from source](README.md#build-fro
 pull request, `swift test` and `swift format lint -r Sources Tests` should both pass.
 
 Run `scripts/create-signing-certificate.sh` once, so Accessibility stays granted across
-rebuilds instead of being granted again after each one (see the README's
-[Permissions](README.md#permissions)). Its private key stays in your keychain; never commit it.
+rebuilds instead of being granted again after each one (see
+[Permissions](docs/permissions.md)). Its private key stays in your keychain; never commit it.
+
+A new feature gets one row in the README's table, in both `README.md` and `README.ja.md`: an icon,
+its name and one line. Details go on its settings page or in `docs/`, not the README.
 
 ## UI conventions
 

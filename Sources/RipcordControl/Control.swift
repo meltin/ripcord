@@ -24,7 +24,7 @@ public struct ControlResponse: Codable, Equatable, Sendable {
     self.cancelled = cancelled
   }
 
-  /// 0 done, 1 a pick cancelled, 2 an error, as the README lists.
+  /// 0 done, 1 a pick cancelled, 2 an error, as docs/command-line.md lists.
   public var exitCode: Int32 { error != nil ? 2 : cancelled ? 1 : 0 }
 }
 
