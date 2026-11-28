@@ -331,6 +331,10 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   public enum SnippetAction: Equatable, Sendable {
     /// `delete` asks; `confirmDelete` deletes.
     case paste, copy, edit, duplicate, delete, confirmDelete
+    /// Export Snippet…: this one, in Raycast's JSON, where the save panel says.
+    case export
+    /// Delete All Snippets, always asked first, and its confirmation.
+    case deleteAll, confirmDeleteAll
   }
 
   public enum ClipAction: Equatable, Sendable {
@@ -446,21 +450,30 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
         id: id, isPinned: isPinned, isText: kind == .text, link: nil,
         settings: ClipboardSettings(primaryAction: clipAction == .copy ? .copy : .paste))
     case .snippet(let index, _):
+      // Raycast's, in its order and with its keys; its Pin and Share are left out.
       return [
         primary,
         MenuAction(
-          title: "Copy to Clipboard", symbol: "doc.on.doc", shortcut: "⇧⌘C",
+          title: "Copy to Clipboard", symbol: "doc.on.doc", shortcut: "⌘↵",
           action: .snippet(index, .copy)),
         MenuAction(
-          title: "Edit Snippet", symbol: "pencil", shortcut: "⌘E", action: .snippet(index, .edit)),
+          title: "Edit Snippet", symbol: "pencil", shortcut: "⌘E", action: .snippet(index, .edit),
+          startsSection: true),
         MenuAction(
           title: "Duplicate Snippet", symbol: "plus.square.on.square", shortcut: "⌘D",
           action: .snippet(index, .duplicate)),
         MenuAction(
           title: "Create Snippet", symbol: "plus", shortcut: "⌘N", action: .run(.createSnippet)),
         MenuAction(
-          title: "Delete Snippet", symbol: "trash", shortcut: "⌃X", action: .snippet(index, .delete)
-        ),
+          title: "Export Snippet…", symbol: "square.and.arrow.up", shortcut: "⌥⇧⌘S",
+          action: .snippet(index, .export), startsSection: true),
+        MenuAction(
+          title: "Delete Snippet", symbol: "trash", shortcut: "⌃X",
+          action: .snippet(index, .delete),
+          isDestructive: true, startsSection: true),
+        MenuAction(
+          title: "Delete All Snippets", symbol: "trash", shortcut: "⌃⇧X",
+          action: .snippet(index, .deleteAll), isDestructive: true),
         .configure(BuiltinCommand.searchSnippets.settingsKey),
       ]
     case .run(let command): return [primary, .configure(command.settingsKey)]
