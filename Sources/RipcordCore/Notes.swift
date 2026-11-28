@@ -112,9 +112,27 @@ public struct NoteStore: Sendable {
   @discardableResult
   public func trash(_ note: Note) throws -> URL? {
     guard note.isSaved else { return nil }
+    return try Self.moveToTrash(note.url)
+  }
+
+  /// The file moved to the Trash; where it went there.
+  public static func moveToTrash(_ url: URL) throws -> URL? {
     var trashed: NSURL?
-    try FileManager.default.trashItem(at: note.url, resultingItemURL: &trashed)
+    try FileManager.default.trashItem(at: url, resultingItemURL: &trashed)
     return trashed as URL?
+  }
+
+  /// Delete All Notes: every note moved to the Trash, as Raycast's go to Recently Deleted; each
+  /// note's file and where it went. `moving` stands in for the Trash in tests.
+  public func trashAll(
+    moving: (URL) throws -> URL? = NoteStore.moveToTrash
+  ) throws -> [(url: URL, trashed: URL?)] {
+    try list().map { ($0.url, try moving($0.url)) }
+  }
+
+  /// Duplicate Note: a new note with the same text, saved now.
+  public func duplicate(_ note: Note, at date: Date = .now) throws -> Note {
+    try save(note.text, over: newNote(at: date))
   }
 
   /// Puts a note moved to the Trash back where it was, as Undo does; the note as it is then.
@@ -134,13 +152,30 @@ extension Search {
   }
 
   private static func result(for note: Note) -> SearchResult {
+    // Raycast's, in its order and with its keys, and Show in Finder, as Ripcord's notes are
+    // files; its Pin, Copy Deeplink, Create Quicklink and AI Chat are left out.
     let menu = [
       MenuAction(title: "Open Note", symbol: "return", shortcut: "↵", action: .openNote(note.url)),
       MenuAction(
         title: "Show in Finder", symbol: "folder", shortcut: "⌘↵", action: .reveal(note.url)),
       MenuAction(
+        title: "Copy Content", symbol: "doc.on.doc", shortcut: "⇧⌘C", action: .copy(note.text),
+        startsSection: true),
+      MenuAction(
+        title: "Copy Note As…", symbol: "doc.on.doc", shortcut: "⌥⌘C",
+        action: .copyNoteAsMenu(note.text)),
+      MenuAction(
+        title: "Create Note", symbol: "plus", shortcut: "⌘N", action: .run(.createNote),
+        startsSection: true),
+      MenuAction(
+        title: "Duplicate Note", symbol: "plus.square.on.square", shortcut: "⌘D",
+        action: .duplicateNote(note.url)),
+      MenuAction(
         title: "Delete Note", symbol: "trash", shortcut: "⌃X", action: .deleteNote(note.url),
         isDestructive: true, startsSection: true),
+      MenuAction(
+        title: "Delete All Notes", symbol: "trash", shortcut: "⌃⇧X",
+        action: .deleteAllNotes(confirmed: false), isDestructive: true),
     ]
     // The second line with text, as a preview.
     let preview = note.text.split(whereSeparator: \.isNewline)
@@ -148,6 +183,16 @@ extension Search {
     return SearchResult(
       id: "note:\(note.url.path):\(note.title)", title: note.title, subtitle: preview ?? "",
       keyword: nil, kind: .note, action: menu[0].action, menu: menu)
+  }
+}
+
+extension Search {
+  /// Copy Note As…: the note's Markdown as it is, or as HTML, as Raycast copies a note.
+  public static func copyNoteAsMenu(for text: String) -> [MenuAction] {
+    [
+      MenuAction(title: "Markdown", symbol: "doc.on.doc", shortcut: "", action: .copy(text)),
+      MenuAction(title: "HTML", symbol: "doc.on.doc", shortcut: "", action: .copyNoteHTML(text)),
+    ]
   }
 }
 

@@ -327,6 +327,14 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case openNote(URL)
     /// Moves the note in this file to the Trash.
     case deleteNote(URL)
+    /// Copy Note As…'s menu, for a note with this text.
+    case copyNoteAsMenu(String)
+    /// Copies this Markdown as HTML.
+    case copyNoteHTML(String)
+    /// A copy of the note in this file, opened in the notes window.
+    case duplicateNote(URL)
+    /// Moves every note to the Trash: always asked first, then done.
+    case deleteAllNotes(confirmed: Bool)
     /// Generate Dummy Text's ⌘↵: the text copied rather than pasted.
     case copyDummyText
     /// `ripcord pick`'s line at this index, handed back to the command.

@@ -2109,6 +2109,45 @@ final class LauncherController: NSObject, NSWindowDelegate {
       notes = noteStore.list()
       return open(.notes)
     }
+    if case .copyNoteAsMenu(let text) = action {
+      model.menu = OpenMenu(
+        title: "Copy Note As", items: Search.copyNoteAsMenu(for: text), isRoot: false)
+      return
+    }
+    if case .copyNoteHTML(let text) = action {
+      guard let html = Self.html(fromMarkdown: text) else { return NSSound.beep() }
+      return perform(.copy(html))
+    }
+    if case .duplicateNote(let url) = action {
+      model.menu = nil
+      guard let note = noteStore.read(url) else { return NSSound.beep() }
+      do {
+        let copy = try noteStore.duplicate(note)
+        notes = noteStore.list()
+        return perform(.openNote(copy.url))
+      } catch {
+        return onError(error.localizedDescription)
+      }
+    }
+    if case .deleteAllNotes(let confirmed) = action {
+      model.menu = nil
+      guard confirmed else {
+        // Always asked: every note goes, though to the Trash.
+        model.confirmation = Confirmation(
+          icon: .command(.searchNotes), title: "Delete All Notes?",
+          message: "Every note is moved to the Trash.", confirmTitle: "Delete All",
+          action: .deleteAllNotes(confirmed: true))
+        return
+      }
+      model.confirmation = nil
+      do {
+        for (url, trashed) in try noteStore.trashAll() { onNotes(.deleted(url, trashed: trashed)) }
+      } catch {
+        onError(error.localizedDescription)
+      }
+      notes = noteStore.list()
+      return refreshRows(selecting: nil)
+    }
     if case .deleteNote(let url) = action {
       let id = model.selected?.id
       model.menu = nil
@@ -2252,7 +2291,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       .run(.searchScriptCommands), .setVolume,
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,
-      .openDraft, .discardDraft, .runScript, .run(.searchNotes), .deleteNote,
+      .openDraft, .discardDraft, .runScript, .run(.searchNotes), .deleteNote, .copyNoteAsMenu,
+      .copyNoteHTML, .duplicateNote, .deleteAllNotes,
       .moveFavorite,
       .deleteColor, .toggleFavoriteColor,
       .run(.createSnippet), .clip, .snippet, .system, .window:
@@ -3068,6 +3108,21 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .saveAsFile:
       saveClipToFile(id)
     }
+  }
+
+  /// A note's Markdown as HTML, for Copy Note As… › HTML: the HTML AppKit writes for it.
+  private static func html(fromMarkdown text: String) -> String? {
+    guard
+      let attributed = try? NSAttributedString(
+        markdown: text,
+        options: .init(
+          allowsExtendedAttributes: true, interpretedSyntax: .full,
+          failurePolicy: .returnPartiallyParsedIfPossible)),
+      let data = try? attributed.data(
+        from: NSRange(location: 0, length: attributed.length),
+        documentAttributes: [.documentType: NSAttributedString.DocumentType.html])
+    else { return nil }
+    return String(data: data, encoding: .utf8)
   }
 
   /// Save as File…: a text entry as a .txt file, an image as its picture, where the save panel

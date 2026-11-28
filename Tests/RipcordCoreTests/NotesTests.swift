@@ -27,6 +27,54 @@ import Testing
     #expect(store.list().map(\.title) == ["Hello"])
   }
 
+  /// Search Notes' ⌘K, Raycast's with Show in Finder.
+  @Test func offersRaycastsNoteActions() throws {
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let note = try store.save("# Plan\nmore", over: store.newNote())
+    let row = try #require(Search.noteSections(for: "", notes: [note]).first?.results.first)
+    #expect(
+      row.actions.map(\.title) == [
+        "Open Note", "Show in Finder", "Copy Content", "Copy Note As…", "Create Note",
+        "Duplicate Note", "Delete Note", "Delete All Notes",
+      ])
+    #expect(row.actions.map(\.shortcut) == ["↵", "⌘↵", "⇧⌘C", "⌥⌘C", "⌘N", "⌘D", "⌃X", "⌃⇧X"])
+    #expect(row.actions[2].action == .copy("# Plan\nmore"))
+    #expect(
+      Search.copyNoteAsMenu(for: note.text).map(\.action) == [
+        .copy(note.text), .copyNoteHTML(note.text),
+      ])
+  }
+
+  /// Duplicate Note: a new file with the same text; the original stays.
+  @Test func duplicatesANote() throws {
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let note = try store.save("# Plan\nmore", over: store.newNote())
+    let copy = try store.duplicate(note, at: .now.addingTimeInterval(1))
+    #expect(copy.url != note.url)
+    #expect(store.list().map(\.text) == ["# Plan\nmore", "# Plan\nmore"])
+  }
+
+  /// Delete All Notes moves every note, and nothing else in the folder, to the Trash (here a
+  /// stand-in, so the test leaves the real Trash alone).
+  @Test func trashesEveryNote() throws {
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let a = try store.save("a", over: store.newNote(at: .now))
+    let b = try store.save("b", over: store.newNote(at: .now.addingTimeInterval(1)))
+    let other = folder.appending(path: "keep.txt")
+    try Data("x".utf8).write(to: other)
+    let bin = folder.appending(path: ".bin")
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    let moved = try store.trashAll { url in
+      let to = bin.appending(path: url.lastPathComponent)
+      try FileManager.default.moveItem(at: url, to: to)
+      return to
+    }
+    #expect(Set(moved.map(\.url)) == [a.url, b.url])
+    #expect(moved.allSatisfy { $0.trashed != nil })
+    #expect(store.list().isEmpty)
+    #expect(FileManager.default.fileExists(atPath: other.path))
+  }
+
   @Test func neverWritesOverAFileChangedOutside() throws {
     let saved = try store.save("mine", over: store.newNote())
     try "theirs".write(to: saved.url, atomically: true, encoding: .utf8)
