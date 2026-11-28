@@ -97,10 +97,11 @@
   page: Raycast's (HEX, HEX Lower Case, HEX No Prefix, RGB, RGB %, RGBA, RGBA %, HSLA, HSVA, OKLCH,
   LCH, P3), written as the colorjs.io library Raycast calls writes them (HEX as #F00 where it can),
   or HSL, SwiftUI or NSColor. A message says what was copied, with the nearest named color if Show
-  Color Name After Picking is on. Color History lists the colors picked, to copy in any format, its
-  favorites first (⇧⌘F adds or removes one, and Favorite Colors lists only them; a favorite stays
-  past the 100 kept); Color Names lists the CSS color names nearest a hex typed, as #00ff00, or the
-  names containing what's typed; Convert Color writes a CSS color typed or pasted (hex, a name,
+  Color Name After Picking is on. Color History lists the colors picked, its favorites first
+  (⇧⌘F adds or removes one, and Favorite Colors lists only them; a favorite stays past the 100
+  kept); as Raycast's, Return copies a color, ⌘↵ pastes it, Copy as… (⇧⌘C) copies it in any
+  format, and ⌃⇧X deletes all but the favorites, asked first; Color Names lists the CSS color
+  names nearest a hex typed, as #00ff00, or the names containing what's typed; Convert Color writes a CSS color typed or pasted (hex, a name,
   rgb(), hsl(), oklch() or color(display-p3 …)) in every format, the one copied last first; Color
   Wheel shows a wheel of every hue in the panel and opens the color sampler over it, to pick from it
   as Pick Color does
@@ -137,8 +138,8 @@
   Generator JP sets the default language, Japanese unless changed
 - Emoji & Symbols: Search Emoji & Symbols shows emoji and symbols (→ ° ⌘ and the like) in a grid by
   category, Frequently Used first; search in English or Japanese (`cat`, `ねこ`), Return pastes,
-  ⌘↵ copies, and ⌘K picks a skin tone that's remembered. Settings › Emoji & Symbols sets the
-  grid's Column Count (6 to 10), the Primary Action (Return copies instead, pasting on ⌘↵) and
+  ⌘↵ copies, ⌘S saves one as a snippet, and ⌘K picks a skin tone that's remembered. Settings ›
+  Emoji & Symbols sets the grid's Column Count (6 to 10), the Primary Action (Return copies instead, pasting on ⌘↵) and
   the skin tone, as Raycast's does. Typing `:` and a word in Notes or Create Snippet's text box
   lists the emoji it names, as Raycast's inline emoji picker does: ↑↓ choose, Return or Tab put
   one in, Esc closes the list; Disable Inline Emoji Picker there turns it off

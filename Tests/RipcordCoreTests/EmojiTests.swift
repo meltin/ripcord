@@ -72,8 +72,10 @@ import Testing
     #expect(
       cat.actions.map(\.title) == [
         "Paste", "Copy to Clipboard", "Paste and Keep Window Open", "Copy Unicode",
-        "Copy All Emojis from Section",
+        "Copy All Emojis from Section", "Save as Snippet",
       ])
+    #expect(cat.actions[5].action == .saveAsSnippet("🐱"))
+    #expect(cat.actions[5].shortcut == "⌘S")
     #expect(cat.actions[3].action == .copy("U+1F431"))
     // In the skin tone picked.
     var toned = history()

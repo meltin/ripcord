@@ -279,6 +279,12 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case stopLidAwake
     /// Removes the picked color with this hex from Color History.
     case deleteColor(String)
+    /// Every picked color but the favorites removed: always asked first, then done.
+    case deleteAllColors(confirmed: Bool)
+    /// A menu of these items in the ⌘K card's place, as Raycast's Copy as… opens one.
+    indirect case submenu(title: String, items: [MenuAction])
+    /// Create Snippet's form filled with this text, as Raycast's Save as Snippet; Esc goes back.
+    case saveAsSnippet(String)
     /// Moves the repository to the Trash: once checked for work not committed or pushed, or,
     /// `force`d, as it is; asked first either way.
     case removeRepository(URL, force: Bool)

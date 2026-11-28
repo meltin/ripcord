@@ -58,6 +58,19 @@ import Testing
     #expect(try JSONDecoder().decode(Config.self, from: data).colorFormat == .hex)
   }
 
+  /// Delete All Colors keeps the favorites, as Delete All Entries keeps pinned clips.
+  @Test func deletesAllButFavorites() throws {
+    let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
+    defer { try? FileManager.default.removeItem(at: file) }
+    var history = ColorHistory(fileURL: file)
+    try history.add(orange)
+    try history.add(PickedColor(red: 0, green: 0, blue: 1))
+    try history.toggleFavorite(hex: orange.hex)
+    try history.deleteAll()
+    #expect(history.colors.map(\.hex) == [orange.hex])
+    #expect(ColorHistory(fileURL: file).colors.map(\.hex) == [orange.hex])
+  }
+
   @Test func listsInTheDefaultFormatAndCopiesTheRest() throws {
     let file = FileManager.default.temporaryDirectory.appending(path: "\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: file) }
@@ -67,13 +80,20 @@ import Testing
       Search.colorSections(for: "", history: history, format: .rgb).first?.results.first)
     #expect(row.title == "rgb(255, 127.5, 0)")
     #expect(row.action == .copy("rgb(255, 127.5, 0)"))
-    // The default format first, then every other, then Delete Color.
+    // Raycast's Organize Colors: copy and paste the default format, Copy as… every format.
     #expect(
-      row.actions.map(\.title)
-        == ["Copy RGB"]
-        + ColorFormat.allCases.filter { $0 != .rgb }.map { "Copy \($0.title)" }
-        + ["Add to Favorites", "Delete Color"])
-    #expect(row.actions.last?.action == .deleteColor("#FF8000"))
+      row.actions.map(\.title) == [
+        "Copy to Clipboard", "Paste", "Copy as…", "Add to Favorites", "Delete Color",
+        "Delete All Colors",
+      ])
+    #expect(row.actions.map(\.shortcut) == ["↵", "⌘↵", "⇧⌘C", "⇧⌘F", "⌃X", "⌃⇧X"])
+    #expect(row.actions[1].action == .pasteText("rgb(255, 127.5, 0)"))
+    guard case .submenu(_, let items) = row.actions[2].action else {
+      Issue.record("Copy as… opens no menu")
+      return
+    }
+    #expect(items.map(\.action) == ColorFormat.allCases.map { .copy($0.string(for: orange)) })
+    #expect(row.actions[4].action == .deleteColor("#FF8000"))
     // Any format matches the search.
     #expect(!Search.colorSections(for: "ff80", history: history, format: .rgb).isEmpty)
     #expect(!Search.colorSections(for: "255, 127", history: history, format: .hex).isEmpty)
