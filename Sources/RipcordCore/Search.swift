@@ -335,6 +335,10 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
 
   public enum ClipAction: Equatable, Sendable {
     case paste, copy, togglePin, delete
+    /// Pastes as Prefer Pasting as Plain Text doesn't: with the formatting when it's on.
+    case pasteOtherFormat
+    /// Pastes and brings the panel back where it was, as Raycast's Paste and Keep Window Open.
+    case pasteKeepingOpen
     /// Delete All Entries, asked first, and its confirmation; pinned items stay.
     case deleteAll, confirmDeleteAll
   }
@@ -428,32 +432,10 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
           action: .copy(url.absoluteString)),
       ]
     case .clip(let id, let clipAction):
-      // With Copy to Clipboard as the Primary Action, copy is on ↵ and paste on ⌘↵.
-      let pasteAndCopy =
-        clipAction == .copy
-        ? [
-          MenuAction(
-            title: "Copy to Clipboard", symbol: "doc.on.doc", shortcut: "↵", action: action),
-          MenuAction(
-            title: kind.primaryAction, symbol: "return", shortcut: "⌘↵",
-            action: .clip(id, .paste)),
-        ]
-        : [
-          primary,
-          MenuAction(
-            title: "Copy to Clipboard", symbol: "doc.on.doc", shortcut: "⇧⌘C",
-            action: .clip(id, .copy)),
-        ]
-      return pasteAndCopy + [
-        MenuAction(
-          title: isPinned ? "Unpin" : "Pin", symbol: isPinned ? "pin.slash" : "pin",
-          shortcut: "⇧⌘P", action: .clip(id, .togglePin)),
-        MenuAction(title: "Delete", symbol: "trash", shortcut: "⌃X", action: .clip(id, .delete)),
-        MenuAction(
-          title: "Delete All Entries…", symbol: "trash", shortcut: "⇧⌘X",
-          action: .clip(id, .deleteAll), isDestructive: true),
-        .configure(BuiltinCommand.clipboardHistory.settingsKey),
-      ]
+      // Without the settings, as Clipboard History's rows carry their own menu.
+      return Self.clipMenu(
+        id: id, isPinned: isPinned, isText: kind == .text, link: nil,
+        settings: ClipboardSettings(primaryAction: clipAction == .copy ? .copy : .paste))
     case .snippet(let index, _):
       return [
         primary,
@@ -512,6 +494,47 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case .window(let layout): return layout.settingsKey
     default: return kind == .quicklink ? id : nil
     }
+  }
+
+  /// A Clipboard History entry's ⌘K, as Raycast's: its pastes and copy first, Open in Browser for
+  /// a link, then Pin Entry and the deletes. "to App" is the app the paste lands in. Only text has
+  /// formatting to keep or leave out, so only text gets the plain-text wording and ⌃⌘↵.
+  public static func clipMenu(
+    id: UUID, isPinned: Bool, isText: Bool, link: URL?, settings: ClipboardSettings
+  ) -> [MenuAction] {
+    let plain = isText && settings.preferPlainText
+    let paste = MenuAction(
+      title: plain ? "Paste as Plain Text to App" : "Paste to App", symbol: "return",
+      shortcut: settings.primaryAction == .copy ? "⌘↵" : "↵", action: .clip(id, .paste))
+    let copy = MenuAction(
+      title: "Copy to Clipboard", symbol: "doc.on.doc",
+      shortcut: settings.primaryAction == .copy ? "↵" : "⌘↵", action: .clip(id, .copy))
+    let other = MenuAction(
+      title: plain ? "Paste to App" : "Paste as Plain Text to App", symbol: "return",
+      shortcut: "⌃⌘↵", action: .clip(id, .pasteOtherFormat))
+    return (settings.primaryAction == .copy ? [copy, paste] : [paste, copy]) + [
+      MenuAction(
+        title: "Paste and Keep Window Open", symbol: "return", shortcut: "⌥↵",
+        action: .clip(id, .pasteKeepingOpen))
+    ] + (isText ? [other] : [])
+      + [
+        link.map {
+          MenuAction(
+            title: "Open in Browser", symbol: "globe", shortcut: "⌘O", action: .open($0),
+            startsSection: true)
+        }
+      ].compactMap { $0 } + [
+        MenuAction(
+          title: isPinned ? "Unpin Entry" : "Pin Entry", symbol: isPinned ? "pin.slash" : "pin",
+          shortcut: "⌘.", action: .clip(id, .togglePin), startsSection: true),
+        MenuAction(
+          title: "Delete Entry", symbol: "trash", shortcut: "⌃X", action: .clip(id, .delete),
+          isDestructive: true, startsSection: true),
+        MenuAction(
+          title: "Delete All Entries", symbol: "trash", shortcut: "⌃⇧X",
+          action: .clip(id, .deleteAll), isDestructive: true),
+        .configure(BuiltinCommand.clipboardHistory.settingsKey),
+      ]
   }
 
   /// The hotkeys in the settings by `itemKey`, for showing a row's.
@@ -930,7 +953,12 @@ public enum Search {
           item,
           SearchResult(
             id: id, title: String(line.prefix(200)), subtitle: "", keyword: nil, kind: .text,
-            action: action, isPinned: item.isPinned)
+            action: action,
+            menu: SearchResult.clipMenu(
+              id: item.id, isPinned: item.isPinned, isText: true,
+              link: ClipType.isLink(text)
+                ? URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) : nil,
+              settings: history.settings), isPinned: item.isPinned)
         )
       case .image(_, let width, let height):
         // A copied file goes by its name, as Raycast lists it; a pasted image by its size.
@@ -946,7 +974,11 @@ public enum Search {
           SearchResult(
             id: id, title: title, subtitle: item.name == nil ? "\(width)×\(height)" : "",
             keyword: nil, kind: .image,
-            action: action, thumbnail: history.imageURL(of: item), isPinned: item.isPinned)
+            action: action, thumbnail: history.imageURL(of: item),
+            menu: SearchResult.clipMenu(
+              id: item.id, isPinned: item.isPinned, isText: false, link: nil,
+              settings: history.settings),
+            isPinned: item.isPinned)
         )
       case .files(let paths):
         // By name, as Raycast lists a copied file, with the folder it's in beside it.
@@ -964,6 +996,9 @@ public enum Search {
           SearchResult(
             id: id, title: title, subtitle: folder ?? "", keyword: nil, kind: .file,
             action: action, thumbnail: paths.first.map { URL(fileURLWithPath: $0) },
+            menu: SearchResult.clipMenu(
+              id: item.id, isPinned: item.isPinned, isText: false, link: nil,
+              settings: history.settings),
             isPinned: item.isPinned)
         )
       }
