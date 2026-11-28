@@ -51,7 +51,7 @@ import Testing
     #expect(SystemAction.unhideAllApps.rawValue == "unhide-all-apps")
     // The old words still find them first.
     func top(_ query: String) -> String? {
-      Search.sections(for: query, apps: [], running: [], quicklinks: [], items: [:])
+      Search.sections(for: query, apps: [], quicklinks: [], items: [:])
         .flatMap(\.results).first?.title
     }
     #expect(top("volume up") == "Turn Volume Up")
@@ -70,7 +70,7 @@ import Testing
     #expect(SystemAction.volumePercent(from: "140") == nil)
     #expect(SystemAction.volumePercent(from: "loud") == nil)
     func rows(_ query: String) -> [SearchResult] {
-      Search.sections(for: query, apps: [], running: [], quicklinks: [], items: [:])
+      Search.sections(for: query, apps: [], quicklinks: [], items: [:])
         .flatMap(\.results)
     }
     let typed = rows("set volume 40").first
@@ -85,13 +85,13 @@ import Testing
   @Test func showsTheScreenSaver() {
     #expect(SystemAction.showScreenSaver.title == "Show Screen Saver")
     let top = Search.sections(
-      for: "screen saver", apps: [], running: [], quicklinks: [], items: [:]
+      for: "screen saver", apps: [], quicklinks: [], items: [:]
     )
     .flatMap(\.results).first
     #expect(top?.action == .system(.showScreenSaver))
     // The words it shares with older ones still find those first.
     func first(_ query: String) -> SearchResult.Action? {
-      Search.sections(for: query, apps: [], running: [], quicklinks: [], items: [:])
+      Search.sections(for: query, apps: [], quicklinks: [], items: [:])
         .flatMap(\.results).first?.action
     }
     #expect(first("lock screen") == .system(.lockScreen))

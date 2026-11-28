@@ -10,7 +10,7 @@ import Testing
       bookmark: BookmarkDraftFields(
         title: "", url: "https://swift.org", description: "", group: nil, newGroup: ""))
     let sections = Search.sections(
-      for: "", apps: [], running: [], quicklinks: [], drafts: drafts)
+      for: "", apps: [], quicklinks: [], drafts: drafts)
     #expect(sections.first?.title == "Drafts")
     let rows = try #require(sections.first?.results)
     // Named by what was typed: the name, else the text's first line; the title, else the URL.
@@ -20,9 +20,9 @@ import Testing
     #expect(rows[0].actions.map(\.title) == ["Open Draft", "Discard Draft"])
     #expect(rows[0].actions[1].shortcut == "⌃X")
     // No drafts, no section; a query doesn't list them.
-    #expect(Search.sections(for: "", apps: [], running: [], quicklinks: []).isEmpty)
+    #expect(Search.sections(for: "", apps: [], quicklinks: []).isEmpty)
     #expect(
-      !Search.sections(for: "dear", apps: [], running: [], quicklinks: [], drafts: drafts)
+      !Search.sections(for: "dear", apps: [], quicklinks: [], drafts: drafts)
         .contains { $0.title == "Drafts" })
   }
 

@@ -92,10 +92,12 @@ import Testing
   let links = [Quicklink(name: "Google", url: "https://google.com/?q={query}", keyword: "g")]
 
   @Test func emptyQueryShowsStartSections() {
-    let sections = Search.sections(for: "", apps: apps, running: [apps[0]], quicklinks: links)
-    #expect(sections.map(\.title) == ["Running", "Quicklinks"])
+    var ranking = Ranking()
+    ranking.record(apps[0].settingsKey)
+    let sections = Search.sections(for: "", apps: apps, quicklinks: links, ranking: ranking)
+    #expect(sections.map(\.title) == ["Suggestions", "Quicklinks"])
     #expect(sections[0].results.map(\.title) == ["Safari"])
-    #expect(Search.sections(for: " ", apps: apps, running: [], quicklinks: []).isEmpty)
+    #expect(Search.sections(for: " ", apps: apps, quicklinks: []).isEmpty)
   }
 
   @Test func runningAppGetsRaycastsQuitActions() throws {
@@ -114,9 +116,12 @@ import Testing
       app.actions.suffix(5).map(\.shortcut) == ["⇧⌘H", "⌃⇧Q", "⌃⌥⇧Q", "⌘R", "⌃⇧⌘D"])
     #expect(app.actions[configure + 1].startsSection)
     #expect(app.actions[configure + 3].action == .controlApp(key, .forceQuit))
-    // The empty search's Running rows are running by definition.
-    let running = Search.sections(for: "", apps: apps, running: [apps[0]], quicklinks: [])
-    #expect(running[0].results[0].actions.contains { $0.title == "Quit Application" })
+    // A suggested app too.
+    var ranking = Ranking()
+    ranking.record(key)
+    let suggested = Search.sections(
+      for: "", apps: apps, quicklinks: [], runningKeys: [key], ranking: ranking)
+    #expect(suggested[0].results[0].actions.contains { $0.title == "Quit Application" })
     // Not running: none of them.
     let idle = try #require(Search.results(for: "safari", apps: apps, quicklinks: []).first)
     #expect(!idle.actions.contains { $0.title == "Hide Application" })
@@ -154,7 +159,7 @@ import Testing
   }
 
   @Test func typedQueryShowsOneResultsSection() {
-    let sections = Search.sections(for: "quit", apps: apps, running: [], quicklinks: links)
+    let sections = Search.sections(for: "quit", apps: apps, quicklinks: links)
     #expect(sections.map(\.title) == ["Results"])
     #expect(sections[0].results.first?.action == .run(.quit))
     let reset = Search.results(for: "reset window", apps: apps, quicklinks: links)
@@ -162,11 +167,11 @@ import Testing
   }
 
   @Test func noMatchFallsBackToQuicklinks() {
-    let sections = Search.sections(for: "zz zz", apps: apps, running: [], quicklinks: links)
+    let sections = Search.sections(for: "zz zz", apps: apps, quicklinks: links)
     #expect(sections.map(\.title) == ["Use “zz zz” with…"])
     #expect(
       sections[0].results.first?.action == .open(URL(string: "https://google.com/?q=zz%20zz")!))
-    #expect(Search.sections(for: "zzzz", apps: apps, running: [], quicklinks: []).isEmpty)
+    #expect(Search.sections(for: "zzzz", apps: apps, quicklinks: []).isEmpty)
   }
 
   @Test func emptyQueryShowsNothing() {

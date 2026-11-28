@@ -481,6 +481,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
     directory: URL.applicationSupportDirectory.appending(path: "Ripcord/Clipboard"))
   private var colors = ColorHistory(
     fileURL: URL.applicationSupportDirectory.appending(path: "Ripcord/colors.json"))
+  /// What's opened from the root search, for its Suggestions.
+  private var rankingStore = RankingStore(
+    fileURL: URL.applicationSupportDirectory.appending(path: "Ripcord/ranking.json"))
   /// Forms left unfinished, listed under Drafts in the root search.
   private var draftStore = DraftStore(
     fileURL: URL.applicationSupportDirectory.appending(path: "Ripcord/drafts.json"))
@@ -846,24 +849,15 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     // No rows behind the form, so ⌘K and row shortcuts have nothing to act on.
     if model.mode.isForm || model.mode == .scriptOutput { return [] }
-    let running = NSWorkspace.shared.runningApplications
-      .filter { $0.activationPolicy == .regular }
-      .compactMap { app in
-        app.bundleURL.map {
-          AppEntry(
-            url: $0, names: [app.localizedName ?? $0.lastPathComponent],
-            bundleID: app.bundleIdentifier)
-        }
-      }
     // Menu bar apps too, as Raycast offers them Quit; not Ripcord, which Restart would wait inside.
     let runningKeys = Set(
       NSWorkspace.shared.runningApplications.filter { $0 != .current }.compactMap {
         $0.bundleIdentifier ?? $0.bundleURL?.path
       })
     return Search.sections(
-      for: query, apps: apps, running: running, quicklinks: quicklinks, items: items,
+      for: query, apps: apps, quicklinks: quicklinks, items: items,
       favorites: favorites, drafts: draftStore.drafts, scripts: scripts, lidAwake: lidAwakeStatus,
-      runningKeys: runningKeys)
+      runningKeys: runningKeys, ranking: rankingStore.ranking)
   }
 
   private func handle(_ command: SearchCommand) {
@@ -952,6 +946,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
         flags.contains($0.0)
       }.map(\.1).joined()
       let action = held.isEmpty ? nil : selected.actions.first { $0.shortcut == held + "↵" }
+      if action == nil { rank(selected) }
       perform(action?.action ?? selected.action)
     case .cancel:
       if let list = model.returnsTo, model.mode.isForm {
@@ -987,7 +982,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
       chooseArgument(choice)
     case .closeArgumentMenu:
       model.argumentMenu = nil
-    case .activate(let id): model.results.first { $0.id == id }.map { perform($0.action) }
+    case .activate(let id):
+      guard let row = model.results.first(where: { $0.id == id }) else { return }
+      rank(row)
+      perform(row.action)
     case .toggleMenu(let root): toggleMenu(root: root)
     case .filterClipType(let type):
       model.clipType = type
@@ -1635,8 +1633,20 @@ final class LauncherController: NSObject, NSWindowDelegate {
     return true
   }
 
-  /// Selects the row of the item with `key` after a favorite moved it: its row ID can differ
-  /// between Running and Favorites, as a running app's path does.
+  /// A row opened from the root search, by Return or a click, as Raycast ranks its Suggestions.
+  private func rank(_ row: SearchResult) {
+    guard model.mode == .root, let key = row.rankingKey else { return }
+    editRanking { $0.record(key) }
+  }
+
+  private func editRanking(_ change: (inout Ranking) -> Void) {
+    var ranking = rankingStore.ranking
+    change(&ranking)
+    do { try rankingStore.save(ranking) } catch { onError(error.localizedDescription) }
+  }
+
+  /// Selects the row of the item with `key` after a favorite moved it, by its key rather than
+  /// its row ID.
   private func select(itemKey key: String) {
     if let index = model.results.firstIndex(where: { $0.itemKey == key }) {
       model.selection = index
@@ -2015,6 +2025,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
       }
       return select(itemKey: key)
     }
+    if case .resetRanking(let key) = action {
+      model.menu = nil
+      editRanking { $0.reset(key) }
+      return refreshRows()
+    }
     if case .moveFavorite(let key, let other) = action {
       model.menu = nil
       if !editSettings({
@@ -2352,7 +2367,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,
       .openDraft, .discardDraft, .runScript, .run(.searchNotes), .deleteNote, .copyNoteAsMenu,
       .duplicateNote, .deleteAllNotes,
-      .moveFavorite,
+      .moveFavorite, .resetRanking,
       .deleteColor, .toggleFavoriteColor, .deleteAllColors, .submenu, .saveAsSnippet,
       .run(.createSnippet), .clip, .snippet, .system, .window:
       break  // Handled above, without hiding the panel.

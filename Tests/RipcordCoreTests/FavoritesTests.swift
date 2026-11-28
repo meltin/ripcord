@@ -9,8 +9,10 @@ import Testing
   let link = Quicklink(name: "Docs", url: "https://docs.example/?q={query}", keyword: "d")
 
   func root(_ favorites: [String]) -> [SearchSection] {
-    Search.sections(
-      for: "", apps: [app], running: [app], quicklinks: [link], favorites: favorites)
+    var ranking = Ranking()
+    ranking.record(app.settingsKey)
+    return Search.sections(
+      for: "", apps: [app], quicklinks: [link], favorites: favorites, ranking: ranking)
   }
 
   @Test func listsFavoritesFirstInTheirOrderAndNotAgain() {
@@ -19,21 +21,21 @@ import Testing
     #expect(sections.map(\.title) == ["Favorites", "Quicklinks"])
     #expect(sections[0].results.map(\.title) == ["Search Snippets", "Rex"])
     // Nothing favorited: no section.
-    #expect(root([]).map(\.title) == ["Running", "Quicklinks"])
+    #expect(root([]).map(\.title) == ["Suggestions", "Quicklinks"])
     // A key that's gone (an app uninstalled) is skipped.
-    #expect(root(["app:/Gone.app"]).map(\.title) == ["Running", "Quicklinks"])
+    #expect(root(["app:/Gone.app"]).map(\.title) == ["Suggestions", "Quicklinks"])
   }
 
   @Test func offersRaycastsFavoriteActions() throws {
     let rex = try #require(root([]).first?.results.first)
     let add = try #require(rex.actions.first { $0.title == "Add to Favorites" })
     #expect(add.shortcut == "⇧⌘F")
-    // A Running row's: Configure Command…, then its Hide to Restart, then Disable Command.
+    // A suggested row's: Reset Ranking after Configure Command…, as Raycast's.
     #expect(
-      rex.actions.suffix(6).map(\.title) == [
-        "Configure Command…", "Hide Application", "Quit Application", "Force Quit Application",
-        "Restart Application", "Disable Command",
+      rex.actions.suffix(3).map(\.title) == [
+        "Configure Command…", "Reset Ranking", "Disable Command",
       ])
+    #expect(rex.actions.first { $0.title == "Reset Ranking" }?.action == .resetRanking("rex"))
     #expect(rex.actions.first { $0.title == "Show in Finder" }?.shortcut == "⌘↵")
     let snippets = BuiltinCommand.searchSnippets.settingsKey
     let favorites = try #require(root([snippets, app.settingsKey]).first?.results)
@@ -67,15 +69,6 @@ import Testing
     #expect(
       favorites[1].actions.first { $0.title == "Move Favorite Up" }?.action
         == .moveFavorite(app.settingsKey, swappingWith: snippets))
-    // A running app the index never scanned stays under Running, where it can be removed.
-    let elsewhere = AppEntry(
-      url: URL(fileURLWithPath: "/Users/me/Downloads/Tool.app"), names: ["Tool"], bundleID: "tool")
-    let sections = Search.sections(
-      for: "", apps: [app], running: [elsewhere], quicklinks: [], favorites: [elsewhere.settingsKey]
-    )
-    #expect(sections.map(\.title) == ["Running"])
-    // Settings can't turn it back on, so it can't be turned off here; a scanned one can.
-    #expect(sections[0].results[0].actions.allSatisfy { $0.title != "Disable Command" })
     #expect(root([]).first?.results.first?.actions.last?.title == "Disable Command")
   }
 
