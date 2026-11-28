@@ -753,17 +753,22 @@ public enum Search {
     items: [String: ItemSettings] = [:], favorites: [String] = []
   ) -> [SearchSection] {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
-    let shown = shownFavorites(favorites, among: scanned)
-    let rows = running.enumerated().compactMap { index, app -> (Int, Int, SearchResult)? in
+    // One row per app, though a second copy or a helper can share its key.
+    var seen = Set<String>()
+    let unique = running.filter { seen.insert($0.settingsKey).inserted }
+    let rows = unique.enumerated().compactMap { index, app -> (Int, Int, SearchResult)? in
       let alias = items[app.settingsKey]?.alias
       let names = app.names + [alias].compactMap { $0 }
       let score = trimmed.isEmpty ? 0 : names.compactMap { Fuzzy.score(trimmed, in: $0) }.max()
       guard let score else { return nil }
       let row = result(for: app, alias: alias, isRunning: true)
-      return (
-        score, index,
-        scanned.contains(app.settingsKey) ? withFavoriteActions(row, favorites: shown) : row
-      )
+      guard scanned.contains(app.settingsKey) else { return (score, index, row) }
+      // Without Move Favorite: Favorites' order isn't shown here to move through.
+      var decorated = withFavoriteActions(row, favorites: favorites)
+      decorated.menu = decorated.actions.filter {
+        if case .moveFavorite = $0.action { false } else { true }
+      }
+      return (score, index, decorated)
     }
     .sorted { ($0.0, -$0.1) > ($1.0, -$1.1) }
     .map(\.2)

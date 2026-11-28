@@ -23,6 +23,18 @@ import Testing
     #expect(Search.runningSections(for: "zzqq", running: [rex], scanned: []).isEmpty)
   }
 
+  @Test func listsEachAppOnceWithoutMovingFavorites() throws {
+    #expect(
+      Search.runningSections(for: "", running: [rex, rex], scanned: ["rex"])[0].results.count == 1)
+    // A favorite here can be removed, not moved: Favorites' order isn't shown.
+    let favorites = [BuiltinCommand.searchSnippets.settingsKey, "rex"]
+    let row = try #require(
+      Search.runningSections(for: "", running: [rex], scanned: ["rex"], favorites: favorites)
+        .first?.results.first)
+    #expect(row.actions.contains { $0.title == "Remove from Favorites" })
+    #expect(!row.actions.contains { $0.title.hasPrefix("Move Favorite") })
+  }
+
   @Test func leavesFavoritesAndDisableOffAnUnscannedApp() throws {
     // Settings doesn't list it, so nothing it turns off or pins could be undone there.
     let row = try #require(
