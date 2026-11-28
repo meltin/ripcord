@@ -452,6 +452,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
   case bookmarks = "Bookmarks"
   case notes = "Notes"
   case dummyText = "Lorem Ipsum Generator JP"
+  case datePicker = "Date Picker"
   case scripts = "Script Commands"
   case emoji = "Emoji & Symbols"
   case cleanShot = "CleanShot X"
@@ -479,6 +480,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .bookmarks: "bookmark.fill"
     case .notes: "note.text"
     case .dummyText: "textformat"
+    case .datePicker: "calendar"
     case .emoji: "face.smiling"
     case .scripts: "terminal"
     case .cleanShot: "camera.viewfinder"
@@ -503,6 +505,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .bookmarks: .yellow
     case .notes: .orange
     case .dummyText: .purple
+    case .datePicker: .red
     case .emoji: .orange
     case .scripts: .gray
     case .cleanShot: .purple
@@ -550,6 +553,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
       "Notes in a floating window, each kept as a Markdown file in ~/.config/ripcord/notes."
     case .dummyText:
       "Japanese or English filler text of the length you type, pasted or copied."
+    case .datePicker:
+      "Pick days on a calendar and paste them, written in the format below."
     case .cleanKeyboard:
       "Turn the keyboard off for a while to wipe it, as in “clean keyboard 30s”; ⌃⌥⌘↩ turns it back on early."
     case .colorPicker:
@@ -564,7 +569,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case .clipboardHistory, .snippets, .repositories, .coffee, .sleepTimer, .lidAwake,
       .httpStatusCodes,
       .colorPicker, .cleanKeyboard, .bookmarks, .notes, .emoji, .ripcord, .dummyText, .quicklinks,
-      .scripts:
+      .scripts, .datePicker:
       Set(BuiltinCommand.allCases.filter { $0.settingsPage == self }.map(\.settingsKey))
     case .systemActions:
       Set(SystemAction.allCases.map(\.settingsKey)).union(
@@ -757,6 +762,16 @@ private enum SettingText {
   static let dummyTextLanguage = SettingsSearch.Item(
     title: "Default Language",
     detail: "What Generate Dummy Text writes in when its menu is left alone.")
+  static let dateFormat = SettingsSearch.Item(
+    title: "Format", detail: "How a day is written, as a pattern like yyyy/MM/dd(E).")
+  static let datePrimaryAction = SettingsSearch.Item(
+    title: "Primary Action", detail: "What Return does; the other is on ⌘↵.")
+  static let dateSeparator = SettingsSearch.Item(
+    title: "Separator", detail: "Between the days picked with ⌘-click.")
+  static let dateRangeSeparator = SettingsSearch.Item(
+    title: "Range Separator", detail: "Between a range's ends, picked with ⇧-click.")
+  static let dateRangeSpaces = SettingsSearch.Item(
+    title: "Spaces Around Range Separator", detail: "A space either side, as 11/24 〜 11/28.")
   static let openWith = SettingsSearch.Item(
     title: "Open With",
     detail: "The app each Return opens a repository in; ↵ without one shows it in Finder.")
@@ -789,6 +804,11 @@ extension SettingsPage {
       case .scripts: [SettingText.scriptFolders]
       case .repositories: [SettingText.repositoryFolders, SettingText.openWith]
       case .dummyText: [SettingText.dummyTextLanguage]
+      case .datePicker:
+        [
+          SettingText.dateFormat, SettingText.datePrimaryAction, SettingText.dateSeparator,
+          SettingText.dateRangeSeparator, SettingText.dateRangeSpaces,
+        ]
       case .windowManagement: [SettingText.windowGap, SettingText.screenGap, SettingText.cycling]
       case .emoji:
         [
@@ -850,6 +870,7 @@ extension BuiltinCommand {
     case .createQuicklink, .searchQuicklinks, .importQuicklinks, .exportQuicklinks: .quicklinks
     case .ripcordNotes, .createNote, .searchNotes: .notes
     case .generateDummyText: .dummyText
+    case .pickDate: .datePicker
     case .runningApplications: .systemActions
     case .searchEmoji: .emoji
     case .searchScriptCommands: .scripts
@@ -1027,6 +1048,12 @@ struct SettingsView: View {
               }
             }
             CommandsList(model: model, page: .dummyText)
+          }
+        case .datePicker:
+          PageScroll(model: model) {
+            PageHeader(page: .datePicker)
+            DatePickerSettingsCard(settings: $model.config.datePicker)
+            CommandsList(model: model, page: .datePicker)
           }
         case .repositories:
           PageScroll(model: model) {
@@ -2852,6 +2879,91 @@ private struct NotesZoomRow: View {
 }
 
 /// Search Emoji & Symbols' Column Count, Primary Action and Emoji Skin Tone, as Raycast's.
+/// Pick Date's format, by preset or typed, its Return and the separators.
+private struct DatePickerSettingsCard: View {
+  @Binding var settings: DatePickerSettings
+  /// Custom picked while the pattern is still a preset's, so its field shows to edit.
+  @State private var custom = false
+
+  private static let customTag = ""
+  private var isCustom: Bool { custom || !DatePickerSettings.presets.contains(settings.format) }
+
+  var body: some View {
+    Card {
+      SettingRow(
+        title: SettingText.dateFormat.title, description: SettingText.dateFormat.detail
+      ) {
+        Picker(
+          SettingText.dateFormat.title,
+          selection: Binding(
+            get: { isCustom ? Self.customTag : settings.format },
+            set: { picked in
+              custom = picked == Self.customTag
+              if !custom { settings.format = picked }
+            })
+        ) {
+          // Each as today comes out in it.
+          ForEach(DatePickerSettings.presets, id: \.self) { preset in
+            Text(DatePickerSettings(format: preset).text(of: .now)).tag(preset)
+          }
+          Divider()
+          Text("Custom").tag(Self.customTag)
+        }
+        .labelsHidden()
+        .fixedSize()
+      }
+      if isCustom {
+        Divider()
+        SettingRow(
+          title: "Custom Format",
+          description: "Today: \(settings.text(of: .now))"
+        ) {
+          field("yyyy/MM/dd(E)", text: $settings.format)
+        }
+      }
+      Divider()
+      SettingRow(
+        title: SettingText.datePrimaryAction.title,
+        description: SettingText.datePrimaryAction.detail
+      ) {
+        Picker(SettingText.datePrimaryAction.title, selection: $settings.primaryAction) {
+          ForEach(ClipboardSettings.PrimaryAction.allCases, id: \.self) { Text($0.title).tag($0) }
+        }
+        .labelsHidden()
+        .fixedSize()
+      }
+      Divider()
+      SettingRow(
+        title: SettingText.dateSeparator.title, description: SettingText.dateSeparator.detail
+      ) {
+        field(", ", text: $settings.separator)
+      }
+      Divider()
+      SettingRow(
+        title: SettingText.dateRangeSeparator.title,
+        description: SettingText.dateRangeSeparator.detail
+      ) {
+        field("〜", text: $settings.rangeSeparator)
+      }
+      Divider()
+      SettingRow(
+        title: SettingText.dateRangeSpaces.title, description: SettingText.dateRangeSpaces.detail
+      ) {
+        Toggle(SettingText.dateRangeSpaces.title, isOn: $settings.spacesAroundRange)
+          .labelsHidden()
+          .toggleStyle(.switch)
+      }
+    }
+  }
+
+  /// Kept as typed, spaces too: ", " joins with a space.
+  private func field(_ prompt: String, text: Binding<String>) -> some View {
+    TextField(prompt, text: text)
+      .textFieldStyle(.roundedBorder)
+      .frame(width: 160)
+  }
+}
+
 private struct EmojiSettingsCard: View {
   @Bindable var model: SettingsModel
 

@@ -31,7 +31,7 @@ struct SearchView: View {
             text: model.query,
             placeholder: model.mode == .pick
               ? model.pickPlaceholder ?? model.mode.placeholder : model.mode.placeholder,
-            sidewaysArrows: model.mode == .emoji,
+            sidewaysArrows: model.mode == .emoji || model.mode == .datePicker,
             takesTab: model.argumentScript != nil,
             // Back from an argument field, it selects what it holds, as Raycast's does.
             caretAtEnd: !model.searchSelectsAll,
@@ -104,6 +104,8 @@ struct SearchView: View {
         ScriptOutputView(output: model.scriptOutput)
       } else if model.mode == .colorWheel {
         ColorWheel()
+      } else if model.mode == .datePicker {
+        DateGrid(dates: model.dates, onCommand: onCommand)
       } else if model.sections.isEmpty {
         EmptyState(query: model.query, mode: model.mode)
       } else if model.mode == .emoji {
@@ -313,7 +315,7 @@ private struct EmptyState: View {
       "Colors you pick with Pick Color show up here."
     case .colors:
       "No color matches “\(query)”."
-    case .colorWheel:
+    case .colorWheel, .datePicker:
       ""
     case .favoriteColors where query.trimmingCharacters(in: .whitespaces).isEmpty:
       "Add colors to your favorites from Color History, with ⇧⌘F."
@@ -678,6 +680,7 @@ extension BuiltinCommand {
     case .searchScriptCommands: "terminal"
     case .ripcordNotes, .searchNotes: "note.text"
     case .generateDummyText: "textformat"
+    case .pickDate: "calendar"
     case .runningApplications: "square.grid.2x2.fill"
     case .createNote: "doc.badge.plus"
     case .addBookmark: "bookmark.circle.fill"
@@ -707,6 +710,7 @@ extension BuiltinCommand {
     case .searchScriptCommands: .gray
     case .ripcordNotes, .createNote, .searchNotes: .orange
     case .generateDummyText: .purple
+    case .pickDate: .red
     case .runningApplications: .blue
     case .httpStatusCodes: .teal
     case .settings, .resetWindowPosition, .checkForUpdates: .gray
@@ -1958,10 +1962,11 @@ private struct Footer: View {
             .frame(width: 18, height: 18)
             .background(command.color.gradient, in: RoundedRectangle(cornerRadius: 5))
           // The emoji picked too, as Raycast names it beside the command.
+          // Pick Date's text in its place: what Return pastes.
           Text(
             mode == .emoji
               ? [command.title, selected?.title].compactMap { $0 }.joined(separator: " – ")
-              : command.title
+              : mode == .datePicker ? selected?.title ?? command.title : command.title
           )
           .foregroundStyle(.secondary)
           .lineLimit(1)
@@ -2568,6 +2573,7 @@ extension LauncherMode {
     case .quicklinks: "Search Quicklinks…"
     case .scriptCommands: "Search Script Commands…"
     case .runningApps: "Search running apps…"
+    case .datePicker: "Pick Date"
     case .scriptOutput: "Script Output"
     case .pick: "Pick a Line…"
     }
@@ -2587,6 +2593,120 @@ private struct LinkIcon<Placeholder: View>: View {
     } else {
       placeholder()
     }
+  }
+}
+
+/// Pick Date's month, six weeks of it: a click picks a day, ⌘-click adds or takes out one,
+/// ⇧-click picks the days from the last one clicked, and a double-click does what Return does.
+private struct DateGrid: View {
+  let dates: DateSelection
+  let onCommand: (SearchCommand) -> Void
+
+  var body: some View {
+    let calendar = dates.calendar
+    // Rotated to the week's first day, as the grid is.
+    let symbols = calendar.veryShortStandaloneWeekdaySymbols
+    let first = calendar.firstWeekday - 1
+    let weekdays = Array(symbols[first...] + symbols[..<first])
+    VStack(spacing: 2) {
+      HStack {
+        HoverButton {
+          onCommand(.showMonth(-1))
+        } label: {
+          Glyph("chevron.left", pointSize: 13).frame(width: 28, height: 28)
+        }
+        .accessibilityLabel("Previous Month")
+        Spacer()
+        Text(dates.month.formatted(.dateTime.year().month(.wide)))
+          .font(.system(size: 14, weight: .semibold))
+        Spacer()
+        HoverButton {
+          onCommand(.showMonth(1))
+        } label: {
+          Glyph("chevron.right", pointSize: 13).frame(width: 28, height: 28)
+        }
+        .accessibilityLabel("Next Month")
+      }
+      HStack(spacing: 0) {
+        ForEach(weekdays.indices, id: \.self) { index in
+          Text(weekdays[index])
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+        }
+      }
+      .frame(height: 20)
+      let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
+      LazyVGrid(columns: columns, spacing: 0) {
+        ForEach(dates.grid, id: \.self) { day in
+          DayCell(day: day, dates: dates, onCommand: onCommand)
+        }
+      }
+    }
+    .padding(.horizontal, 14)
+    .padding(.top, 6)
+    // The footer floats over the bottom.
+    .padding(.bottom, LauncherController.footerHeight)
+    .frame(maxHeight: .infinity, alignment: .top)
+  }
+}
+
+private struct DayCell: View {
+  let day: Date
+  let dates: DateSelection
+  let onCommand: (SearchCommand) -> Void
+
+  var body: some View {
+    let calendar = dates.calendar
+    let picked = dates.isPicked(day)
+    let inMonth = calendar.isDate(day, equalTo: dates.month, toGranularity: .month)
+    // A range's days between its ends are tinted, its ends filled as a single day is.
+    let ends: (start: Date, end: Date)? =
+      if case .range(let a, let b) = dates.picked, a != b { (min(a, b), max(a, b)) } else { nil }
+    let filled = picked && (ends == nil || day == ends?.start || day == ends?.end)
+    Button {
+      // The click's own, as it was made.
+      let event = NSApp.currentEvent
+      let flags = event?.modifierFlags ?? NSEvent.modifierFlags
+      let command = flags.contains(.command)
+      let shift = flags.contains(.shift)
+      onCommand(.pickDay(day, command: command, shift: shift))
+      // A double-click does what Return does, on the day clicked, as a list's row opens.
+      if event?.clickCount == 2, !command, !shift { onCommand(.submit) }
+    } label: {
+      // The number alone: Japanese's day format adds 日.
+      Text("\(calendar.component(.day, from: day))")
+        .font(
+          .system(size: 14, weight: filled || calendar.isDateInToday(day) ? .semibold : .regular)
+        )
+        .foregroundStyle(
+          filled
+            ? AnyShapeStyle(.white)
+            : calendar.isDateInToday(day)
+              ? AnyShapeStyle(.red) : inMonth ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary)
+        )
+        .frame(width: 36, height: 36)
+        .background(filled ? Color.accentColor : .clear, in: RoundedRectangle(cornerRadius: 9))
+        .frame(maxWidth: .infinity)
+        .frame(height: 41)
+        .background {
+          if picked, let ends {
+            // The band runs through the range, from the middle of its first day to its last.
+            GeometryReader { proxy in
+              Color.accentColor.opacity(0.18)
+                .frame(
+                  width: day == ends.start || day == ends.end
+                    ? proxy.size.width / 2 : proxy.size.width
+                )
+                .frame(
+                  maxWidth: .infinity, alignment: day == ends.start ? .trailing : .leading)
+            }
+            .padding(.vertical, 4)
+          }
+        }
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
   }
 }
 

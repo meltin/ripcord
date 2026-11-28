@@ -395,6 +395,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       launcher.favorites = config.favorites
       launcher.scriptFolders = config.scriptFolders
       launcher.dummyTextLanguage = config.dummyTextLanguage
+      launcher.datePickerSettings = config.datePicker
       launcher.clipboardSettings = config.clipboardHistory
       launcher.backdrop = config.backdrop
       launcher.cycleHalves = config.cycleHalves
