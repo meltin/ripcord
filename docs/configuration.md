@@ -30,6 +30,8 @@ the settings window opens. The settings window writes every change back to it.
     "showDeleteWarning": true
   },
   "dummyTextLanguage": "ja",
+  "datePicker": { "format": "yyyy/MM/dd(E)", "primaryAction": "paste", "separator": ", ",
+    "rangeSeparator": "〜", "spacesAroundRange": false },
   "clipboardHistory": { "keepFor": "unlimited", "maxEntries": 300 },
   "backdrop": "off",
   "cycleHalves": true,

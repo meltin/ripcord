@@ -106,6 +106,11 @@
     <td><b>HTTP Status Codes</b></td>
     <td>HTTP ステータスコードを番号か名前で調べる。</td>
   </tr>
+  <tr>
+    <td><img src="./docs/icons/date-picker.svg" width="24" height="24" alt=""></td>
+    <td><b>Date Picker</b></td>
+    <td>カレンダーで日を選び、決めた書式で貼り付ける。</td>
+  </tr>
 </table>
 
 これらの拡張機能は今は本体に組み込んでいます。いずれ拡張機能の規格を決めて、別のリポジトリに分ける予定です。

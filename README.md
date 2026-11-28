@@ -107,6 +107,11 @@ them made to work as Raycast's do:
     <td><b>HTTP Status Codes</b></td>
     <td>Look up a status code by number or name.</td>
   </tr>
+  <tr>
+    <td><img src="./docs/icons/date-picker.svg" width="24" height="24" alt=""></td>
+    <td><b>Date Picker</b></td>
+    <td>Pick days on a calendar and paste them in your format.</td>
+  </tr>
 </table>
 
 These extensions are built in for now. Once an extension format is settled, they'll move to a
