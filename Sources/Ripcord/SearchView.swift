@@ -2670,9 +2670,10 @@ private struct DayCell: View {
       let flags = event?.modifierFlags ?? NSEvent.modifierFlags
       let command = flags.contains(.command)
       let shift = flags.contains(.shift)
+      // A double-click does what Return does, as a list's row opens. Only that: its first click
+      // picked the day, and may have turned the grid to that day's month, under the pointer.
+      if event?.clickCount == 2, !command, !shift { return onCommand(.submit) }
       onCommand(.pickDay(day, command: command, shift: shift))
-      // A double-click does what Return does, on the day clicked, as a list's row opens.
-      if event?.clickCount == 2, !command, !shift { onCommand(.submit) }
     } label: {
       // The number alone: Japanese's day format adds 日.
       Text("\(calendar.component(.day, from: day))")
