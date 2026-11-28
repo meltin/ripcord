@@ -415,6 +415,24 @@ private func temporaryDirectory() -> URL {
     #expect(formatted.actions[3].title == "Paste as Plain Text to App")
   }
 
+  /// An image or a file has no formatting to keep: "Paste to App", and no ⌃⌘↵.
+  @Test func imagesAndFilesPasteAsTheyAre() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var history = ClipboardHistory(directory: directory)
+    try history.add(.files([URL(fileURLWithPath: "/tmp/a.txt")]))
+    let file = try #require(
+      Search.clipboardSections(for: "", history: history).first?.results.first)
+    #expect(file.actions[0].title == "Paste to App")
+    #expect(!file.actions.contains { $0.shortcut == "⌃⌘↵" })
+    let image = SearchResult.clipMenu(
+      id: UUID(), isPinned: false, isText: false, link: nil, settings: ClipboardSettings())
+    #expect(
+      image.map(\.title).prefix(3) == [
+        "Paste to App", "Copy to Clipboard", "Paste and Keep Window Open",
+      ])
+  }
+
   /// A copied link alone gets Open in Browser (⌘O); text with a link in it doesn't.
   @Test func offersOpenInBrowserForALink() throws {
     let directory = temporaryDirectory()

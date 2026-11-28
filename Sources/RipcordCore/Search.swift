@@ -434,7 +434,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case .clip(let id, let clipAction):
       // Without the settings, as Clipboard History's rows carry their own menu.
       return Self.clipMenu(
-        id: id, isPinned: isPinned, link: nil,
+        id: id, isPinned: isPinned, isText: kind == .text, link: nil,
         settings: ClipboardSettings(primaryAction: clipAction == .copy ? .copy : .paste))
     case .snippet(let index, _):
       return [
@@ -497,25 +497,26 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   }
 
   /// A Clipboard History entry's ⌘K, as Raycast's: its pastes and copy first, Open in Browser for
-  /// a link, then Pin Entry and the deletes. "to App" is the app the paste lands in.
+  /// a link, then Pin Entry and the deletes. "to App" is the app the paste lands in. Only text has
+  /// formatting to keep or leave out, so only text gets the plain-text wording and ⌃⌘↵.
   public static func clipMenu(
-    id: UUID, isPinned: Bool, link: URL?, settings: ClipboardSettings
+    id: UUID, isPinned: Bool, isText: Bool, link: URL?, settings: ClipboardSettings
   ) -> [MenuAction] {
-    let plain = settings.preferPlainText
+    let plain = isText && settings.preferPlainText
     let paste = MenuAction(
       title: plain ? "Paste as Plain Text to App" : "Paste to App", symbol: "return",
       shortcut: settings.primaryAction == .copy ? "⌘↵" : "↵", action: .clip(id, .paste))
     let copy = MenuAction(
       title: "Copy to Clipboard", symbol: "doc.on.doc",
       shortcut: settings.primaryAction == .copy ? "↵" : "⌘↵", action: .clip(id, .copy))
+    let other = MenuAction(
+      title: plain ? "Paste to App" : "Paste as Plain Text to App", symbol: "return",
+      shortcut: "⌃⌘↵", action: .clip(id, .pasteOtherFormat))
     return (settings.primaryAction == .copy ? [copy, paste] : [paste, copy]) + [
       MenuAction(
         title: "Paste and Keep Window Open", symbol: "return", shortcut: "⌥↵",
-        action: .clip(id, .pasteKeepingOpen)),
-      MenuAction(
-        title: plain ? "Paste to App" : "Paste as Plain Text to App", symbol: "return",
-        shortcut: "⌃⌘↵", action: .clip(id, .pasteOtherFormat)),
-    ]
+        action: .clip(id, .pasteKeepingOpen))
+    ] + (isText ? [other] : [])
       + [
         link.map {
           MenuAction(
@@ -954,7 +955,9 @@ public enum Search {
             id: id, title: String(line.prefix(200)), subtitle: "", keyword: nil, kind: .text,
             action: action,
             menu: SearchResult.clipMenu(
-              id: item.id, isPinned: item.isPinned, link: link(in: text),
+              id: item.id, isPinned: item.isPinned, isText: true,
+              link: ClipType.isLink(text)
+                ? URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) : nil,
               settings: history.settings), isPinned: item.isPinned)
         )
       case .image(_, let width, let height):
@@ -973,7 +976,8 @@ public enum Search {
             keyword: nil, kind: .image,
             action: action, thumbnail: history.imageURL(of: item),
             menu: SearchResult.clipMenu(
-              id: item.id, isPinned: item.isPinned, link: nil, settings: history.settings),
+              id: item.id, isPinned: item.isPinned, isText: false, link: nil,
+              settings: history.settings),
             isPinned: item.isPinned)
         )
       case .files(let paths):
@@ -993,7 +997,8 @@ public enum Search {
             id: id, title: title, subtitle: folder ?? "", keyword: nil, kind: .file,
             action: action, thumbnail: paths.first.map { URL(fileURLWithPath: $0) },
             menu: SearchResult.clipMenu(
-              id: item.id, isPinned: item.isPinned, link: nil, settings: history.settings),
+              id: item.id, isPinned: item.isPinned, isText: false, link: nil,
+              settings: history.settings),
             isPinned: item.isPinned)
         )
       }
@@ -1010,15 +1015,6 @@ public enum Search {
         title: title, results: unpinned.filter { day(of: $0.item) == title }.map(\.result))
     }
     return ([SearchSection(title: "Pinned", results: pinned)] + days).filter { !$0.results.isEmpty }
-  }
-
-  /// The web link a copied text is, alone: Clipboard History's Open in Browser.
-  static func link(in text: String) -> URL? {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.contains(where: \.isWhitespace), let url = URL(string: trimmed),
-      ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host() != nil
-    else { return nil }
-    return url
   }
 
   /// Search Snippets' list: snippets whose name, keyword or text contains the query, by name; an
