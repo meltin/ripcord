@@ -44,29 +44,48 @@ public struct DatePickerSettings: Codable, Equatable, Sendable {
         ?? defaults.spacesAroundRange)
   }
 
+  /// The Gregorian calendar in the Mac's time zone and week: yyyy is 2026 with the Japanese or
+  /// Buddhist calendar picked in System Settings too.
+  public static var calendar: Calendar {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = .current
+    calendar.locale = .current
+    calendar.firstWeekday = Calendar.current.firstWeekday
+    return calendar
+  }
+
   /// `day` in the format; the default one while the pattern is left empty.
-  public func text(of day: Date, calendar: Calendar = .current, locale: Locale = .current)
+  public func text(of day: Date, calendar: Calendar = calendar, locale: Locale = .current)
     -> String
   {
+    formatter(calendar: calendar, locale: locale).string(from: day)
+  }
+
+  /// What Pick Date pastes: the days earliest first, or a range's first and last day. An emptied
+  /// separator writes its default, as an emptied format does.
+  public func text(for selection: DateSelection, locale: Locale = .current) -> String {
+    let formatter = formatter(calendar: selection.calendar, locale: locale)
+    let defaults = Self()
+    switch selection.picked {
+    case .days(let days):
+      return days.sorted().map(formatter.string(from:))
+        .joined(separator: separator.isEmpty ? defaults.separator : separator)
+    case .range(let start, let end):
+      let mark = rangeSeparator.isEmpty ? defaults.rangeSeparator : rangeSeparator
+      let between = spacesAroundRange ? " \(mark) " : mark
+      return formatter.string(from: min(start, end)) + between
+        + formatter.string(from: max(start, end))
+    }
+  }
+
+  private func formatter(calendar: Calendar, locale: Locale) -> DateFormatter {
     let formatter = DateFormatter()
     formatter.calendar = calendar
     formatter.timeZone = calendar.timeZone
     formatter.locale = locale
     formatter.dateFormat =
       format.trimmingCharacters(in: .whitespaces).isEmpty ? Self.defaultFormat : format
-    return formatter.string(from: day)
-  }
-
-  /// What Pick Date pastes: the days earliest first, or a range's first and last day.
-  public func text(for selection: DateSelection, locale: Locale = .current) -> String {
-    let write = { text(of: $0, calendar: selection.calendar, locale: locale) }
-    switch selection.picked {
-    case .days(let days):
-      return days.sorted().map(write).joined(separator: separator)
-    case .range(let start, let end):
-      let between = spacesAroundRange ? " \(rangeSeparator) " : rangeSeparator
-      return write(min(start, end)) + between + write(max(start, end))
-    }
+    return formatter
   }
 }
 
@@ -86,7 +105,7 @@ public struct DateSelection: Equatable, Sendable {
   /// The first of the month the calendar shows.
   public private(set) var month: Date
 
-  public init(day: Date = .now, calendar: Calendar = .current) {
+  public init(day: Date = .now, calendar: Calendar = DatePickerSettings.calendar) {
     self.calendar = calendar
     let start = calendar.startOfDay(for: day)
     cursor = start
@@ -106,7 +125,8 @@ public struct DateSelection: Equatable, Sendable {
   public mutating func click(_ day: Date, command: Bool = false, shift: Bool = false) {
     let day = calendar.startOfDay(for: day)
     if shift {
-      picked = .range(cursor, day)
+      // From the day itself to itself is that day alone, not a range of one.
+      picked = day == cursor ? .days([day]) : .range(cursor, day)
     } else if command {
       var days = Set(pickedDays)
       // The last one stays: there'd be nothing to paste.

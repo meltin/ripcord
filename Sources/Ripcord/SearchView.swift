@@ -2672,7 +2672,9 @@ private struct DayCell: View {
       let shift = flags.contains(.shift)
       // A double-click does what Return does, as a list's row opens. Only that: its first click
       // picked the day, and may have turned the grid to that day's month, under the pointer.
-      if event?.clickCount == 2, !command, !shift { return onCommand(.submit) }
+      // Only a mouse event has a click count: a VoiceOver press would raise reading it.
+      let isMouse = [.leftMouseDown, .leftMouseUp].contains(event?.type)
+      if isMouse, event?.clickCount == 2, !command, !shift { return onCommand(.submit) }
       onCommand(.pickDay(day, command: command, shift: shift))
     } label: {
       // The number alone: Japanese's day format adds 日.
@@ -2708,6 +2710,9 @@ private struct DayCell: View {
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    // The whole date, as the number alone reads the same in either month.
+    .accessibilityLabel(day.formatted(date: .complete, time: .omitted))
+    .accessibilityAddTraits(picked ? .isSelected : [])
   }
 }
 

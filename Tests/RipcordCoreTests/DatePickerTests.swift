@@ -44,7 +44,7 @@ struct DatePickerTests {
     dates.click(try day(11, 3), command: true)
     dates.click(try day(11, 28), command: true)
     #expect(text(dates) == "2026/11/28(土)")
-    // A day taken out isn't where a range starts: it goes on from the last one added.
+    // A day taken out isn't where a range starts: it goes on from the latest day still picked.
     dates.click(try day(11, 20), command: true)
     dates.click(try day(11, 20), command: true)
     dates.click(try day(11, 26), shift: true)
@@ -57,11 +57,31 @@ struct DatePickerTests {
     #expect(text(dates) == "2026/11/24(火)〜2026/11/28(土)")
     #expect(dates.isPicked(try day(11, 26)))
     #expect(!dates.isPicked(try day(11, 29)))
+    // An emptied separator writes its default, as an emptied format does.
+    #expect(text(dates, DatePickerSettings(rangeSeparator: "")) == "2026/11/24(火)〜2026/11/28(土)")
     let spaced = DatePickerSettings(rangeSeparator: "-", spacesAroundRange: true)
     #expect(text(dates, spaced) == "2026/11/24(火) - 2026/11/28(土)")
     // ⌘-click after a range keeps its days and adds one.
     dates.click(try day(11, 30), command: true)
     #expect(text(dates, DatePickerSettings(format: "d")) == "24, 25, 26, 27, 28, 30")
+  }
+
+  @Test func writesAShiftClickOnTheSameDayAsThatDay() throws {
+    var dates = DateSelection(day: try day(11, 28), calendar: Self.calendar)
+    dates.click(try day(11, 28), shift: true)
+    #expect(text(dates) == "2026/11/28(土)")
+  }
+
+  @Test func writesTheGregorianYearWhateverTheMacsCalendar() throws {
+    #expect(DatePickerSettings.calendar.identifier == .gregorian)
+    var japanese = Calendar(identifier: .japanese)
+    japanese.timeZone = Self.calendar.timeZone
+    // Without the Gregorian calendar, yyyy would be Reiwa's 8.
+    #expect(
+      DatePickerSettings(format: "yyyy").text(of: try day(11, 28), calendar: Self.calendar)
+        == "2026")
+    #expect(
+      DatePickerSettings(format: "yyyy").text(of: try day(11, 28), calendar: japanese) != "2026")
   }
 
   @Test func showsSixWeeksFromTheWeekTheMonthStartsIn() throws {

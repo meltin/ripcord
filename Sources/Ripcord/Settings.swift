@@ -2878,7 +2878,6 @@ private struct NotesZoomRow: View {
   private var scale: Double { zoom > 0 ? zoom : 1 }
 }
 
-/// Search Emoji & Symbols' Column Count, Primary Action and Emoji Skin Tone, as Raycast's.
 /// Pick Date's format, by preset or typed, its Return and the separators.
 private struct DatePickerSettingsCard: View {
   @Binding var settings: DatePickerSettings
@@ -2964,6 +2963,7 @@ private struct DatePickerSettingsCard: View {
   }
 }
 
+/// Search Emoji & Symbols' Column Count, Primary Action and Emoji Skin Tone, as Raycast's.
 private struct EmojiSettingsCard: View {
   @Bindable var model: SettingsModel
 
