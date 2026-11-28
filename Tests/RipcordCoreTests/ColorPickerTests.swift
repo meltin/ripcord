@@ -94,6 +94,12 @@ import Testing
     }
     #expect(items.map(\.action) == ColorFormat.allCases.map { .copy($0.string(for: orange)) })
     #expect(row.actions[4].action == .deleteColor("#FF8000"))
+    // Favorite Colors lists only what Delete All Colors keeps, so it isn't offered there.
+    try history.toggleFavorite(hex: orange.hex)
+    let favorite = try #require(
+      Search.colorSections(for: "", history: history, format: .rgb, favoritesOnly: true).first?
+        .results.first)
+    #expect(!favorite.actions.contains { $0.title == "Delete All Colors" })
     // Any format matches the search.
     #expect(!Search.colorSections(for: "ff80", history: history, format: .rgb).isEmpty)
     #expect(!Search.colorSections(for: "255, 127", history: history, format: .hex).isEmpty)
