@@ -139,7 +139,7 @@ enum SystemActions {
     }
   }
 
-  private static func relaunch(_ app: NSRunningApplication) -> String? {
+  static func relaunch(_ app: NSRunningApplication) -> String? {
     guard let bundle = app.bundleURL else { return "Couldn't find where the app is." }
     guard app.terminate() else { return "\(app.localizedName ?? "The app") didn't quit." }
     Task { @MainActor in

@@ -269,6 +269,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case deleteAlias(String)
     /// Turns the app, command or Quicklink with this key off, as the On box in Settings does.
     case disableCommand(String)
+    /// Hides, quits, force quits or restarts the running app with this settings key.
+    case controlApp(String, AppControl)
     /// Keeps the Mac awake for this many seconds; nil until Decaffeinate.
     case caffeinate(TimeInterval?)
     /// Sleeps the Mac, or only turns its display off, after this many seconds.
@@ -345,6 +347,11 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case copyDummyText
     /// `ripcord pick`'s line at this index, handed back to the command.
     case pick(Int)
+  }
+
+  /// What a running app's ⌘K does to it, as Raycast's.
+  public enum AppControl: Equatable, Sendable {
+    case hide, quit, forceQuit, restart
   }
 
   public enum SnippetAction: Equatable, Sendable {
@@ -447,6 +454,7 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
               action: .copy($0))
           }
         ].compactMap { $0 } + [settingsKey.map(MenuAction.configure)].compactMap { $0 }
+        + runningAppActions
     case .open(let url) where url.isFileURL:
       return [
         primary,
@@ -505,6 +513,25 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     }
   }
 
+  /// Raycast's, in its order and with its keys, on a running app's row only.
+  private var runningAppActions: [MenuAction] {
+    guard isRunning, let key = settingsKey else { return [] }
+    return [
+      MenuAction(
+        title: "Hide Application", symbol: "eye.slash", shortcut: "⇧⌘H",
+        action: .controlApp(key, .hide), startsSection: true),
+      MenuAction(
+        title: "Quit Application", symbol: "xmark.app.fill", shortcut: "⌃⇧Q",
+        action: .controlApp(key, .quit)),
+      MenuAction(
+        title: "Force Quit Application", symbol: "xmark.app.fill", shortcut: "⌃⌥⇧Q",
+        action: .controlApp(key, .forceQuit)),
+      MenuAction(
+        title: "Restart Application", symbol: "restart", shortcut: "⌘R",
+        action: .controlApp(key, .restart)),
+    ]
+  }
+
   public let id: String
   public let title: String
   public let subtitle: String
@@ -523,6 +550,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   public var menu: [MenuAction]? = nil
   /// An app's key in the settings, for Configure Command…; commands carry theirs in `action`.
   public var settingsKey: String? = nil
+  /// An app that was running when the rows were made, for its Hide, Quit and Restart.
+  public var isRunning = false
 
   /// What its alias and hotkey are kept under: an app's or a command's settings key, or a
   /// Quicklink's row ID; nil for rows that take neither.
@@ -649,7 +678,7 @@ public enum Search {
     for query: String, apps: [AppEntry], running: [AppEntry], quicklinks: [Quicklink],
     items: [String: ItemSettings] = [:], favorites: [String] = [],
     drafts: SavedDrafts = SavedDrafts(), scripts: [ScriptCommand] = [],
-    lidAwake: LidAwakeStatus? = nil
+    lidAwake: LidAwakeStatus? = nil, runningKeys: Set<String> = []
   ) -> [SearchSection] {
     let links = quicklinks.filter(\.isEnabled)
     let trimmed = query.trimmingCharacters(in: .whitespaces)
@@ -658,7 +687,7 @@ public enum Search {
       // its title.
       let found = results(
         for: query, apps: apps, quicklinks: links, items: items, favorites: favorites,
-        scripts: scripts)
+        scripts: scripts, runningKeys: runningKeys)
       guard found.isEmpty else { return [SearchSection(title: "Results", results: found)] }
       // Like Raycast's fallback commands: hand the whole query to each Quicklink.
       let fallbacks = links.compactMap { link in
@@ -673,7 +702,9 @@ public enum Search {
     }
     // Favorites first, as Raycast's; what's there isn't listed again below.
     let byKey = Dictionary(
-      candidates(apps: apps, quicklinks: links, items: items, scripts: scripts).compactMap {
+      candidates(
+        apps: apps, quicklinks: links, items: items, scripts: scripts, runningKeys: runningKeys
+      ).compactMap {
         candidate in
         candidate.result.itemKey.map { ($0, candidate.result) }
       }, uniquingKeysWith: { first, _ in first })
@@ -697,8 +728,8 @@ public enum Search {
           title: "Running",
           results: shownRunning.prefix(5).map {
             withFavoriteActions(
-              result(for: $0, alias: items[$0.settingsKey]?.alias), favorites: shown,
-              disables: scanned.contains($0.settingsKey))
+              result(for: $0, alias: items[$0.settingsKey]?.alias, isRunning: true),
+              favorites: shown, disables: scanned.contains($0.settingsKey))
           }),
         SearchSection(
           title: "Quicklinks",
@@ -782,7 +813,7 @@ public enum Search {
   public static func results(
     for query: String, apps: [AppEntry], quicklinks: [Quicklink],
     items: [String: ItemSettings] = [:], favorites: [String] = [],
-    scripts: [ScriptCommand] = []
+    scripts: [ScriptCommand] = [], runningKeys: Set<String> = []
   ) -> [SearchResult] {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return [] }
@@ -834,7 +865,8 @@ public enum Search {
         action: .lidAwake($0))
     }
 
-    let everything = candidates(apps: apps, quicklinks: links, items: items, scripts: scripts)
+    let everything = candidates(
+      apps: apps, quicklinks: links, items: items, scripts: scripts, runningKeys: runningKeys)
     let shown = shownFavorites(favorites, among: Set(everything.compactMap(\.result.itemKey)))
     let ranked =
       everything
@@ -905,12 +937,14 @@ public enum Search {
   /// commands, System Actions, window layouts, and CleanShot X's commands when it's there.
   static func candidates(
     apps: [AppEntry], quicklinks links: [Quicklink], items: [String: ItemSettings],
-    scripts: [ScriptCommand] = []
+    scripts: [ScriptCommand] = [], runningKeys: Set<String> = []
   ) -> [Candidate] {
     let appCandidates: [Candidate] = apps.compactMap { app in
       let settings = items[app.settingsKey] ?? ItemSettings()
       guard settings.isEnabled else { return nil }
-      return (app.names, settings.alias, result(for: app, alias: settings.alias))
+      let row = result(
+        for: app, alias: settings.alias, isRunning: runningKeys.contains(app.settingsKey))
+      return (app.names, settings.alias, row)
     }
     let linkCandidates: [Candidate] = links.compactMap { link in
       result(for: link).map { ([link.name], link.keyword, $0) }
@@ -1251,10 +1285,14 @@ public enum Search {
     ]
   }
 
-  private static func result(for app: AppEntry, alias: String?) -> SearchResult {
-    SearchResult(
+  private static func result(for app: AppEntry, alias: String?, isRunning: Bool = false)
+    -> SearchResult
+  {
+    var row = SearchResult(
       id: app.url.path, title: app.names[0], subtitle: "", keyword: alias, kind: .application,
       action: .open(app.url), settingsKey: app.settingsKey)
+    row.isRunning = isRunning
+    return row
   }
 
   private static func result(for link: Quicklink) -> SearchResult? {

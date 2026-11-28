@@ -98,6 +98,30 @@ import Testing
     #expect(Search.sections(for: " ", apps: apps, running: [], quicklinks: []).isEmpty)
   }
 
+  @Test func runningAppGetsRaycastsQuitActions() throws {
+    // Matched by settings key: Safari runs from another path than the one scanned.
+    let key = apps[0].settingsKey
+    let app = try #require(
+      Search.results(for: "safari", apps: apps, quicklinks: [], runningKeys: [key]).first)
+    let titles = app.actions.map(\.title)
+    let configure = try #require(titles.firstIndex(of: "Configure Command…"))
+    #expect(
+      Array(titles[(configure + 1)...]) == [
+        "Hide Application", "Quit Application", "Force Quit Application", "Restart Application",
+        "Disable Command",
+      ])
+    #expect(
+      app.actions.suffix(5).map(\.shortcut) == ["⇧⌘H", "⌃⇧Q", "⌃⌥⇧Q", "⌘R", "⌃⇧⌘D"])
+    #expect(app.actions[configure + 1].startsSection)
+    #expect(app.actions[configure + 3].action == .controlApp(key, .forceQuit))
+    // The empty search's Running rows are running by definition.
+    let running = Search.sections(for: "", apps: apps, running: [apps[0]], quicklinks: [])
+    #expect(running[0].results[0].actions.contains { $0.title == "Quit Application" })
+    // Not running: none of them.
+    let idle = try #require(Search.results(for: "safari", apps: apps, quicklinks: []).first)
+    #expect(!idle.actions.contains { $0.title == "Hide Application" })
+  }
+
   @Test func actionsPutPrimaryFirst() throws {
     let app = try #require(Search.results(for: "safari", apps: apps, quicklinks: []).first)
     // Raycast's actions, keys and order. Copy Bundle Identifier is there only when the app's
