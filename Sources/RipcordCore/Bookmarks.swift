@@ -425,21 +425,25 @@ extension Search {
     let menu = [
       MenuAction(
         title: "Open in Browser", symbol: "safari", shortcut: "↵", action: .open(bookmark.url)),
+      // MarkMarks' keys; ⌘C copies only while no text is selected in the search field.
       MenuAction(
-        title: "Copy URL", symbol: "link", shortcut: "⇧⌘C",
+        title: "Copy URL", symbol: "link", shortcut: "⌘C",
         action: .copy(bookmark.url.absoluteString)),
       MenuAction(
-        title: "Copy Title", symbol: "doc.on.doc", shortcut: "⌥⌘C", action: .copy(bookmark.title)),
+        title: "Copy Title", symbol: "doc.on.doc", shortcut: "⇧⌘C", action: .copy(bookmark.title)),
       MenuAction(
         title: "Edit Bookmark", symbol: "pencil", shortcut: "⌘E",
         action: .editBookmark(line: bookmark.line, text: bookmark.text), startsSection: true),
       MenuAction(
-        title: "Move to Group…", symbol: "arrow.turn.up.right", shortcut: "⇧⌘M",
+        title: "Move to Group…", symbol: "arrow.turn.up.right", shortcut: "⌘M",
         action: .moveBookmarkMenu(line: bookmark.line, text: bookmark.text)),
+      // ⌃X, not MarkMarks' ⌘⌫: that clears the search field, and the delete isn't asked first.
       MenuAction(
         title: "Delete Bookmark", symbol: "trash", shortcut: "⌃X",
-        action: .deleteBookmark(line: bookmark.line, text: bookmark.text), isDestructive: true,
-        startsSection: true),
+        action: .deleteBookmark(line: bookmark.line, text: bookmark.text), isDestructive: true),
+      MenuAction(
+        title: "Reveal Bookmarks File in Finder", symbol: "folder", shortcut: "⇧⌘O",
+        action: .revealBookmarksFile, startsSection: true),
     ]
     // With the line's text, so an edit that keeps the URL still redraws the row.
     return SearchResult(

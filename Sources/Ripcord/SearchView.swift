@@ -479,7 +479,7 @@ private struct ResultIcon: View {
       tile(action.symbol, .gray)
     case .window(let layout):
       tile(layout.symbol, .indigo)
-    case .reveal:
+    case .reveal, .revealBookmarksFile:
       tile("folder", .gray)
     case .showInfo:
       tile("info.circle", .gray)

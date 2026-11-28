@@ -59,6 +59,8 @@ import Testing
         == .open(
           URL(string: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/404")!))
     #expect(row.actions.map(\.title) == ["Open in Browser", "Copy Code", "Copy Name"])
+    // Copy Code on ⌘↵, as Raycast's.
+    #expect(row.actions.map(\.shortcut) == ["↵", "⌘↵", "⌥⌘C"])
     #expect(row.actions.map(\.action).dropFirst() == [.copy("404"), .copy("Not Found")])
     #expect(row.subtitle == "The server can't find the resource.")
   }

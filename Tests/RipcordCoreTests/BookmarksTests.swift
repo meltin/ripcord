@@ -102,7 +102,10 @@ import Testing
       ])
     let row = Search.bookmarkSections(for: "swift", file: file)[0].results[0]
     #expect(row.action == .open(URL(string: "https://swift.org")!))
-    #expect(row.actions.last?.action == .deleteBookmark(line: 3, text: file.bookmarks[0].text))
+    // MarkMarks' keys, but Delete Bookmark on ⌃X; Reveal Bookmarks File in Finder last.
+    #expect(row.actions.map(\.shortcut) == ["↵", "⌘C", "⇧⌘C", "⌘E", "⌘M", "⌃X", "⇧⌘O"])
+    #expect(row.actions[5].action == .deleteBookmark(line: 3, text: file.bookmarks[0].text))
+    #expect(row.actions.last?.action == .revealBookmarksFile)
   }
 
   // MARK: Saving and moving

@@ -305,6 +305,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case duplicateQuicklink(index: Int, name: String)
     /// Deletes every Quicklink: always asked first, then done.
     case deleteAllQuicklinks(confirmed: Bool)
+    /// The bookmarks file, selected in Finder, as MarkMarks' Reveal Bookmarks File in Finder.
+    case revealBookmarksFile
     /// Removes a bookmark's line from bookmarks.md, if it still holds `text`.
     case deleteBookmark(line: Int, text: String)
     /// Opens the form on the bookmark on `line`, if it still holds `text`.
@@ -1173,7 +1175,7 @@ public enum Search {
       let remote = repository.remote.map { page in
         MenuAction(
           title: page.host() == "github.com" ? "Open on GitHub" : "Open Remote", symbol: "globe",
-          shortcut: "⌘O", action: .open(page))
+          shortcut: "⇧⌘O", action: .open(page))
       }
       let removals = [
         MenuAction(
@@ -1190,7 +1192,7 @@ public enum Search {
           MenuAction(
             title: "Show in Finder", symbol: "folder", shortcut: "⇧⌘F", action: .reveal(url)),
           MenuAction(
-            title: "Copy Path", symbol: "doc.on.doc", shortcut: "⇧⌘C", action: .copy(url.path)),
+            title: "Copy Path", symbol: "doc.on.doc", shortcut: "⌘.", action: .copy(url.path)),
           .configure(BuiltinCommand.searchRepositories.settingsKey),
         ]
       return SearchResult(

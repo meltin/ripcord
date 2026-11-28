@@ -1700,7 +1700,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
       "x": #selector(NSText.cut(_:)), "c": #selector(NSText.copy(_:)),
       "v": #selector(NSText.paste(_:)), "a": #selector(NSText.selectAll(_:)),
     ]
-    if flags == .command, let selector = editing[key] {
+    // ⌘C copies text selected in the search field; with none selected, a row's ⌘C, as Search
+    // Bookmarks' Copy URL, has it.
+    let rowTakesCopy =
+      key == "c" && ((panel.firstResponder as? NSTextView)?.selectedRange().length ?? 0) == 0
+      && model.selected?.actions.contains { $0.shortcut == "⌘C" } == true
+    if flags == .command, let selector = editing[key], !rowTakesCopy {
       return NSApp.sendAction(selector, to: nil, from: panel)
     }
     // Undo and redo, for the same reason; they matter in Create Snippet's editor.
@@ -2239,6 +2244,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
         Bundle.main.bundleIdentifier ?? "", forType: .init("org.nspasteboard.source"))
     case .reveal(let url):
       NSWorkspace.shared.activateFileViewerSelecting([url])
+    case .revealBookmarksFile:
+      NSWorkspace.shared.activateFileViewerSelecting([Self.bookmarksURL])
     case .showInfo(let url):
       // Finder's own Show Info service: no Apple Events, so no Automation prompt.
       let board = NSPasteboard(name: .init("io.github.meltin.ripcord.show-info"))
