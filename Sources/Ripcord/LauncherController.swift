@@ -1703,7 +1703,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
     // ⌘C copies text selected in the search field; with none selected, a row's ⌘C, as Search
     // Bookmarks' Copy URL, has it.
     let rowTakesCopy =
-      key == "c" && ((panel.firstResponder as? NSTextView)?.selectedRange().length ?? 0) == 0
+      key == "c" && !model.mode.isForm
+      && ((panel.firstResponder as? NSTextView)?.selectedRange().length ?? 0) == 0
       && model.selected?.actions.contains { $0.shortcut == "⌘C" } == true
     if flags == .command, let selector = editing[key], !rowTakesCopy {
       return NSApp.sendAction(selector, to: nil, from: panel)
