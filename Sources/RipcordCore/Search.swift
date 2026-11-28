@@ -294,6 +294,11 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case editQuicklink(index: Int, name: String)
     /// Deletes the Quicklink at `index`, if it's still named `name`: asked first, then done.
     case deleteQuicklink(index: Int, name: String, confirmed: Bool)
+    /// Create Quicklink's form filled with a copy of the Quicklink at `index`, if it's still named
+    /// `name`: " Copy" after its name, and no keyword, as Duplicate Snippet does.
+    case duplicateQuicklink(index: Int, name: String)
+    /// Deletes every Quicklink: always asked first, then done.
+    case deleteAllQuicklinks(confirmed: Bool)
     /// Removes a bookmark's line from bookmarks.md, if it still holds `text`.
     case deleteBookmark(line: Int, text: String)
     /// Opens the form on the bookmark on `line`, if it still holds `text`.

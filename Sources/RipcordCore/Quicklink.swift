@@ -94,18 +94,34 @@ extension Search {
       let open = link.url(for: "").map {
         MenuAction(title: "Open Quicklink", symbol: "link", shortcut: "↵", action: .open($0))
       }
+      // Raycast's, in its order and with its keys; its Open With…, Pin, Share and Hide in Root
+      // Search are left out.
       let menu =
         [open].compactMap { $0 } + [
           MenuAction(
             title: "Edit Quicklink", symbol: "pencil", shortcut: "⌘E",
             action: .editQuicklink(index: index, name: link.name)),
           MenuAction(
+            title: "Duplicate Quicklink", symbol: "plus.square.on.square", shortcut: "⌘D",
+            action: .duplicateQuicklink(index: index, name: link.name)),
+          MenuAction(
+            title: "Copy Name", symbol: "doc.on.doc", shortcut: "⌥⌘C", action: .copy(link.name),
+            startsSection: true),
+          MenuAction(
+            title: "Copy Link", symbol: "doc.on.doc", shortcut: "⌃⌘C", action: .copy(link.url)),
+          MenuAction(
+            title: "Configure Quicklink…", symbol: "gearshape", shortcut: "⇧⌘,",
+            action: .configureMenu(link.rowID), startsSection: true),
+          MenuAction(
             title: "Create Quicklink", symbol: "plus", shortcut: "⌘N",
-            action: .run(.createQuicklink)),
+            action: .run(.createQuicklink), startsSection: true),
           MenuAction(
             title: "Delete Quicklink", symbol: "trash", shortcut: "⌃X",
             action: .deleteQuicklink(index: index, name: link.name, confirmed: false),
-            isDestructive: true),
+            isDestructive: true, startsSection: true),
+          MenuAction(
+            title: "Delete All Quicklinks", symbol: "trash", shortcut: "⌃⇧X",
+            action: .deleteAllQuicklinks(confirmed: false), isDestructive: true),
         ]
       return SearchResult(
         id: "quicklink-list:\(index)", title: link.name, subtitle: link.url,

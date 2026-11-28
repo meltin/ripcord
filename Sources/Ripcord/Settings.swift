@@ -1159,9 +1159,11 @@ struct SettingsView: View {
       guard let key = model.requestedKey else { return }
       // The page turned to shows in the sidebar's list, not under a search left in it.
       model.sidebarQuery = ""
-      // A key no page lists as a command is an app's.
+      // A key no page lists as a command is an app's, or a Quicklink's.
       page =
-        SettingsPage.allCases.first { $0.commandKeys?.contains(key) == true } ?? .applications
+        key.hasPrefix("quicklink:")
+        ? .quicklinks
+        : SettingsPage.allCases.first { $0.commandKeys?.contains(key) == true } ?? .applications
       model.requestedKey = nil
     }
     // A recording left running on a page no longer shown would swallow every key typed.

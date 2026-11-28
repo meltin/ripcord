@@ -13,8 +13,9 @@
   go on from (⇧⌘↵)
 - Quicklinks: `g swift testing` opens a search; with no match, the query goes to each Quicklink.
   Create Quicklink makes one in the panel (a link with `{query}`, a name and a keyword), and
-  Search Quicklinks lists them to open, edit (⌘E) or delete (⌃X, asked first unless Show Warning
-  Before Deleting Quicklinks is off), as Raycast's do.
+  Search Quicklinks lists them to open, edit (⌘E), duplicate (⌘D), copy the name (⌥⌘C) or link
+  (⌃⌘C), give a hotkey or alias (Configure Quicklink…, ⇧⌘,), delete (⌃X, asked first unless Show
+  Warning Before Deleting Quicklinks is off) or delete all (⌃⇧X, always asked), as Raycast's do.
   Import Quicklinks and Export Quicklinks read and write Raycast's JSON file, its `{argument}`
   taken as `{query}`; one already here is skipped. With Pass Selected Text as Argument on, a
   Quicklink's hotkey fills its `{query}` with the text selected in the app in front, as Raycast's

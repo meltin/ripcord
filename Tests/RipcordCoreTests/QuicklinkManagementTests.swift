@@ -32,11 +32,21 @@ struct QuicklinkManagementTests {
     ]
     let all = Search.quicklinkSections(for: "", quicklinks: links).flatMap(\.results)
     #expect(all.map(\.title) == ["Google", "GitHub"])
+    // Raycast's names and keys.
     #expect(
       all[0].actions.map(\.title) == [
-        "Open Quicklink", "Edit Quicklink", "Create Quicklink", "Delete Quicklink",
+        "Open Quicklink", "Edit Quicklink", "Duplicate Quicklink", "Copy Name", "Copy Link",
+        "Configure Quicklink…", "Create Quicklink", "Delete Quicklink", "Delete All Quicklinks",
+      ])
+    #expect(
+      all[0].actions.map(\.shortcut) == [
+        "↵", "⌘E", "⌘D", "⌥⌘C", "⌃⌘C", "⇧⌘,", "⌘N", "⌃X", "⌃⇧X",
       ])
     #expect(all[1].actions[1].action == .editQuicklink(index: 1, name: "GitHub"))
+    #expect(all[1].actions[2].action == .duplicateQuicklink(index: 1, name: "GitHub"))
+    // The link as written, {query} and all; Configure Quicklink… by the Quicklink's own key.
+    #expect(all[0].actions[4].action == .copy("https://google.com/search?q={query}"))
+    #expect(all[0].actions[5].action == .configureMenu(links[0].rowID))
     let found = Search.quicklinkSections(for: "hub", quicklinks: links).flatMap(\.results)
     #expect(found.map(\.title) == ["GitHub"])
   }
