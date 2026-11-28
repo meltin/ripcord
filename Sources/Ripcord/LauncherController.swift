@@ -1141,18 +1141,18 @@ final class LauncherController: NSObject, NSWindowDelegate {
       run = Coffee.duration(hours: value(0), minutes: value(1), seconds: value(2)).map {
         seconds in { [weak self] in self?.onCaffeinate(seconds) }
       }
-      if run == nil { HUD.show("Type whole hours, minutes or seconds.", failed: true) }
+      if run == nil { HUD.show("Type whole hours, minutes or seconds.", .failed) }
     case .caffeinateUntil:
       if value(0).isEmpty { return askForArgument(0, of: command) }
       run = Coffee.until(value(0), now: .now).map { seconds in
         { [weak self] in self?.onCaffeinate(seconds) }
       }
-      if run == nil { HUD.show("Type a time, as 5pm or 17:30.", failed: true) }
+      if run == nil { HUD.show("Type a time, as 5pm or 17:30.", .failed) }
     default:
       // Left alone, the app you were in, found as it runs.
       let app = value(0).isEmpty ? frontmostApp() : value(0)
       run = app.map { app in { [weak self] in self?.onCaffeinateWhile(app) } }
-      if run == nil { HUD.show("Pick a running app to stay awake for.", failed: true) }
+      if run == nil { HUD.show("Pick a running app to stay awake for.", .failed) }
     }
     guard let run else { return }
     // Its menu's choice too: next time starts from the app you're in again.
@@ -1172,12 +1172,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
       if url.trimmingCharacters(in: .whitespaces).isEmpty {
         return askForArgument(0, of: .cloneRepo)
       }
-      return HUD.show("That isn't a repository URL git can clone.", failed: true)
+      return HUD.show("That isn't a repository URL git can clone.", .failed)
     }
     let folders = RepositoryIndex.roots(repositorySettings.folders)
     let chosen = values.count > 1 && !values[1].isEmpty ? values[1] : folders.first?.path
     guard let chosen else {
-      return HUD.show("Add a folder under Settings › Git Repositories first.", failed: true)
+      return HUD.show("Add a folder under Settings › Git Repositories first.", .failed)
     }
     model.argumentValues[key] = nil
     hide()
@@ -1198,10 +1198,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
         return (process.terminationStatus, String(decoding: errors, as: UTF8.self))
       }.value
       if status == 0 {
-        HUD.show("Cloned \(name)")
+        HUD.show("Cloned \(name)", .done)
         scanRepositories()
       } else {
-        HUD.show(CloneRepo.failure(errors), failed: true)
+        HUD.show(CloneRepo.failure(errors), .failed)
       }
     }
   }
@@ -1225,7 +1225,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       // Closed or left meanwhile: no card whose Return trashes it should turn up later.
       guard panel.isVisible, model.mode == .removeRepos else { return }
       guard let problem else { return ask() }
-      HUD.show("Cannot remove repository: \(problem)", failed: true)
+      HUD.show("Cannot remove repository: \(problem)", .failed)
     }
   }
 
@@ -1374,7 +1374,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
       : ScriptCommand.lastLine(of: result.output)
     guard let line else { return }
     // Compact shows it in the panel while it's still open there; otherwise over the screen.
-    guard script.mode == .compact, panel.isVisible else { return HUD.show(line, failed: failed) }
+    guard script.mode == .compact, panel.isVisible else {
+      return HUD.show(line, failed ? .failed : .none)
+    }
     // Counted as it shows, so only a newer toast keeps this one's timer from clearing it.
     scriptRun += 1
     let run = scriptRun
@@ -1855,14 +1857,14 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .hide:
       if !app.hide() { NSSound.beep() }
     case .quit:
-      app.terminate() ? HUD.show("Quit \(name)") : NSSound.beep()
+      app.terminate() ? HUD.show("Quit \(name)", .done) : NSSound.beep()
     case .forceQuit:
-      app.forceTerminate() ? HUD.show("Force quit \(name)") : NSSound.beep()
+      app.forceTerminate() ? HUD.show("Force quit \(name)", .done) : NSSound.beep()
     case .restart:
       if let message = SystemActions.relaunch(app) {
-        HUD.show(message, failed: true)
+        HUD.show(message, .failed)
       } else {
-        HUD.show("Restarted \(name)")
+        HUD.show("Restarted \(name)", .done)
       }
     }
   }
@@ -1932,11 +1934,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
       model.confirmation = nil
       do {
         try FileManager.default.trashItem(at: url, resultingItemURL: nil)
-        HUD.show("Moved \(url.lastPathComponent) to the Trash")
+        HUD.show("Moved \(url.lastPathComponent) to the Trash", .done)
         repositories = repositories.filter { $0.url != url }
         return refreshRows(selecting: nil)
       } catch {
-        return HUD.show("Couldn't move \(url.lastPathComponent) to the Trash.", failed: true)
+        return HUD.show("Couldn't move \(url.lastPathComponent) to the Trash.", .failed)
       }
     }
     // Read before hide(), which clears what's typed in the fields.
@@ -1977,7 +1979,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       hide()
       NSPasteboard.general.clearContents()
       NSPasteboard.general.setString(text, forType: .string)
-      return HUD.show("Copied color to clipboard")
+      return HUD.show("Copied color to clipboard", .done)
     }
     if action == .run(.searchBookmarks) {
       if loadBookmarks() { open(.bookmarks) }
@@ -2216,7 +2218,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       let wasFavorite = colors.colors.first { $0.hex == hex }?.isFavorite == true
       do { try colors.toggleFavorite(hex: hex) } catch { onError(error.localizedDescription) }
       refreshRows(selecting: model.mode == .favoriteColors ? nil : "color:\(hex)")
-      return HUD.show(wasFavorite ? "Removed from favorites" : "Added to favorites")
+      return HUD.show(wasFavorite ? "Removed from favorites" : "Added to favorites", .done)
     }
     if case .submenu(let title, let items) = action {
       model.menu = OpenMenu(title: title, items: items, isRoot: false)
@@ -2326,7 +2328,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     if case .setVolume(let percent) = action {
       hide()
-      if let message = SystemActions.setVolume(percent: percent) { HUD.show(message, failed: true) }
+      if let message = SystemActions.setVolume(percent: percent) { HUD.show(message, .failed) }
       return
     }
     if case .system(let system, let confirmed) = action {
@@ -2842,7 +2844,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
         self.perform(.copy(text))
         // As Raycast's says it, the nearest named color after it when asked.
         let name = self.showColorName ? ColorNames.nearest(to: color, count: 1).first?.name : nil
-        HUD.show("Copied color \(text)\(name.map { " (\($0))" } ?? "") to clipboard")
+        HUD.show("Copied color \(text)\(name.map { " (\($0))" } ?? "") to clipboard", .done)
       }
     }
   }

@@ -37,6 +37,7 @@ enum Tabler {
     "car": "outline/car",
     "cart": "outline/shopping-cart",
     "checklist": "outline/list-check",
+    "checkmark": "outline/check",
     "checkmark.circle": "outline/circle-check",
     "checkmark.circle.fill": "filled/circle-check",
     "checkmark.square.fill": "filled/square-check",

@@ -45,9 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     statusItem = makeStatusItem()
     caffeinator.onChange = { [weak self] in self?.showTimersInMenuBar() }
     launcher.onCaffeinate = { [weak self] seconds in
-      if self?.caffeinator.caffeinate(for: seconds) == false {
-        self?.showError("macOS didn't let Ripcord keep the Mac awake.")
-      }
+      self?.caffeinate(for: seconds)
     }
     sleepTimer.onChange = { [weak self] in self?.showTimersInMenuBar() }
     sleepTimer.onFire = { [weak self] displayOnly in
@@ -69,17 +67,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     lidAwake.onError = { [weak self] in self?.showError($0) }
     launcher.onBeforeSleep = { [weak self] in self?.lidAwake.stop() }
+    // Said in a HUD, as the toggle otherwise leaves no sign of which way it went.
     launcher.onLidAwake = { [weak self] seconds in
-      if let message = self?.lidAwake.start(for: seconds) { self?.showError(message) }
+      self?.startLidAwake(for: seconds)
     }
     launcher.onToggleLidAwake = { [weak self] in
       guard let self else { return }
-      if lidAwake.isActive { return lidAwake.stop() }
-      if let message = lidAwake.start(for: nil) { showError(message) }
+      lidAwake.isActive ? stopLidAwake() : startLidAwake(for: nil)
     }
     launcher.onStopLidAwake = { [weak self] in
       guard self?.lidAwake.isActive == true else { return NSSound.beep() }
-      self?.lidAwake.stop()
+      self?.stopLidAwake()
     }
     keyboardCleaner.onChange = { [weak self] in self?.showTimersInMenuBar() }
     launcher.onCleanKeyboard = { [weak self] seconds in
@@ -106,27 +104,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     launcher.onToggleCaffeinate = { [weak self] in
       guard let self else { return }
-      if caffeinator.isActive { return caffeinator.decaffeinate() }
-      if !caffeinator.caffeinate(for: nil) {
-        showError("macOS didn't let Ripcord keep the Mac awake.")
-      }
+      caffeinator.isActive ? decaffeinate() : caffeinate(for: nil)
     }
     launcher.onCaffeinateWhile = { [weak self] bundleID in
-      if self?.caffeinator.caffeinate(whileRunning: bundleID) == false {
-        HUD.show("That app isn't running anymore.", failed: true)
+      guard self?.caffeinator.caffeinate(whileRunning: bundleID) == true else {
+        return HUD.show("That app isn't running anymore.", .failed)
       }
+      HUD.show("Caffeinate is on", .on)
     }
     launcher.onCaffeinateStatus = { [weak self] in
       guard let caffeinator = self?.caffeinator else { return }
       HUD.show(
         Coffee.status(
           isActive: caffeinator.isActive, remaining: caffeinator.remaining,
-          whileApp: caffeinator.whileApp))
+          whileApp: caffeinator.whileApp), caffeinator.isActive ? .on : .off)
     }
     launcher.onDecaffeinate = { [weak self] in
       // Nothing to stop: a beep rather than a panel that just closes.
       guard self?.caffeinator.isActive == true else { return NSSound.beep() }
-      self?.caffeinator.decaffeinate()
+      self?.decaffeinate()
     }
     launcher.onOpenSettings = { [weak self] in self?.openSettings() }
     launcher.onCheckForUpdates = { [weak self] in self?.checkForUpdates() }
@@ -162,6 +158,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let firstLaunch = !FileManager.default.fileExists(atPath: configURL.path)
     applyConfig()
     settings.showWelcomeIfNew(firstLaunch: firstLaunch)
+  }
+
+  private func caffeinate(for seconds: TimeInterval?) {
+    guard caffeinator.caffeinate(for: seconds) else {
+      return showError("macOS didn't let Ripcord keep the Mac awake.")
+    }
+    HUD.show("Caffeinate is on", .on)
+  }
+
+  private func startLidAwake(for seconds: TimeInterval?) {
+    if let message = lidAwake.start(for: seconds) { return showError(message) }
+    HUD.show("Lid Awake is on", .on)
   }
 
   /// What's typed in a note is saved before quitting, as its autosave may not have run yet.
@@ -543,7 +551,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let stopLidAwakeItem = NSMenuItem(
     title: "Turn Off Lid Awake", action: #selector(stopLidAwake), keyEquivalent: "")
 
-  @objc private func stopLidAwake() { lidAwake.stop() }
+  /// The menu bar's Turn Off too.
+  @objc private func stopLidAwake() {
+    lidAwake.stop()
+    // stop() keeps it on when pmset refuses, and says so itself.
+    if !lidAwake.isActive { HUD.show("Lid Awake is off", .off) }
+  }
   private let keyboardCleaner = KeyboardCleaner()
   private let stopCleanKeyboardItem = NSMenuItem(
     title: "Stop Clean Keyboard", action: #selector(stopCleanKeyboard), keyEquivalent: "")
@@ -557,7 +570,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let decaffeinateItem = NSMenuItem(
     title: "Decaffeinate", action: #selector(decaffeinate), keyEquivalent: "")
 
-  @objc private func decaffeinate() { caffeinator.decaffeinate() }
+  /// The menu bar's Decaffeinate too.
+  @objc private func decaffeinate() {
+    caffeinator.decaffeinate()
+    HUD.show("Caffeinate is off", .off)
+  }
 
   /// The menu bar while a timer runs: a moon and the time left for Sleep Timer, else a cup for
   /// Coffee, with its time when timed, as Raycast's extensions show them; Ripcord's icon
