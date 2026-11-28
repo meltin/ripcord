@@ -114,9 +114,10 @@
 - Bookmarks: Search Bookmarks lists the Markdown links (`- [Title](URL) - description`) in
   `~/.config/ripcord/bookmarks.md`, or the file picked under Settings › Bookmarks as Raycast's
   MarkMarks has one picked, under their `#` headings; Return opens one, and ⌘K copies its
-  URL or title, edits it, moves it to another group or deletes it. Add Bookmark opens a form for
-  a new one, filled with the tab you're on in Safari, Chrome or Arc. Only the lines a change
-  touches are rewritten; the rest stays as you wrote it
+  URL (⌘C, while no text is selected in the search field) or title (⇧⌘C), edits it (⌘E), moves it
+  to another group (⌘M), deletes it (⌃X) or shows the file in Finder (⇧⌘O), as MarkMarks' do. Add
+  Bookmark opens a form for a new one, filled with the tab you're on in Safari, Chrome or Arc.
+  Only the lines a change touches are rewritten; the rest stays as you wrote it
 - Notes: Ripcord Notes opens a small window at the top right of the screen, floating over your
   apps without taking them out of front, on one note at a time, and grows with the note. Its
   Markdown is formatted as you type, as in Raycast Notes: once a mark is complete it's hidden
@@ -155,7 +156,7 @@
   Return runs the script once the required ones are filled, after asking first when it sets
   `needsConfirmation`. A refreshing `inline` isn't run yet
 - HTTP Status Codes: look a code up by number or name, grouped by hundred; Return opens its MDN
-  page and ⌘K copies the code or its name. As Raycast's "Are you a cat or a dog person?", its
+  page, ⌘↵ copies the code and ⌘K its name too. As Raycast's "Are you a cat or a dog person?", its
   settings can show http.cat's or http.dog's picture of the selected code beside the list
 - CleanShot X: Capture Area, Window, Fullscreen and Previous Area, Scrolling Capture, Record
   Screen, Capture Text (OCR), Self Timer, Pin, Annotate, History and the rest of its URL scheme,

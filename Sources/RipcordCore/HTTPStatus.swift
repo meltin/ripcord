@@ -157,7 +157,8 @@ extension Search {
     }
     let menu =
       [open].compactMap { $0 } + [
-        MenuAction(title: "Copy Code", symbol: "number", shortcut: "⇧⌘C", action: .copy(code)),
+        // ⌘↵, as Raycast's HTTP Status Codes.
+        MenuAction(title: "Copy Code", symbol: "number", shortcut: "⌘↵", action: .copy(code)),
         MenuAction(
           title: "Copy Name", symbol: "doc.on.doc", shortcut: "⌥⌘C", action: .copy(status.name)),
       ]

@@ -89,7 +89,8 @@ import Testing
     let result = try #require(
       Search.repositorySections(for: "rip", repositories: [repository], settings: settings)
         .first?.results.first)
-    #expect(result.actions.map(\.shortcut) == ["↵", "⌘↵", "⌥↵", "⌘O", "⇧⌘F", "⇧⌘C", "⇧⌘,"])
+    // Git Repos' keys: Open on GitHub ⇧⌘O, Copy Path ⌘.
+    #expect(result.actions.map(\.shortcut) == ["↵", "⌘↵", "⌥↵", "⇧⌘O", "⇧⌘F", "⌘.", "⇧⌘,"])
     #expect(
       result.actions.map(\.title).prefix(4) == [
         "Open in Finder", "Open in Visual Studio Code", "Open in Ghostty", "Open on GitHub",
