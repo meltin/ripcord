@@ -42,6 +42,7 @@ enum Tabler {
     "checkmark.square.fill": "filled/square-check",
     "chevron.down": "outline/chevron-down",
     "chevron.left": "outline/chevron-left",
+    "chevron.right": "outline/chevron-right",
     "chevron.left.forwardslash.chevron.right": "outline/code",
     "chevron.up": "outline/chevron-up",
     "chevron.up.chevron.down": "outline/selector",

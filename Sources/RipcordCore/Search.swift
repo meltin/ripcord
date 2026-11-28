@@ -17,6 +17,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case searchScriptCommands
   case ripcordNotes, createNote, searchNotes
   case generateDummyText
+  case pickDate
   case runningApplications
   case resetWindowPosition, checkForUpdates, quit
 
@@ -76,6 +77,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .createNote: "Create Note"
     case .searchNotes: "Search Notes"
     case .generateDummyText: "Generate Dummy Text"
+    case .pickDate: "Pick Date"
     case .runningApplications: "Running Applications"
     case .resetWindowPosition: "Reset Ripcord Window Position"
     case .checkForUpdates: "Check for Updates"
@@ -107,6 +109,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     // Generator", shortened here.
     case .generateDummyText: "Lorem Ipsum Generator JP"
     case .runningApplications: "System Actions"
+    case .pickDate: "Date Picker"
     default: "Ripcord"
     }
   }
@@ -155,6 +158,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .createNote: "command:create-note"
     case .searchNotes: "command:search-notes"
     case .generateDummyText: "command:generate-dummy-text"
+    case .pickDate: "command:pick-date"
     case .runningApplications: "command:running-applications"
     case .resetWindowPosition: "command:reset-window-position"
     case .checkForUpdates: "command:check-for-updates"

@@ -117,6 +117,7 @@ enum LauncherMode {
   case bookmarks
   case bookmarkForm, emoji, scriptOutput, notes, quicklinks, quicklinkForm, scriptCommands
   case runningApps
+  case datePicker
   /// `ripcord pick`: lines handed in, one to choose.
   case pick
 
@@ -144,6 +145,7 @@ enum LauncherMode {
     case .quicklinkForm: .createQuicklink
     case .scriptCommands: .searchScriptCommands
     case .runningApps: .runningApplications
+    case .datePicker: .pickDate
     case .emoji: .searchEmoji
     case .scriptOutput: nil
     case .notes: .searchNotes
@@ -170,6 +172,8 @@ final class LauncherModel {
   var pasteTarget: String?
   /// `ripcord pick --placeholder`, shown in the search field.
   var pickPlaceholder: String?
+  /// Pick Date's calendar: the days picked and the month shown.
+  var dates = DateSelection()
   var query = ""
   var sections: [SearchSection] = []
   var selection = 0
@@ -294,6 +298,10 @@ enum SearchCommand {
   case runMenuItem(Int)
   case selectMenuItem(Int)
   case editAlias(String)
+  /// A click on Pick Date's day, with ⌘ or ⇧ held.
+  case pickDay(Date, command: Bool, shift: Bool)
+  /// Pick Date's header arrows: the month before or after.
+  case showMonth(Int)
 }
 
 /// A panel that takes keys without activating Ripcord, so the previous app stays frontmost.
@@ -505,6 +513,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
       if model.mode == .emoji { refreshRows(selecting: model.selected?.id) }
     }
   }
+  /// Pick Date's format, Return and separators, from the settings.
+  var datePickerSettings = DatePickerSettings() {
+    didSet { if model.mode == .datePicker { refreshRows() } }
+  }
   /// Read each time Search Bookmarks opens, so edits made by hand show up.
   private var bookmarks = BookmarkFile(text: "")
   /// The notes folder, and its notes as Search Notes last read them.
@@ -541,6 +553,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       guard let self else { return false }
       guard model.confirmation == nil else { return answerQuestion(event) }
       return typeIntoMenu(event) || typeIntoArgumentDropdown(event) || spaceAfterAlias(event)
+        || spaceMarksDay(event)
     }
     panel.escapeHandler = { [weak self] in
       // Only the form: the search field turns Esc into .cancel itself.
@@ -827,6 +840,9 @@ final class LauncherController: NSObject, NSWindowDelegate {
         favorites: favorites)
     }
     if model.mode == .pick { return Search.pickSections(for: query, items: pickItems) }
+    if model.mode == .datePicker {
+      return Search.datePickerSections(model.dates, settings: datePickerSettings)
+    }
     if model.mode == .bookmarks { return Search.bookmarkSections(for: query, file: bookmarks) }
     if model.mode == .quicklinks {
       return Search.quicklinkSections(for: query, quicklinks: quicklinks)
@@ -948,6 +964,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
       }
     }
     if model.mode.isForm, case .submit = command { return saveForm() }
+    if model.mode == .datePicker, let moved = dateMove(command) {
+      moved(&model.dates)
+      // A click on a day while ⌘K is open: its actions were for the days picked before.
+      model.menu = nil
+      return refreshRows()
+    }
     let count = model.results.count
     if model.mode == .emoji, let moved = gridSelection(after: command) {
       model.selection = moved
@@ -957,6 +979,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .up: model.selection = max(model.selection - 1, 0)
     case .down: model.selection = min(model.selection + 1, max(count - 1, 0))
     case .left, .right: break  // Only the emoji grid moves sideways, above.
+    case .pickDay, .showMonth: break  // Pick Date's, above.
     case .filterCategory(let category):
       model.emojiCategory = category
       update(model.query)
@@ -1607,6 +1630,19 @@ final class LauncherController: NSObject, NSWindowDelegate {
     return true
   }
 
+  /// Space in Pick Date marks the cursor's day instead of typing; after an open ⌘K menu, which
+  /// takes it as typing, and Japanese input, which converts with it.
+  private func spaceMarksDay(_ event: NSEvent) -> Bool {
+    guard event.keyCode == UInt16(kVK_Space),
+      event.modifierFlags.isDisjoint(with: [.command, .control, .option, .shift]),
+      model.mode == .datePicker, model.menu == nil, model.configureEditor == nil,
+      (panel.firstResponder as? NSTextView)?.hasMarkedText() != true
+    else { return false }
+    model.dates.mark()
+    refreshRows()
+    return true
+  }
+
   /// Letters typed while a menu is open go to its "Search for actions…", and Delete takes the
   /// last one back; arrows, Return and Esc still reach the field, and shortcuts still fire.
   private func typeIntoMenu(_ event: NSEvent) -> Bool {
@@ -1672,6 +1708,25 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private func select(itemKey key: String) {
     if let index = model.results.firstIndex(where: { $0.itemKey == key }) {
       model.selection = index
+    }
+  }
+
+  /// Pick Date's change for an arrow, with ⇧ stretching the range, a click on a day or the
+  /// header's arrows; nil for the rest.
+  private func dateMove(_ command: SearchCommand) -> ((inout DateSelection) -> Void)? {
+    let shift = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+    let step: (Int) -> (inout DateSelection) -> Void = { days in
+      shift ? { $0.extend(by: days) } : { $0.move(by: days) }
+    }
+    switch command {
+    case .left: return step(-1)
+    case .right: return step(1)
+    case .up: return step(-7)
+    case .down: return step(7)
+    case .pickDay(let day, let command, let shift):
+      return { $0.click(day, command: command, shift: shift) }
+    case .showMonth(let months): return { $0.showMonth(by: months) }
+    default: return nil
     }
   }
 
@@ -1898,6 +1953,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.searchSnippets) { return open(.snippets) }
     if action == .run(.httpStatusCodes) { return open(.httpStatusCodes) }
     if action == .run(.runningApplications) { return open(.runningApps) }
+    if action == .run(.pickDate) {
+      // Today again each time, as the calendar starts there.
+      if !(panel.isVisible && model.mode == .datePicker) { model.dates = DateSelection() }
+      return open(.datePicker)
+    }
     if action == .run(.colorHistory) { return open(.colors) }
     if action == .run(.colorNames) { return open(.colorNames) }
     if action == .run(.convertColor) { return open(.convertColor) }
@@ -2380,6 +2440,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onCleanKeyboard(seconds)
     case .run(.resetWindowPosition), .run(.clipboardHistory), .run(.searchSnippets),
       .run(.searchRepositories), .run(.httpStatusCodes), .run(.runningApplications),
+      .run(.pickDate),
       .run(.sleepTimer), .run(.colorHistory),
       .run(.colorNames), .run(.convertColor), .run(.favoriteColors), .run(.colorWheel),
       .run(.cloneRepo), .run(.removeRepo), .removeRepository, .trashRepository,
