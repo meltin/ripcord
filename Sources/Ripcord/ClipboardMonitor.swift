@@ -118,6 +118,7 @@ final class ClipboardMonitor {
   func togglePin(_ id: UUID) { update { try $0.togglePin(id) } }
   func delete(_ id: UUID) { update { try $0.delete(id) } }
   func deleteAll() { update { try $0.deleteAll() } }
+  func deleteRecent(since date: Date) { update { try $0.deleteRecent(since: date) } }
   /// Drops what the settings no longer keep: older entries, and those past the most kept.
   func prune() { update { try $0.prune() } }
 

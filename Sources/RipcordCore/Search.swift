@@ -341,6 +341,15 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case pasteKeepingOpen
     /// Delete All Entries, asked first, and its confirmation; pinned items stay.
     case deleteAll, confirmDeleteAll
+    /// Delete Recent Entries…: its menu of times, then the entries from the last so many seconds,
+    /// asked first, and its confirmation; pinned items stay.
+    case deleteRecentMenu
+    case deleteRecent(TimeInterval)
+    case confirmDeleteRecent(TimeInterval)
+    /// Raycast's Save as Snippet and Save as Quicklink: their forms, filled with the entry.
+    case saveAsSnippet, saveAsQuicklink
+    /// Save as File…: the text or image, written where the save panel says.
+    case saveAsFile
   }
 
   public enum EmojiAction: Equatable, Sendable {
@@ -500,7 +509,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
   /// a link, then Pin Entry and the deletes. "to App" is the app the paste lands in. Only text has
   /// formatting to keep or leave out, so only text gets the plain-text wording and ⌃⌘↵.
   public static func clipMenu(
-    id: UUID, isPinned: Bool, isText: Bool, link: URL?, settings: ClipboardSettings
+    id: UUID, isPinned: Bool, isText: Bool, link: URL?, settings: ClipboardSettings,
+    savesAsFile: Bool = false
   ) -> [MenuAction] {
     let plain = isText && settings.preferPlainText
     let paste = MenuAction(
@@ -526,15 +536,53 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
       ].compactMap { $0 } + [
         MenuAction(
           title: isPinned ? "Unpin Entry" : "Pin Entry", symbol: isPinned ? "pin.slash" : "pin",
-          shortcut: "⌘.", action: .clip(id, .togglePin), startsSection: true),
+          shortcut: "⌘.", action: .clip(id, .togglePin), startsSection: true)
+      ]
+      // Raycast's Save as…, for text: a snippet, a link's Quicklink, or a file; an image's file.
+      + (isText
+        ? [
+          MenuAction(
+            title: "Save as Snippet", symbol: "text.quote", shortcut: "⌘S",
+            action: .clip(id, .saveAsSnippet), startsSection: true)
+        ] : [])
+      + (link == nil
+        ? []
+        : [
+          MenuAction(
+            title: "Save as Quicklink", symbol: "link", shortcut: "⇧⌘S",
+            action: .clip(id, .saveAsQuicklink))
+        ])
+      + (savesAsFile
+        ? [
+          MenuAction(
+            title: "Save as File…", symbol: "square.and.arrow.down", shortcut: "⌥⇧⌘S",
+            action: .clip(id, .saveAsFile), startsSection: !isText)
+        ] : [])
+      + [
         MenuAction(
           title: "Delete Entry", symbol: "trash", shortcut: "⌃X", action: .clip(id, .delete),
           isDestructive: true, startsSection: true),
+        MenuAction(
+          title: "Delete Recent Entries…", symbol: "clock", shortcut: "⇧⌘X",
+          action: .clip(id, .deleteRecentMenu), isDestructive: true),
         MenuAction(
           title: "Delete All Entries", symbol: "trash", shortcut: "⌃⇧X",
           action: .clip(id, .deleteAll), isDestructive: true),
         .configure(BuiltinCommand.clipboardHistory.settingsKey),
       ]
+  }
+
+  /// Delete Recent Entries…' times, as Raycast's: the last 5, 15 or 30 minutes, 1 hour or 24 hours.
+  public static func deleteRecentMenu(for id: UUID) -> [MenuAction] {
+    let times: [(seconds: TimeInterval, title: String)] = [
+      (300, "Last 5 Minutes"), (900, "Last 15 Minutes"), (1800, "Last 30 Minutes"),
+      (3600, "Last Hour"), (86400, "Last 24 Hours"),
+    ]
+    return times.map {
+      MenuAction(
+        title: $0.title, symbol: "clock", shortcut: "", action: .clip(id, .deleteRecent($0.seconds))
+      )
+    }
   }
 
   /// The hotkeys in the settings by `itemKey`, for showing a row's.
@@ -958,7 +1006,7 @@ public enum Search {
               id: item.id, isPinned: item.isPinned, isText: true,
               link: ClipType.isLink(text)
                 ? URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)) : nil,
-              settings: history.settings), isPinned: item.isPinned)
+              settings: history.settings, savesAsFile: true), isPinned: item.isPinned)
         )
       case .image(_, let width, let height):
         // A copied file goes by its name, as Raycast lists it; a pasted image by its size.
@@ -977,7 +1025,7 @@ public enum Search {
             action: action, thumbnail: history.imageURL(of: item),
             menu: SearchResult.clipMenu(
               id: item.id, isPinned: item.isPinned, isText: false, link: nil,
-              settings: history.settings),
+              settings: history.settings, savesAsFile: true),
             isPinned: item.isPinned)
         )
       case .files(let paths):

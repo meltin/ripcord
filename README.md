@@ -40,13 +40,15 @@
   selected one (a file's kind, size and path). Return pastes into the app you were in (files paste
   as files, into Finder too) and ⌘↵ copies; as Raycast's, ⌥↵ pastes and keeps the panel open, ⌃⌘↵
   pastes with the formatting Prefer Pasting as Plain Text leaves out (or without it, when that's
-  off), ⌘O opens a copied link, ⌘. pins an item to the top, ⌃X deletes it and ⌃⇧X deletes all but
-  the pinned ones; the All Types menu (⌘P) narrows the list to text, images, files, links, emails or
-  colors. Text in copied images is read (Text Recognition, with Vision, on the Mac), so a search
-  finds an image by it. Settings › Clipboard History can make Return copy instead, with paste on ⌘↵,
-  and list apps whose copies aren't recorded (Passwords and Keychain Access to start with). Copies a
-  password manager marks as concealed are never recorded, and switching the command off on its
-  settings page stops recording
+  off), ⌘O opens a copied link, ⌘. pins an item to the top, ⌘S, ⇧⌘S and ⌥⇧⌘S save it as a snippet,
+  a link's Quicklink or a file, ⌃X deletes it, ⇧⌘X deletes what was copied in the last 5 minutes to
+  24 hours and ⌃⇧X deletes all, each but the pinned ones and asked first; the All Types menu (⌘P)
+  narrows the list to text, images, files, links, emails or colors. Text in copied images is read
+  (Text Recognition, with Vision, on the Mac), so a search finds an image by it. Settings ›
+  Clipboard History can make Return copy instead, with paste on ⌘↵, and list apps whose copies
+  aren't recorded (Passwords and Keychain Access to start with). Copies a password manager marks
+  as concealed are never recorded, and switching the command off on its settings page stops
+  recording
 - Snippets: Create Snippet saves text with a name, keyword, icon and tags from the panel, and
   Search Snippets pastes it into the app you were in. `{clipboard}`, `{date}`, `{time}`,
   `{datetime}`, `{day}` and `{uuid}` are filled in, and `{cursor}` is where the caret lands.

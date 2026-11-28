@@ -397,10 +397,13 @@ private func temporaryDirectory() -> URL {
     #expect(
       row.actions.map(\.title) == [
         "Paste as Plain Text to App", "Copy to Clipboard", "Paste and Keep Window Open",
-        "Paste to App", "Pin Entry", "Delete Entry", "Delete All Entries", "Configure Command…",
+        "Paste to App", "Pin Entry", "Save as Snippet", "Save as File…", "Delete Entry",
+        "Delete Recent Entries…", "Delete All Entries", "Configure Command…",
       ])
     #expect(
-      row.actions.map(\.shortcut) == ["↵", "⌘↵", "⌥↵", "⌃⌘↵", "⌘.", "⌃X", "⌃⇧X", "⇧⌘,"])
+      row.actions.map(\.shortcut) == [
+        "↵", "⌘↵", "⌥↵", "⌃⌘↵", "⌘.", "⌘S", "⌥⇧⌘S", "⌃X", "⇧⌘X", "⌃⇧X", "⇧⌘,",
+      ])
     #expect(row.actions[3].action == .clip(id, .pasteOtherFormat))
     #expect(row.actions.last?.action == .configureMenu(BuiltinCommand.clipboardHistory.settingsKey))
     try history.togglePin(id)
@@ -431,6 +434,43 @@ private func temporaryDirectory() -> URL {
       image.map(\.title).prefix(3) == [
         "Paste to App", "Copy to Clipboard", "Paste and Keep Window Open",
       ])
+  }
+
+  /// Save as Quicklink only on a link; a copied file has nothing to save as a file.
+  @Test func savesTextLinksAndImagesAsRaycastsDo() throws {
+    let link = SearchResult.clipMenu(
+      id: UUID(), isPinned: false, isText: true, link: URL(string: "https://example.com"),
+      settings: ClipboardSettings(), savesAsFile: true)
+    #expect(
+      link.filter { $0.title.hasPrefix("Save as") }.map(\.title) == [
+        "Save as Snippet", "Save as Quicklink", "Save as File…",
+      ])
+    let file = SearchResult.clipMenu(
+      id: UUID(), isPinned: false, isText: false, link: nil, settings: ClipboardSettings())
+    #expect(!file.contains { $0.title.hasPrefix("Save as") })
+  }
+
+  /// Delete Recent Entries: what was copied in the time picked goes; older and pinned ones stay.
+  @Test func deletesRecentEntriesButNotPinnedOrOlder() throws {
+    let directory = temporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var history = ClipboardHistory(directory: directory)
+    let now = Date.now
+    try history.add(.text("old"), at: now.addingTimeInterval(-3600))
+    try history.add(.text("pinned"), at: now.addingTimeInterval(-60))
+    try history.add(.text("new"), at: now.addingTimeInterval(-60))
+    try history.togglePin(try #require(history.items.first { $0.content == .text("pinned") }).id)
+    try history.deleteRecent(since: now.addingTimeInterval(-300))
+    #expect(
+      history.items.compactMap { if case .text(let t) = $0.content { t } else { nil } }.sorted()
+        == ["old", "pinned"])
+    // Its menu: Raycast's five times.
+    let id = UUID()
+    #expect(
+      SearchResult.deleteRecentMenu(for: id).map(\.action)
+        == [
+          300, 900, 1800, 3600, 86400,
+        ].map { .clip(id, .deleteRecent($0)) })
   }
 
   /// A copied link alone gets Open in Browser (⌘O); text with a link in it doesn't.
