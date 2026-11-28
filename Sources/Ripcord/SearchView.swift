@@ -665,6 +665,7 @@ extension BuiltinCommand {
       "moon.zzz.fill"
     case .stopSleepTimer: "moon.zzz"
     case .lidAwake: "sun.max"
+    case .turnOffLidAwake: "moon"
     case .pickColor: "eyedropper"
     case .colorHistory: "swatchpalette.fill"
     case .colorNames: "tag"
@@ -702,7 +703,7 @@ extension BuiltinCommand {
     case .sleepTimer, .stopSleepTimer, .sleepTimer15, .sleepTimer30, .sleepTimer45, .sleepTimer60,
       .sleepTimer90:
       .indigo
-    case .lidAwake: .orange
+    case .lidAwake, .turnOffLidAwake: .orange
     case .pickColor, .colorHistory, .colorNames, .convertColor, .favoriteColors, .colorWheel: .pink
     case .cleanKeyboard: .cyan
     case .searchBookmarks, .addBookmark: .yellow
