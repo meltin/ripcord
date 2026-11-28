@@ -113,13 +113,20 @@ enum ScriptRunner {
 /// its window closes.
 @MainActor
 enum HUD {
+  /// What leads the line: whether something is now on or off, done, or failed; none for a
+  /// script's own output.
+  enum Mark {
+    case none, on, off, done, failed
+  }
+
   private static var window: NSPanel?
   private static var hideTask: DispatchWorkItem?
 
-  static func show(_ text: String, failed: Bool = false) {
+  static func show(_ text: String, _ mark: Mark = .none) {
+    let failed = mark == .failed
     let panel = window ?? makePanel()
     window = panel
-    panel.contentView = NSHostingView(rootView: HUDView(text: text, failed: failed))
+    panel.contentView = NSHostingView(rootView: HUDView(text: text, mark: mark))
     panel.setContentSize(panel.contentView?.fittingSize ?? NSSize(width: 300, height: 40))
     if let screen = NSScreen.main {
       let frame = screen.visibleFrame
@@ -149,11 +156,18 @@ enum HUD {
 
 private struct HUDView: View {
   let text: String
-  let failed: Bool
+  let mark: HUD.Mark
 
   var body: some View {
     HStack(spacing: 8) {
-      if failed { Glyph("exclamationmark.triangle.fill", pointSize: 13).foregroundStyle(.red) }
+      switch mark {
+      case .none: EmptyView()
+      case .on: Circle().fill(.green).frame(width: 9, height: 9)
+      case .off: Circle().fill(.gray).frame(width: 9, height: 9)
+      case .done: Glyph("checkmark", pointSize: 14).foregroundStyle(.green)
+      case .failed:
+        Glyph("exclamationmark.triangle.fill", pointSize: 13).foregroundStyle(.red)
+      }
       Text(text).lineLimit(2).font(.system(size: Metrics.scriptHUDFontSize, weight: .medium))
     }
     .padding(.horizontal, 16)
