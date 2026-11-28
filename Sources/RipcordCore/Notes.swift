@@ -123,11 +123,20 @@ public struct NoteStore: Sendable {
   }
 
   /// Delete All Notes: every note moved to the Trash, as Raycast's go to Recently Deleted; each
-  /// note's file and where it went. `moving` stands in for the Trash in tests.
+  /// note's file and where it went, and what stopped it partway, if anything did, with those
+  /// moved before it still listed. `moving` stands in for the Trash in tests.
   public func trashAll(
     moving: (URL) throws -> URL? = NoteStore.moveToTrash
-  ) throws -> [(url: URL, trashed: URL?)] {
-    try list().map { ($0.url, try moving($0.url)) }
+  ) -> (moved: [(url: URL, trashed: URL?)], error: (any Error)?) {
+    var moved: [(url: URL, trashed: URL?)] = []
+    for note in list() {
+      do {
+        moved.append((note.url, try moving(note.url)))
+      } catch {
+        return (moved, error)
+      }
+    }
+    return (moved, nil)
   }
 
   /// Duplicate Note: a new note with the same text, saved now.
@@ -191,7 +200,9 @@ extension Search {
   public static func copyNoteAsMenu(for text: String) -> [MenuAction] {
     [
       MenuAction(title: "Markdown", symbol: "doc.on.doc", shortcut: "", action: .copy(text)),
-      MenuAction(title: "HTML", symbol: "doc.on.doc", shortcut: "", action: .copyNoteHTML(text)),
+      MenuAction(
+        title: "HTML", symbol: "doc.on.doc", shortcut: "",
+        action: .copy(NoteHTML.html(fromMarkdown: text))),
     ]
   }
 }

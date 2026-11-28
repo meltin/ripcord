@@ -1732,9 +1732,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
     // ⌘N creates a snippet even when Search Snippets lists none.
     let create = MenuAction(
       title: "Create Snippet", symbol: "plus", shortcut: "⌘N", action: .run(.createSnippet))
+    // ⌘N creates a note even when Search Notes lists none.
+    let createNote = MenuAction(
+      title: "Create Note", symbol: "plus", shortcut: "⌘N", action: .run(.createNote))
     let candidates =
       (model.selected?.actions ?? []) + BuiltinCommand.rootMenu
-      + (model.mode == .snippets ? [create] : [])
+      + (model.mode == .snippets ? [create] : []) + (model.mode == .notes ? [createNote] : [])
     guard let match = candidates.first(where: { $0.shortcut == shortcut }) else { return false }
     perform(match.action)
     return true
@@ -2114,13 +2117,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
         title: "Copy Note As", items: Search.copyNoteAsMenu(for: text), isRoot: false)
       return
     }
-    if case .copyNoteHTML(let text) = action {
-      guard let html = Self.html(fromMarkdown: text) else { return NSSound.beep() }
-      return perform(.copy(html))
-    }
     if case .duplicateNote(let url) = action {
       model.menu = nil
-      guard let note = noteStore.read(url) else { return NSSound.beep() }
+      // An empty note would be a copy that's never written.
+      guard let note = noteStore.read(url), !note.text.isEmpty else { return NSSound.beep() }
       do {
         let copy = try noteStore.duplicate(note)
         notes = noteStore.list()
@@ -2140,11 +2140,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
         return
       }
       model.confirmation = nil
-      do {
-        for (url, trashed) in try noteStore.trashAll() { onNotes(.deleted(url, trashed: trashed)) }
-      } catch {
-        onError(error.localizedDescription)
-      }
+      // All moved first, then the window told, so it lets go of its note once, with no Undo
+      // for a single one; those moved before a failure are still told.
+      let (moved, error) = noteStore.trashAll()
+      for (url, trashed) in moved { onNotes(.deleted(url, trashed: trashed)) }
+      if let error { onError(error.localizedDescription) }
       notes = noteStore.list()
       return refreshRows(selecting: nil)
     }
@@ -2292,7 +2292,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,
       .openDraft, .discardDraft, .runScript, .run(.searchNotes), .deleteNote, .copyNoteAsMenu,
-      .copyNoteHTML, .duplicateNote, .deleteAllNotes,
+      .duplicateNote, .deleteAllNotes,
       .moveFavorite,
       .deleteColor, .toggleFavoriteColor,
       .run(.createSnippet), .clip, .snippet, .system, .window:
@@ -3108,21 +3108,6 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .saveAsFile:
       saveClipToFile(id)
     }
-  }
-
-  /// A note's Markdown as HTML, for Copy Note As… › HTML: the HTML AppKit writes for it.
-  private static func html(fromMarkdown text: String) -> String? {
-    guard
-      let attributed = try? NSAttributedString(
-        markdown: text,
-        options: .init(
-          allowsExtendedAttributes: true, interpretedSyntax: .full,
-          failurePolicy: .returnPartiallyParsedIfPossible)),
-      let data = try? attributed.data(
-        from: NSRange(location: 0, length: attributed.length),
-        documentAttributes: [.documentType: NSAttributedString.DocumentType.html])
-    else { return nil }
-    return String(data: data, encoding: .utf8)
   }
 
   /// Save as File…: a text entry as a .txt file, an image as its picture, where the save panel

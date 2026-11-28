@@ -41,8 +41,39 @@ import Testing
     #expect(row.actions[2].action == .copy("# Plan\nmore"))
     #expect(
       Search.copyNoteAsMenu(for: note.text).map(\.action) == [
-        .copy(note.text), .copyNoteHTML(note.text),
+        .copy(note.text), .copy("<h1>Plan</h1>\n<p>more</p>"),
       ])
+  }
+
+  /// Copy Note As › HTML keeps the note's structure: headings, paragraphs, lists and tasks,
+  /// code, quotes and inline marks, with the text escaped.
+  @Test func writesANoteAsHTML() {
+    let note = """
+      # Plan
+      First line with **bold**, *it*, ~~old~~ and a [link](https://a.example/?q=1&b=2).
+      Second line <b>.
+
+      - one
+      - [ ] todo
+      - [x] done
+      1. first
+      > quoted `x`
+
+      ```
+      let a = 1 < 2
+      ```
+      """
+    #expect(
+      NoteHTML.html(fromMarkdown: note) == """
+        <h1>Plan</h1>
+        <p>First line with <strong>bold</strong>, <em>it</em>, <del>old</del> and a \
+        <a href="https://a.example/?q=1&amp;b=2">link</a>.<br>Second line &lt;b&gt;.</p>
+        <ul><li>one</li><li><input type="checkbox" disabled> todo</li>\
+        <li><input type="checkbox" disabled checked> done</li></ul>
+        <ol><li>first</li></ol>
+        <blockquote>quoted <code>x</code></blockquote>
+        <pre><code>let a = 1 &lt; 2</code></pre>
+        """)
   }
 
   /// Duplicate Note: a new file with the same text; the original stays.
@@ -64,15 +95,31 @@ import Testing
     try Data("x".utf8).write(to: other)
     let bin = folder.appending(path: ".bin")
     try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-    let moved = try store.trashAll { url in
+    let (moved, error) = store.trashAll { url in
       let to = bin.appending(path: url.lastPathComponent)
       try FileManager.default.moveItem(at: url, to: to)
       return to
     }
+    #expect(error == nil)
     #expect(Set(moved.map(\.url)) == [a.url, b.url])
     #expect(moved.allSatisfy { $0.trashed != nil })
     #expect(store.list().isEmpty)
     #expect(FileManager.default.fileExists(atPath: other.path))
+  }
+
+  /// A note that won't move stops Delete All there; those moved before it are still listed.
+  @Test func reportsWhatMovedBeforeAFailure() throws {
+    defer { try? FileManager.default.removeItem(at: folder) }
+    _ = try store.save("a", over: store.newNote(at: .now))
+    _ = try store.save("b", over: store.newNote(at: .now.addingTimeInterval(1)))
+    var calls = 0
+    let (moved, error) = store.trashAll { url in
+      calls += 1
+      guard calls == 1 else { throw CocoaError(.fileWriteNoPermission) }
+      return url
+    }
+    #expect(moved.count == 1)
+    #expect(error != nil)
   }
 
   @Test func neverWritesOverAFileChangedOutside() throws {

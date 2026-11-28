@@ -329,8 +329,6 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case deleteNote(URL)
     /// Copy Note As…'s menu, for a note with this text.
     case copyNoteAsMenu(String)
-    /// Copies this Markdown as HTML.
-    case copyNoteHTML(String)
     /// A copy of the note in this file, opened in the notes window.
     case duplicateNote(URL)
     /// Moves every note to the Trash: always asked first, then done.
