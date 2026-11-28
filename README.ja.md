@@ -6,8 +6,7 @@
 
 > Apple silicon の Mac で常駐する小さなランチャー。Swift と AppKit で書いています。
 
-⌘Space でパネルが開きます。入力してアプリを開いたり、計算（`1+2*3`）したり、次の機能を
-使ったりできます。多くは Raycast と同じ操作で動きます。
+⌘Space でパネルが開きます。入力してアプリを開いたり、計算（`1+2*3`）したり、次の機能を使ったりできます。多くは Raycast と同じ操作で動きます。
 
 <table>
   <tr>
@@ -109,24 +108,16 @@
 
 ## はじめかた
 
-まず ⌘Space を空けてください。Spotlight のショートカットを切り、ほかのランチャーの割り当ても
-外します。あとから Settings で別のホットキーにもできます。
+まず ⌘Space を空けてください。Spotlight のショートカットを切り、ほかのランチャーの割り当ても外します。あとから Settings で別のホットキーにもできます。
 
-1. [Releases](https://github.com/meltin/ripcord/releases) から `Ripcord-<version>.zip` を
-   ダウンロードして展開し、`Ripcord.app` を `/Applications` に移します。
-2. Ripcord は自己署名の証明書で署名していて公証を受けていないため、初回の起動は macOS に
-   止められます。`xattr -dr com.apple.quarantine /Applications/Ripcord.app` を実行するか、
-   Control キーを押しながらアプリをクリックして「開く」を選んでください。
+1. [Releases](https://github.com/meltin/ripcord/releases) から `Ripcord-<version>.zip` をダウンロードして展開し、`Ripcord.app` を `/Applications` に移します。
+2. Ripcord は自己署名の証明書で署名していて公証を受けていないため、初回の起動は macOS に止められます。`xattr -dr com.apple.quarantine /Applications/Ripcord.app` を実行するか、Control キーを押しながらアプリをクリックして「開く」を選んでください。
 
-macOS 26 以降の Apple silicon の Mac で動きます。貼り付けとスニペットのキーワード展開には
-アクセシビリティの許可が要り、最初の貼り付けで確認されます（[Permissions](./docs/permissions.md)）。
+macOS 26 以降の Apple silicon の Mac で動きます。貼り付けとスニペットのキーワード展開にはアクセシビリティの許可が要り、最初の貼り付けで確認されます（[Permissions](./docs/permissions.md)）。
 
 ### アップデート
 
-1 日に 1 回新しいリリースを確かめ、あればインストールを勧めます（[Sparkle](https://sparkle-project.org)
-を使います）。Check for Updates はメニューバーのメニュー、パネルの ⌘K、検索から使えます。
-毎日の確認は Settings › General で止められます。0.1.0 にはアップデーターがないため、その次の
-リリースは一度だけ手で入れてください。Nix で入れたものは Nix で更新します。
+1 日に 1 回新しいリリースを確かめ、あればインストールを勧めます（[Sparkle](https://sparkle-project.org) を使います）。Check for Updates はメニューバーのメニュー、パネルの ⌘K、検索から使えます。毎日の確認は Settings › General で止められます。0.1.0 にはアップデーターがないため、その次のリリースは一度だけ手で入れてください。Nix で入れたものは Nix で更新します。
 
 ### Nix で入れる
 
@@ -136,9 +127,7 @@ nix profile add github:meltin/ripcord
 nix build github:meltin/ripcord && open result/Applications/Ripcord.app
 ```
 
-flake はホストの Xcode 26 以降でビルドします。SwiftUI の `@State` はマクロで、そのプラグインは
-Xcode にしか入っておらず、nixpkgs の Swift では展開できないためです。そのためビルドは Nix の
-サンドボックスの外で動きます。macOS の既定の `sandbox = false` か `relaxed` なら動きます。
+flake はホストの Xcode 26 以降でビルドします。SwiftUI の `@State` はマクロで、そのプラグインは Xcode にしか入っておらず、nixpkgs の Swift では展開できないためです。そのためビルドは Nix のサンドボックスの外で動きます。macOS の既定の `sandbox = false` か `relaxed` なら動きます。
 
 ## ソースからビルド
 
@@ -160,30 +149,12 @@ swift test
 
 macOS が用意していない手段で回避するより、そのままにしているものです。
 
-- Notes: Ripcord Notes と、Raycast Notes のようにアプリを前に出さないほかのフローティング
-  ウインドウを両方開いていると、もう一方をクリックしてもキー入力が Ripcord Notes に残ることが
-  あります（[#73](https://github.com/meltin/ripcord/issues/73)）。普通のアプリをクリックすれば
-  移ります。
-- Quicklinks: ホットキーで `{query}` に入る選択テキストは、アクセシビリティで選択範囲を伝える
-  アプリからだけ取れます。ほかのアプリでは空のままにします。⌘C でコピーするとクリップボードの
-  中身を置き換えてしまうためです。
-- System Actions: Raycast にある Dismiss Notifications はありません。macOS には通知センターを
-  アプリから消す方法がなく、アクセシビリティでボタンを押すしかありませんが、macOS が変わると
-  壊れるためです（[#30](https://github.com/meltin/ripcord/issues/30)）。
+- Notes: Ripcord Notes と、Raycast Notes のようにアプリを前に出さないほかのフローティングウインドウを両方開いていると、もう一方をクリックしてもキー入力が Ripcord Notes に残ることがあります（[#73](https://github.com/meltin/ripcord/issues/73)）。普通のアプリをクリックすれば移ります。
+- Quicklinks: ホットキーで `{query}` に入る選択テキストは、アクセシビリティで選択範囲を伝えるアプリからだけ取れます。ほかのアプリでは空のままにします。⌘C でコピーするとクリップボードの中身を置き換えてしまうためです。
+- System Actions: Raycast にある Dismiss Notifications はありません。macOS には通知センターをアプリから消す方法がなく、アクセシビリティでボタンを押すしかありませんが、macOS が変わると壊れるためです（[#30](https://github.com/meltin/ripcord/issues/30)）。
 
 ## ライセンス
 
 Ripcord は [MIT](./LICENSE) ライセンスです。
 
-パネルの操作に出る GitHub のアイコンは [it-icons](https://github.com/ouka-lab/it-icons) のもので、
-[MIT](./Resources/ThirdParty/GitHub-LICENSE.txt) です。
-絵文字の名前は Unicode の [CLDR](https://github.com/unicode-org/cldr-json) と
-[emoji-test.txt](https://unicode.org/Public/emoji/latest/emoji-test.txt) によるもので、
-[Unicode License](./Resources/ThirdParty/Unicode-LICENSE.txt) です。
-そのほかのアイコンは [Tabler Icons](https://github.com/tabler/tabler-icons) で、
-[MIT](./Resources/ThirdParty/Tabler-LICENSE.txt) です。
-Generate Dummy Text の単語リストは Raycast の
-[Japanese Lorem Ipsum Generator](https://github.com/raycast/extensions/tree/main/extensions/lipsum)
-によるもので、[MIT](./Resources/ThirdParty/Lipsum-LICENSE.txt) です。
-アップデートは [Sparkle](https://github.com/sparkle-project/Sparkle) を使っていて、
-[そのライセンス](./Resources/ThirdParty/Sparkle-LICENSE.txt) に従います。
+パネルの操作に出る GitHub のアイコンは [it-icons](https://github.com/ouka-lab/it-icons) のもので、[MIT](./Resources/ThirdParty/GitHub-LICENSE.txt) です。絵文字の名前は Unicode の [CLDR](https://github.com/unicode-org/cldr-json) と [emoji-test.txt](https://unicode.org/Public/emoji/latest/emoji-test.txt) によるもので、[Unicode License](./Resources/ThirdParty/Unicode-LICENSE.txt) です。そのほかのアイコンは [Tabler Icons](https://github.com/tabler/tabler-icons) で、[MIT](./Resources/ThirdParty/Tabler-LICENSE.txt) です。Generate Dummy Text の単語リストは Raycast の [Japanese Lorem Ipsum Generator](https://github.com/raycast/extensions/tree/main/extensions/lipsum) によるもので、[MIT](./Resources/ThirdParty/Lipsum-LICENSE.txt) です。アップデートは [Sparkle](https://github.com/sparkle-project/Sparkle) を使っていて、[そのライセンス](./Resources/ThirdParty/Sparkle-LICENSE.txt) に従います。
