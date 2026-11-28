@@ -6,6 +6,8 @@
 
 > A small, resident launcher for Apple silicon Macs, written in Swift and AppKit.
 
+<p align="center"><img src="./docs/screenshot.png" alt="Ripcord's panel, searching for color" width="600"></p>
+
 ⌘Space opens the panel. Type to open apps, calculate (`1+2*3`) or run one of these, many of
 them made to work as Raycast's do:
 

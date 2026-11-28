@@ -6,6 +6,8 @@
 
 > Apple silicon の Mac で常駐する小さなランチャー。Swift と AppKit で書いています。
 
+<p align="center"><img src="./docs/screenshot.png" alt="color で検索した Ripcord のパネル" width="600"></p>
+
 ⌘Space でパネルが開きます。入力してアプリを開いたり、計算（`1+2*3`）したり、次の機能を使ったりできます。多くは Raycast と同じ操作で動きます。
 
 <table>
