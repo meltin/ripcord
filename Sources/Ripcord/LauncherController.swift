@@ -2432,7 +2432,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       onToggleLidAwake()
     case .lidAwake(let seconds):
       onLidAwake(seconds)
-    case .stopLidAwake:
+    case .stopLidAwake, .run(.turnOffLidAwake):
       onStopLidAwake()
     case .run(.pickColor):
       pickColor()

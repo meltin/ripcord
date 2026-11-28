@@ -8,7 +8,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
   case caffeinateWhile, caffeinateStatus
   case sleepTimer, stopSleepTimer
   case sleepTimer15, sleepTimer30, sleepTimer45, sleepTimer60, sleepTimer90
-  case lidAwake
+  case lidAwake, turnOffLidAwake
   case pickColor, colorHistory, colorNames, convertColor, favoriteColors, colorWheel
   case cleanKeyboard
   case searchBookmarks, addBookmark
@@ -58,6 +58,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
       "Start \(sleepTimerMinutes ?? 0) Minute Sleep Timer"
     case .stopSleepTimer: "Stop Sleep Timer"
     case .lidAwake: "Lid Awake"
+    case .turnOffLidAwake: "Turn Off Lid Awake"
     case .pickColor: "Pick Color"
     case .colorHistory: "Color History"
     case .colorNames: "Color Names"
@@ -95,6 +96,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
       .sleepTimer90:
       "Sleep Timer"
     case .lidAwake: "Keep the Mac awake with the lid closed"
+    case .turnOffLidAwake: "Lid Awake"
     case .pickColor, .colorHistory, .colorNames, .convertColor, .favoriteColors, .colorWheel:
       "Color Picker"
     case .cleanKeyboard: "Clean Keyboard"
@@ -129,6 +131,7 @@ public enum BuiltinCommand: CaseIterable, Sendable {
     case .settings: "command:settings"
     case .caffeinate: "command:caffeinate"
     case .lidAwake: "command:lid-awake"
+    case .turnOffLidAwake: "command:turn-off-lid-awake"
     case .decaffeinate: "command:decaffeinate"
     case .toggleCaffeinate: "command:toggle-caffeinate"
     case .caffeinateFor: "command:caffeinate-for"

@@ -862,7 +862,7 @@ extension BuiltinCommand {
     case .sleepTimer, .stopSleepTimer, .sleepTimer15, .sleepTimer30, .sleepTimer45, .sleepTimer60,
       .sleepTimer90:
       .sleepTimer
-    case .lidAwake: .lidAwake
+    case .lidAwake, .turnOffLidAwake: .lidAwake
     case .pickColor, .colorHistory, .colorNames, .convertColor, .favoriteColors, .colorWheel:
       .colorPicker
     case .cleanKeyboard: .cleanKeyboard
