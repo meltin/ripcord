@@ -247,10 +247,10 @@ final class LauncherModel {
   /// A new bookmark's draft, kept while an edit has the form.
   var addDraft: BookmarkDraft?
   var quicklinkDraft = QuicklinkDraft()
-  /// A form Clipboard History's Save as Snippet or Save as Quicklink opened: Esc goes back to
-  /// the history, as it was searched, keeping no draft.
-  var returnsToClipboard = false
-  var clipboardQuery = ""
+  /// The list a Save as form came from (Clipboard History's Save as Snippet or Save as Quicklink,
+  /// Search Emoji's Save as Snippet): Esc goes back to it, as it was searched, keeping no draft.
+  var returnsTo: LauncherMode?
+  var returnQuery = ""
   /// Create Snippet's and Create Quicklink's own drafts, set aside while a Save as form or
   /// Duplicate Quicklink uses theirs, and put back however it's left.
   var setAside: (snippet: Snippet, tags: String, quicklink: QuicklinkDraft)?
@@ -948,10 +948,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
       let action = held.isEmpty ? nil : selected.actions.first { $0.shortcut == held + "↵" }
       perform(action?.action ?? selected.action)
     case .cancel:
-      if model.returnsToClipboard, model.mode.isForm {
+      if let list = model.returnsTo, model.mode.isForm {
         putBackSetAside()
-        model.mode = .clipboard
-        return update(model.clipboardQuery)
+        model.mode = list
+        return update(model.returnQuery)
       }
       // An edit always goes back to its list, even one its hotkey opened.
       if model.mode == .snippetForm, model.formSource != nil { return goBack() }
@@ -1348,7 +1348,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private func stashDraft() {
     // A borrowed form's fields (Save as, Duplicate Quicklink) aren't a draft: the form's own come
     // back instead.
-    if model.returnsToClipboard || model.setAside != nil { return putBackSetAside() }
+    if model.returnsTo != nil || model.setAside != nil { return putBackSetAside() }
     switch model.mode {
     case .snippetForm where model.formSource == nil:
       let started = snippetStarted
@@ -1378,7 +1378,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// Ends a Save as form: Create Snippet's and Create Quicklink's drafts as they were before it.
   private func putBackSetAside() {
-    model.returnsToClipboard = false
+    model.returnsTo = nil
     guard let setAside = model.setAside else { return }
     model.draft = setAside.snippet
     model.tagsText = setAside.tags
@@ -2083,6 +2083,24 @@ final class LauncherController: NSObject, NSWindowDelegate {
       refreshRows(selecting: model.mode == .favoriteColors ? nil : "color:\(hex)")
       return HUD.show(wasFavorite ? "Removed from favorites" : "Added to favorites")
     }
+    if case .submenu(let title, let items) = action {
+      model.menu = OpenMenu(title: title, items: items, isRoot: false)
+      return
+    }
+    if case .saveAsSnippet(let text) = action { return saveAsSnippet(text) }
+    if case .deleteAllColors(let confirmed) = action {
+      model.menu = nil
+      guard confirmed else {
+        model.confirmation = Confirmation(
+          icon: .command(.colorHistory), title: "Delete All Colors?",
+          message: "Every picked color but the favorites is deleted. This can't be undone.",
+          confirmTitle: "Delete All", action: .deleteAllColors(confirmed: true))
+        return
+      }
+      model.confirmation = nil
+      do { try colors.deleteAll() } catch { onError(error.localizedDescription) }
+      return refreshRows(selecting: nil)
+    }
     if case .deleteColor(let hex) = action {
       model.menu = nil
       do { try colors.delete(hex: hex) } catch { onError(error.localizedDescription) }
@@ -2294,7 +2312,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       .openDraft, .discardDraft, .runScript, .run(.searchNotes), .deleteNote, .copyNoteAsMenu,
       .duplicateNote, .deleteAllNotes,
       .moveFavorite,
-      .deleteColor, .toggleFavoriteColor,
+      .deleteColor, .toggleFavoriteColor, .deleteAllColors, .submenu, .saveAsSnippet,
       .run(.createSnippet), .clip, .snippet, .system, .window:
       break  // Handled above, without hiding the panel.
     case .run(.checkForUpdates):
@@ -2733,10 +2751,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// An edit goes back to Search Snippets, where it started; anything else to the root search.
   private func goBack() {
     // Where a borrowed form goes back to, read before its own draft is put back in its place.
-    if model.returnsToClipboard, model.mode.isForm {
+    if let list = model.returnsTo, model.mode.isForm {
       putBackSetAside()
-      model.mode = .clipboard
-      return update(model.clipboardQuery)
+      model.mode = list
+      return update(model.returnQuery)
     }
     let quicklinkDraft = model.quicklinkDraft
     stashDraft()
@@ -2825,7 +2843,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
     guard saved else { return NSSound.beep() }
     // A Save as form's save leaves Create Snippet's own draft alone.
-    if editing == nil, model.formSource == nil, !model.returnsToClipboard {
+    if editing == nil, model.formSource == nil, model.returnsTo == nil {
       saveDrafts { drafts in
         drafts.snippet = nil
         drafts.snippetTags = nil
@@ -3082,32 +3100,37 @@ final class LauncherController: NSObject, NSWindowDelegate {
       if model.mode == .clipboard { refreshRows() }
     case .saveAsSnippet:
       guard case .text(let text) = clipboard.history.item(id)?.content else { return }
-      // Create Snippet's form with the text; Esc goes back to the history.
-      model.menu = nil
-      setDraftsAside()
-      model.isPickingIcon = false
-      model.formSource = nil
-      model.editing = nil
-      model.editingOriginal = nil
-      model.draft = Snippet(name: "", text: text)
-      model.tagsText = ""
-      model.clipboardQuery = model.query
-      model.mode = .snippetForm
-      update("")
-      model.returnsToClipboard = true
+      saveAsSnippet(text)
     case .saveAsQuicklink:
       guard case .text(let text) = clipboard.history.item(id)?.content else { return }
       model.menu = nil
       setDraftsAside()
       model.quicklinkDraft = QuicklinkDraft(
         link: text.trimmingCharacters(in: .whitespacesAndNewlines))
-      model.clipboardQuery = model.query
+      let from = (model.mode, model.query)
       model.mode = .quicklinkForm
       update("")
-      model.returnsToClipboard = true
+      (model.returnsTo, model.returnQuery) = from
     case .saveAsFile:
       saveClipToFile(id)
     }
+  }
+
+  /// Create Snippet's form filled with `text`, Esc going back to the list it came from, as
+  /// Raycast's Save as Snippet.
+  private func saveAsSnippet(_ text: String) {
+    model.menu = nil
+    setDraftsAside()
+    model.isPickingIcon = false
+    model.formSource = nil
+    model.editing = nil
+    model.editingOriginal = nil
+    model.draft = Snippet(name: "", text: text)
+    model.tagsText = ""
+    let from = (model.mode, model.query)
+    model.mode = .snippetForm
+    update("")
+    (model.returnsTo, model.returnQuery) = from
   }
 
   /// Save as File…: a text entry as a .txt file, an image as its picture, where the save panel

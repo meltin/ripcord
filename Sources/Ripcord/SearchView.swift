@@ -500,7 +500,7 @@ private struct ResultIcon: View {
       tile("trash", .gray)
     case .editQuicklink, .duplicateQuicklink:
       tile("pencil", .gray)
-    case .deleteColor, .deleteBookmark:
+    case .deleteColor, .deleteBookmark, .deleteAllColors:
       tile("trash", .gray)
     case .editBookmark, .moveBookmarkMenu, .moveBookmark:
       tile("bookmark.fill", .yellow)
@@ -522,6 +522,10 @@ private struct ResultIcon: View {
       tile(BuiltinCommand.cleanKeyboard.symbol, BuiltinCommand.cleanKeyboard.color)
     case .openNote, .deleteNote, .copyNoteAsMenu, .duplicateNote, .deleteAllNotes:
       tile("note.text", .orange)
+    case .submenu:
+      tile("doc.on.doc", .gray)
+    case .saveAsSnippet:
+      tile(BuiltinCommand.createSnippet.symbol, BuiltinCommand.createSnippet.color)
     case .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey, .deleteAlias,
       .disableCommand:
       tile("gearshape", .gray)

@@ -308,6 +308,12 @@ public struct ColorHistory: Sendable {
     try save(colors.filter { $0.hex != hex })
   }
 
+  /// Delete All Colors: every picked color but the favorites, as Clipboard History's Delete All
+  /// Entries keeps the pinned ones.
+  public mutating func deleteAll() throws {
+    try save(colors.filter { $0.isFavorite == true })
+  }
+
   /// Writes `new`, and only then shows it, so the list never differs from the file.
   private mutating func save(_ new: [PickedColor]) throws {
     try FileManager.default.createDirectory(
@@ -333,16 +339,22 @@ extension Search {
           || searched.contains { $0.string(for: color).localizedStandardContains(trimmed) })
     }
     .map { color in
-      // The default format first, on Return; the others after it.
-      let copies = ([format] + ColorFormat.allCases.filter { $0 != format }).enumerated().map {
-        index, each in
+      // Raycast's Organize Colors: the default format copied on Return, pasted on ⌘↵, and the
+      // others under Copy as…; its Edit Title and groups are left out.
+      let shown = format.string(for: color)
+      let copyAs = ColorFormat.allCases.map {
         MenuAction(
-          title: "Copy \(each.title)", symbol: "doc.on.doc", shortcut: index == 0 ? "↵" : "",
-          action: .copy(each.string(for: color)))
+          title: $0.title, symbol: "doc.on.doc", shortcut: "", action: .copy($0.string(for: color)))
       }
       let isFavorite = color.isFavorite == true
       let menu =
-        copies + [
+        [
+          MenuAction(
+            title: "Copy to Clipboard", symbol: "doc.on.doc", shortcut: "↵", action: .copy(shown)),
+          MenuAction(title: "Paste", symbol: "return", shortcut: "⌘↵", action: .pasteText(shown)),
+          MenuAction(
+            title: "Copy as…", symbol: "doc.on.doc", shortcut: "⇧⌘C",
+            action: .submenu(title: "Copy as", items: copyAs)),
           // ⇧⌘F, as Raycast's Organize Colors has it.
           MenuAction(
             title: isFavorite ? "Remove from Favorites" : "Add to Favorites",
@@ -350,8 +362,16 @@ extension Search {
             action: .toggleFavoriteColor(color.hex), startsSection: true),
           MenuAction(
             title: "Delete Color", symbol: "trash", shortcut: "⌃X",
-            action: .deleteColor(color.hex), isDestructive: true),
+            action: .deleteColor(color.hex), isDestructive: true, startsSection: true),
         ]
+        // Not in Favorite Colors, whose colors it keeps: it would delete only what's not shown.
+        + (favoritesOnly
+          ? []
+          : [
+            MenuAction(
+              title: "Delete All Colors", symbol: "trash", shortcut: "⌃⇧X",
+              action: .deleteAllColors(confirmed: false), isDestructive: true)
+          ])
       return SearchResult(
         id: "color:\(color.hex)", title: format.string(for: color),
         subtitle: format == .hex ? ColorFormat.rgb.string(for: color) : color.hex, keyword: nil,

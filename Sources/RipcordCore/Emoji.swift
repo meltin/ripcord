@@ -250,6 +250,9 @@ extension Search {
         MenuAction(
           title: "Copy All Emojis from Section", symbol: "doc.on.doc", shortcut: "⌃⌘C",
           action: .copy(section)),
+        MenuAction(
+          title: "Save as Snippet", symbol: "text.quote", shortcut: "⌘S",
+          action: .saveAsSnippet(shown)),
       ]
     if emoji.tones != nil {
       menu.append(
