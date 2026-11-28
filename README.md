@@ -116,8 +116,8 @@
   MarkMarks has one picked, under their `#` headings; Return opens one, and ⌘K copies its
   URL (⌘C, while no text is selected in the search field) or title (⇧⌘C), edits it (⌘E), moves it
   to another group (⌘M), deletes it (⌃X) or shows the file in Finder (⇧⌘O), as MarkMarks' do. Add
-  Bookmark opens a form for a new one, filled with the tab you're on in Safari, Chrome or Arc. Only the lines a change
-  touches are rewritten; the rest stays as you wrote it
+  Bookmark opens a form for a new one, filled with the tab you're on in Safari, Chrome or Arc.
+  Only the lines a change touches are rewritten; the rest stays as you wrote it
 - Notes: Ripcord Notes opens a small window at the top right of the screen, floating over your
   apps without taking them out of front, on one note at a time, and grows with the note. Its
   Markdown is formatted as you type, as in Raycast Notes: once a mark is complete it's hidden
