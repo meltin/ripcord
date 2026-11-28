@@ -247,6 +247,10 @@ final class LauncherModel {
   /// A new bookmark's draft, kept while an edit has the form.
   var addDraft: BookmarkDraft?
   var quicklinkDraft = QuicklinkDraft()
+  /// A form Clipboard History's Save as Snippet or Save as Quicklink opened: Esc goes back to
+  /// the history, as it was searched, keeping no draft.
+  var returnsToClipboard = false
+  var clipboardQuery = ""
 
   /// The command the footer names: an edit's form is the list's, where it came from.
   var footerCommand: BuiltinCommand? {
@@ -941,6 +945,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
       let action = held.isEmpty ? nil : selected.actions.first { $0.shortcut == held + "↵" }
       perform(action?.action ?? selected.action)
     case .cancel:
+      if model.returnsToClipboard, model.mode.isForm {
+        model.returnsToClipboard = false
+        model.mode = .clipboard
+        return update(model.clipboardQuery)
+      }
       // An edit always goes back to its list, even one its hotkey opened.
       if model.mode == .snippetForm, model.formSource != nil { return goBack() }
       if model.mode == .bookmarkForm, model.bookmarkDraft.original != nil { return goBack() }
@@ -1821,6 +1830,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.searchQuicklinks) { return open(.quicklinks) }
     if action == .run(.searchScriptCommands) { return open(.scriptCommands) }
     if action == .run(.createQuicklink) {
+      model.returnsToClipboard = false
       // A new one left half typed stays, as Raycast's drafts do; an edit left open doesn't.
       if model.quicklinkDraft.original != nil { model.quicklinkDraft = QuicklinkDraft() }
       model.quicklinkDraft.fromList = panel.isVisible && model.mode == .quicklinks
@@ -2599,6 +2609,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if mode != .pick { finishPick(nil) }
     // A form left for another command's list keeps what was typed.
     if model.mode != mode { stashDraft() }
+    model.returnsToClipboard = false
     // A command's hotkey would change the list under Set Alias…'s card.
     closeEditor(backToMenu: false)
     // Its hotkey closes its own list, as the launcher hotkey closes the panel.
@@ -2640,6 +2651,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// something into it; it's cleared once saved.
   private func edit(_ index: Int?, duplicate: Bool = false) {
     model.isPickingIcon = false
+    model.returnsToClipboard = false
     let draftIsNew = model.formSource == nil
     let source = index.flatMap { snippets.indices.contains($0) ? $0 : nil }
     model.formSource = source
@@ -2907,6 +2919,82 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .confirmDeleteAll:
       model.menu = nil
       clearClipboardHistory()
+    case .deleteRecentMenu:
+      model.menu = OpenMenu(
+        title: "Delete Recent Entries", items: SearchResult.deleteRecentMenu(for: id),
+        isRoot: false)
+    case .deleteRecent(let seconds):
+      // Asked first, as Delete All Entries is: the entries have no undo.
+      model.menu = nil
+      let span =
+        SearchResult.deleteRecentMenu(for: id)
+        .first { $0.action == .clip(id, .deleteRecent(seconds)) }?.title.lowercased() ?? ""
+      model.confirmation = Confirmation(
+        icon: .command(.clipboardHistory), title: "Delete Recent Entries?",
+        message:
+          "Entries copied in the \(span) are deleted, but not the pinned ones. This can't be undone.",
+        confirmTitle: "Delete", action: .clip(id, .confirmDeleteRecent(seconds)))
+    case .confirmDeleteRecent(let seconds):
+      model.menu = nil
+      clipboard.deleteRecent(since: .now.addingTimeInterval(-seconds))
+      if model.mode == .clipboard { refreshRows() }
+    case .saveAsSnippet:
+      guard case .text(let text) = clipboard.history.item(id)?.content else { return }
+      // Create Snippet's form with the text; Esc goes back to the history.
+      model.menu = nil
+      model.isPickingIcon = false
+      model.formSource = nil
+      model.editing = nil
+      model.editingOriginal = nil
+      model.draft = Snippet(name: "", text: text)
+      model.tagsText = ""
+      model.clipboardQuery = model.query
+      model.mode = .snippetForm
+      update("")
+      model.returnsToClipboard = true
+    case .saveAsQuicklink:
+      guard case .text(let text) = clipboard.history.item(id)?.content else { return }
+      model.menu = nil
+      model.quicklinkDraft = QuicklinkDraft(
+        link: text.trimmingCharacters(in: .whitespacesAndNewlines))
+      model.clipboardQuery = model.query
+      model.mode = .quicklinkForm
+      update("")
+      model.returnsToClipboard = true
+    case .saveAsFile:
+      saveClipToFile(id)
+    }
+  }
+
+  /// Save as File…: a text entry as a .txt file, an image as its picture, where the save panel
+  /// says.
+  private func saveClipToFile(_ id: UUID) {
+    guard let item = clipboard.history.item(id) else { return }
+    let data: Data?
+    let name: String
+    switch item.content {
+    case .text(let text):
+      data = Data(text.utf8)
+      name = "Clipboard Text.txt"
+    case .image:
+      let file = clipboard.history.imageURL(of: item)
+      data = file.flatMap { try? Data(contentsOf: $0) }
+      name =
+        (item.name.map { ($0 as NSString).deletingPathExtension } ?? "Image") + "."
+        + (file?.pathExtension ?? "png")
+    case .files:
+      return
+    }
+    hide()
+    NSApp.activate()
+    let panel = NSSavePanel()
+    panel.nameFieldStringValue = name
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+    do {
+      guard let data else { throw CocoaError(.fileReadNoSuchFile) }
+      try data.write(to: url, options: .atomic)
+    } catch {
+      onError("Couldn't save the entry: \(error.localizedDescription)")
     }
   }
 }

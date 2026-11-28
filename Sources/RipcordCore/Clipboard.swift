@@ -265,6 +265,17 @@ public struct ClipboardHistory: Sendable {
     try save()
   }
 
+  /// Deletes the unpinned items last copied at or after `date`, as Raycast's Delete Recent
+  /// Entries does for its last few minutes or hours.
+  public mutating func deleteRecent(since date: Date) throws {
+    let recent = items.filter { !$0.isPinned && $0.date >= date }
+    guard !recent.isEmpty else { return }
+    recent.forEach(removeFile)
+    let ids = Set(recent.map(\.id))
+    items = items.filter { !ids.contains($0.id) }
+    try save()
+  }
+
   /// Counts another copy of `id` and moves it to the top; a copied file's `name` renames it.
   public mutating func touch(_ id: UUID, at date: Date = .now, name: String? = nil) throws {
     guard var item = item(id) else { return }
