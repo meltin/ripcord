@@ -52,9 +52,10 @@
 - Snippets: Create Snippet saves text with a name, keyword, icon and tags from the panel, and
   Search Snippets pastes it into the app you were in. `{clipboard}`, `{date}`, `{time}`,
   `{datetime}`, `{day}` and `{uuid}` are filled in, and `{cursor}` is where the caret lands.
-  ⇧⌘C copies, ⌘E edits, ⌘D duplicates and ⌃X deletes, asked first unless Show Warning Before
-  Deleting Snippets is off; the tag menu filters the list. Export
-  Snippets and Import Snippets read and write the JSON Raycast uses. Typing a snippet's keyword
+  As Raycast's, ⌘↵ copies, ⌘E edits, ⌘D duplicates, ⌥⇧⌘S exports the one snippet, ⌃X deletes it
+  (asked first unless Show Warning Before Deleting Snippets is off) and ⌃⇧X deletes all, always
+  asked first; the tag menu filters the list. Export Snippets and Import Snippets read and write
+  the JSON Raycast uses. Typing a snippet's keyword
   (`;addr`) in another app replaces it with the snippet, while typing in English rather than kana
   and never in a password field or Ripcord's own panel and Notes; Settings › Snippets sets when
   it expands, and the apps it stays out of

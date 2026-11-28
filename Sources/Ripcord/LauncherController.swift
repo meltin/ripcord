@@ -2774,6 +2774,29 @@ final class LauncherController: NSObject, NSWindowDelegate {
         return current.enumerated().filter { $0.offset != index }.map(\.element)
       }
       if !saved { NSSound.beep() }
+    case .export:
+      let snippet = snippets[index]
+      hide()
+      NSApp.activate()
+      let panel = NSSavePanel()
+      panel.nameFieldStringValue = "\(snippet.name).json"
+      panel.allowedContentTypes = [.json]
+      guard panel.runModal() == .OK, let url = panel.url else { return }
+      do {
+        try Snippet.exportData([snippet]).write(to: url, options: .atomic)
+      } catch {
+        onError("Couldn't export the snippet: \(error.localizedDescription)")
+      }
+    case .deleteAll:
+      // Asked even with Show Warning Before Deleting Snippets off: every snippet goes.
+      model.menu = nil
+      model.confirmation = Confirmation(
+        icon: .command(.searchSnippets), title: "Delete All Snippets?",
+        message: "Every snippet is deleted. This can't be undone.",
+        confirmTitle: "Delete All", action: .snippet(index, .confirmDeleteAll))
+    case .confirmDeleteAll:
+      model.menu = nil
+      if !editSnippets({ _ in [] }) { NSSound.beep() }
     }
   }
 

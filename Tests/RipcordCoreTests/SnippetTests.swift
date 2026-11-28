@@ -144,12 +144,17 @@ import Testing
     #expect(result.kind.primaryAction == "Paste to App")
     #expect(result.keyword == "sig")
     #expect(result.symbol == "doc")
-    #expect(result.actions.map(\.shortcut) == ["↵", "⇧⌘C", "⌘E", "⌘D", "⌘N", "⌃X", "⇧⌘,"])
+    // Raycast's keys: Copy on ⌘↵, Export Snippet… and Delete All Snippets.
+    #expect(
+      result.actions.map(\.shortcut) == [
+        "↵", "⌘↵", "⌘E", "⌘D", "⌘N", "⌥⇧⌘S", "⌃X", "⌃⇧X", "⇧⌘,",
+      ])
     #expect(
       result.actions.map(\.action) == [
         .snippet(4, .paste), .snippet(4, .copy), .snippet(4, .edit), .snippet(4, .duplicate),
-        .run(.createSnippet),
-        .snippet(4, .delete), .configureMenu(BuiltinCommand.searchSnippets.settingsKey),
+        .run(.createSnippet), .snippet(4, .export),
+        .snippet(4, .delete), .snippet(4, .deleteAll),
+        .configureMenu(BuiltinCommand.searchSnippets.settingsKey),
       ])
   }
 
