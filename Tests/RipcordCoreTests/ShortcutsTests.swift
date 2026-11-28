@@ -142,17 +142,20 @@ import Testing
     #expect(
       !Search.results(for: "quit", apps: [], quicklinks: [], items: items)
         .contains { $0.action == .run(.quit) })
+    var ranking = Ranking()
+    ranking.record(photoshop.settingsKey)
+    ranking.record(remotePlay.settingsKey)
     let start = Search.sections(
-      for: "", apps: [], running: [photoshop, remotePlay], quicklinks: [], items: items)
+      for: "", apps: [photoshop, remotePlay], quicklinks: [], items: items, ranking: ranking)
     #expect(start.first?.results.map(\.title) == ["PS Remote Play"])
   }
 
   @Test func disabledQuicklinksDisappearEverywhere() {
-    let start = Search.sections(for: "", apps: [], running: [], quicklinks: links)
+    let start = Search.sections(for: "", apps: [], quicklinks: links)
     #expect(start.flatMap(\.results).map(\.title) == ["GitHub"])
     let expanded = Search.results(for: "g cats", apps: [], quicklinks: links)
     #expect(!expanded.contains { $0.subtitle == "Google" })
-    let fallback = Search.sections(for: "zzqq", apps: [], running: [], quicklinks: links)
+    let fallback = Search.sections(for: "zzqq", apps: [], quicklinks: links)
     #expect(fallback.flatMap(\.results).map(\.title) == ["GitHub"])
   }
 

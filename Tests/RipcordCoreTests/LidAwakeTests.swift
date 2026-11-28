@@ -5,7 +5,7 @@ import Testing
 
 @Suite struct LidAwakeTests {
   @Test func aTimeTypedAfterItsNameTurnsItOnForThatLong() throws {
-    let sections = Search.sections(for: "lid awake 2h", apps: [], running: [], quicklinks: [])
+    let sections = Search.sections(for: "lid awake 2h", apps: [], quicklinks: [])
     let row = try #require(sections.first?.results.first { $0.id == "lid-awake-for" })
     #expect(row.action == .lidAwake(7200))
     #expect(row.title.hasPrefix("Lid Awake for"))
@@ -21,7 +21,7 @@ import Testing
     #expect(open.results.first?.subtitle == "Until turned off")
     #expect(Search.lidAwakeSection(nil) == nil)
     let root = Search.sections(
-      for: "", apps: [], running: [], quicklinks: [], lidAwake: LidAwakeStatus(endsAt: nil))
+      for: "", apps: [], quicklinks: [], lidAwake: LidAwakeStatus(endsAt: nil))
     #expect(root.first?.title == "Lid Awake")
   }
 

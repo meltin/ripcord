@@ -15,7 +15,7 @@ import Testing
     #expect(rows.first?.action == .cleanKeyboard(15))
     // Through the root sections too, as the panel lists them.
     #expect(
-      Search.sections(for: "Clean Keyboard ", apps: [], running: [], quicklinks: [])
+      Search.sections(for: "Clean Keyboard ", apps: [], quicklinks: [])
         .flatMap(\.results).first?.action == .cleanKeyboard(15))
   }
 

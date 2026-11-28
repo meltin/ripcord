@@ -527,7 +527,7 @@ private struct ResultIcon: View {
     case .saveAsSnippet:
       tile(BuiltinCommand.createSnippet.symbol, BuiltinCommand.createSnippet.color)
     case .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey, .deleteAlias,
-      .disableCommand, .controlApp:
+      .disableCommand, .controlApp, .resetRanking:
       tile("gearshape", .gray)
     case .snippet:
       // Plain, as Raycast draws a snippet's icon.

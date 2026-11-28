@@ -271,6 +271,8 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     case disableCommand(String)
     /// Hides, quits, force quits or restarts the running app with this settings key.
     case controlApp(String, AppControl)
+    /// Reset Ranking: the item with this key leaves Suggestions until it's opened again.
+    case resetRanking(String)
     /// Keeps the Mac awake for this many seconds; nil until Decaffeinate.
     case caffeinate(TimeInterval?)
     /// Sleeps the Mac, or only turns its display off, after this many seconds.
@@ -675,10 +677,10 @@ public struct SearchSection: Identifiable, Equatable, Sendable {
 public enum Search {
   /// The start screen for an empty query; otherwise one "Results" section.
   public static func sections(
-    for query: String, apps: [AppEntry], running: [AppEntry], quicklinks: [Quicklink],
+    for query: String, apps: [AppEntry], quicklinks: [Quicklink],
     items: [String: ItemSettings] = [:], favorites: [String] = [],
     drafts: SavedDrafts = SavedDrafts(), scripts: [ScriptCommand] = [],
-    lidAwake: LidAwakeStatus? = nil, runningKeys: Set<String> = []
+    lidAwake: LidAwakeStatus? = nil, runningKeys: Set<String> = [], ranking: Ranking = Ranking()
   ) -> [SearchSection] {
     let links = quicklinks.filter(\.isEnabled)
     let trimmed = query.trimmingCharacters(in: .whitespaces)
@@ -687,7 +689,7 @@ public enum Search {
       // its title.
       let found = results(
         for: query, apps: apps, quicklinks: links, items: items, favorites: favorites,
-        scripts: scripts, runningKeys: runningKeys)
+        scripts: scripts, runningKeys: runningKeys, ranking: ranking)
       guard found.isEmpty else { return [SearchSection(title: "Results", results: found)] }
       // Like Raycast's fallback commands: hand the whole query to each Quicklink.
       let fallbacks = links.compactMap { link in
@@ -710,31 +712,22 @@ public enum Search {
       }, uniquingKeysWith: { first, _ in first })
     let shown = shownFavorites(favorites, among: Set(byKey.keys))
     let favored = shown.compactMap { byKey[$0] }
-    // Only what Favorites shows leaves the lists below: a favorite that can't be listed there
-    // (an app run from outside the folders scanned) stays where it can be seen and removed.
-    let shownRunning = running.filter {
-      (items[$0.settingsKey]?.isEnabled ?? true) && !shown.contains($0.settingsKey)
+    // Raycast's five, from what's listed (on) and not a favorite already.
+    let suggested = ranking.top(5, among: Set(byKey.keys).subtracting(shown))
+    let decorate = { (result: SearchResult) in
+      withFavoriteActions(result, favorites: shown, ranking: ranking)
     }
-    let decorate = { (result: SearchResult) in withFavoriteActions(result, favorites: shown) }
-    // An app run from outside the folders scanned has no On box in Settings to turn it back on.
-    let scanned = Set(apps.map(\.settingsKey))
     // Ripcord's own commands live in the footer's root menu; typing still finds them.
     // On, Lid Awake stays at the top with the way to turn it off.
     return [lidAwakeSection(lidAwake), draftSection(drafts)].compactMap { $0 }
       + [
         SearchSection(title: "Favorites", results: favored.map(decorate)),
-        // Capped so Quicklinks stay in view.
         SearchSection(
-          title: "Running",
-          results: shownRunning.prefix(5).map {
-            withFavoriteActions(
-              result(for: $0, alias: items[$0.settingsKey]?.alias, isRunning: true),
-              favorites: shown, disables: scanned.contains($0.settingsKey))
-          }),
+          title: "Suggestions", results: suggested.compactMap { byKey[$0] }.map(decorate)),
         SearchSection(
           title: "Quicklinks",
           results: links.compactMap(result(for:)).filter {
-            !shown.contains($0.itemKey ?? "")
+            !shown.contains($0.itemKey ?? "") && !suggested.contains($0.itemKey ?? "")
           }.map(decorate)),
       ].filter { !$0.results.isEmpty }
   }
@@ -761,9 +754,9 @@ public enum Search {
 
   /// The row's ⌘K actions with Add to Favorites, or a favorite's Remove and Move, as Raycast's
   /// list them; rows that can't be one stay as they are.
-  /// `disables` adds Raycast's Disable Command, last; not for an item Settings can't turn back on.
+  /// Raycast's Disable Command goes last. Reset Ranking goes after Configure Command…, as Raycast's, on an item Suggestions ranks.
   static func withFavoriteActions(
-    _ result: SearchResult, favorites: [String], disables: Bool = true
+    _ result: SearchResult, favorites: [String], ranking: Ranking = Ranking()
   ) -> SearchResult {
     guard let key = result.itemKey else { return result }
     let favorite: [MenuAction] =
@@ -802,9 +795,20 @@ public enum Search {
       actions.indices.dropFirst().first { actions[$0].startsSection }
       ?? actions.count - (configure == nil ? 0 : 1)
     // Last and red, as Raycast's. Not on a script, which Settings lists only by its folder.
-    let disable = disables && result.kind != .script ? [MenuAction.disable(key)] : []
+    let disable = result.kind != .script ? [MenuAction.disable(key)] : []
+    var menu = Array(actions[..<cut]) + favorite + Array(actions[cut...])
+    if ranking.uses[key] != nil {
+      let configured = menu.firstIndex {
+        if case .configureMenu = $0.action { true } else { false }
+      }
+      menu.insert(
+        MenuAction(
+          title: "Reset Ranking", symbol: "arrow.uturn.backward", shortcut: "",
+          action: .resetRanking(key)),
+        at: configured.map { $0 + 1 } ?? menu.count)
+    }
     var decorated = result
-    decorated.menu = Array(actions[..<cut]) + favorite + Array(actions[cut...]) + disable
+    decorated.menu = menu + disable
     return decorated
   }
 
@@ -813,7 +817,7 @@ public enum Search {
   public static func results(
     for query: String, apps: [AppEntry], quicklinks: [Quicklink],
     items: [String: ItemSettings] = [:], favorites: [String] = [],
-    scripts: [ScriptCommand] = [], runningKeys: Set<String> = []
+    scripts: [ScriptCommand] = [], runningKeys: Set<String> = [], ranking: Ranking = Ranking()
   ) -> [SearchResult] {
     let trimmed = query.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return [] }
@@ -890,7 +894,7 @@ public enum Search {
       }
       .prefix(30)
       // Only the rows shown: an app's actions read its bundle.
-      .map { withFavoriteActions($0.result, favorites: shown) }
+      .map { withFavoriteActions($0.result, favorites: shown, ranking: ranking) }
 
     // "clean keyboard 30s", or the usual times while none is typed yet.
     // The usual times only once the command put its title and a space in the field: the title or

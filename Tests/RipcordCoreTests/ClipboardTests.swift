@@ -490,6 +490,6 @@ private func temporaryDirectory() -> URL {
   @Test func typingFindsTheCommandButTheStartScreenStaysAsItWas() {
     let results = Search.results(for: "clipboard", apps: [], quicklinks: [])
     #expect(results.first?.action == .run(.clipboardHistory))
-    #expect(Search.sections(for: "", apps: [], running: [], quicklinks: []).isEmpty)
+    #expect(Search.sections(for: "", apps: [], quicklinks: []).isEmpty)
   }
 }
