@@ -946,10 +946,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
         flags.contains($0.0)
       }.map(\.1).joined()
       let action = held.isEmpty ? nil : selected.actions.first { $0.shortcut == held + "↵" }
-      // Opened from the root search with Return, as Raycast ranks its Suggestions.
-      if action == nil, model.mode == .root, let key = selected.itemKey {
-        editRanking { $0.record(key) }
-      }
+      if action == nil { rank(selected) }
       perform(action?.action ?? selected.action)
     case .cancel:
       if let list = model.returnsTo, model.mode.isForm {
@@ -985,7 +982,10 @@ final class LauncherController: NSObject, NSWindowDelegate {
       chooseArgument(choice)
     case .closeArgumentMenu:
       model.argumentMenu = nil
-    case .activate(let id): model.results.first { $0.id == id }.map { perform($0.action) }
+    case .activate(let id):
+      guard let row = model.results.first(where: { $0.id == id }) else { return }
+      rank(row)
+      perform(row.action)
     case .toggleMenu(let root): toggleMenu(root: root)
     case .filterClipType(let type):
       model.clipType = type
@@ -1633,14 +1633,20 @@ final class LauncherController: NSObject, NSWindowDelegate {
     return true
   }
 
-  /// Selects the row of the item with `key` after a favorite moved it: its row ID can differ
-  /// between Running and Favorites, as a running app's path does.
+  /// A row opened from the root search, by Return or a click, as Raycast ranks its Suggestions.
+  private func rank(_ row: SearchResult) {
+    guard model.mode == .root, let key = row.rankingKey else { return }
+    editRanking { $0.record(key) }
+  }
+
   private func editRanking(_ change: (inout Ranking) -> Void) {
     var ranking = rankingStore.ranking
     change(&ranking)
     do { try rankingStore.save(ranking) } catch { onError(error.localizedDescription) }
   }
 
+  /// Selects the row of the item with `key` after a favorite moved it, by its key rather than
+  /// its row ID.
   private func select(itemKey key: String) {
     if let index = model.results.firstIndex(where: { $0.itemKey == key }) {
       model.selection = index

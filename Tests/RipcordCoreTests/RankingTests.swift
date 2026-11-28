@@ -36,6 +36,35 @@ import Testing
     #expect(!sections.contains { $0.title == "Quicklinks" })
   }
 
+  @Test func typedQuicklinksCountForTheirQuicklink() throws {
+    let link = Quicklink(name: "Google", url: "https://google.com/?q={query}", keyword: "g")
+    let typed = try #require(Search.results(for: "g swift", apps: [], quicklinks: [link]).first)
+    #expect(typed.rankingKey == link.rowID)
+    let fallback = try #require(
+      Search.sections(for: "zzqq", apps: [], quicklinks: [link]).first?.results.first)
+    #expect(fallback.rankingKey == link.rowID)
+    #expect(
+      Search.results(for: "search snippets", apps: [], quicklinks: []).first?.rankingKey
+        == BuiltinCommand.searchSnippets.settingsKey)
+  }
+
+  @Test func rankedRunningAppKeepsRaycastsOrder() throws {
+    let app = AppEntry(
+      url: URL(fileURLWithPath: "/Applications/Rex.app"), names: ["Rex"], bundleID: "rex")
+    var ranking = Ranking()
+    ranking.record("rex", at: now)
+    let row = try #require(
+      Search.sections(for: "", apps: [app], quicklinks: [], runningKeys: ["rex"], ranking: ranking)
+        .first?.results.first)
+    let titles = row.actions.map(\.title)
+    let configure = try #require(titles.firstIndex(of: "Configure Command…"))
+    #expect(
+      Array(titles[configure...]) == [
+        "Configure Command…", "Reset Ranking", "Hide Application", "Quit Application",
+        "Force Quit Application", "Restart Application", "Disable Command",
+      ])
+  }
+
   @Test func storeKeepsTheRankingAcrossLaunches() throws {
     let url = FileManager.default.temporaryDirectory.appending(path: "ranking-\(UUID()).json")
     defer { try? FileManager.default.removeItem(at: url) }

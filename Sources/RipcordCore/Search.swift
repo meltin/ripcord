@@ -568,6 +568,15 @@ public struct SearchResult: Identifiable, Equatable, Sendable {
     }
   }
 
+  /// What Suggestions counts opening this row as: its item, or the Quicklink a query was typed
+  /// for ("g swift", or a fallback), whose row is the one Suggestions lists.
+  public var rankingKey: String? {
+    for prefix in ["quicklink-query:", "fallback:"] where id.hasPrefix(prefix) {
+      return Quicklink(name: String(id.dropFirst(prefix.count)), url: "").rowID
+    }
+    return itemKey
+  }
+
   /// A Clipboard History entry's ⌘K, as Raycast's: its pastes and copy first, Open in Browser for
   /// a link, then Pin Entry and the deletes. "to App" is the app the paste lands in. Only text has
   /// formatting to keep or leave out, so only text gets the plain-text wording and ⌃⌘↵.
@@ -754,7 +763,8 @@ public enum Search {
 
   /// The row's ⌘K actions with Add to Favorites, or a favorite's Remove and Move, as Raycast's
   /// list them; rows that can't be one stay as they are.
-  /// Raycast's Disable Command goes last. Reset Ranking goes after Configure Command…, as Raycast's, on an item Suggestions ranks.
+  /// Raycast's Disable Command goes last, and Reset Ranking after Configure Command…, on an item
+  /// Suggestions ranks.
   static func withFavoriteActions(
     _ result: SearchResult, favorites: [String], ranking: Ranking = Ranking()
   ) -> SearchResult {
