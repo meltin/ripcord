@@ -496,9 +496,9 @@ private struct ResultIcon: View {
       tile("star", .yellow)
     case .setVolume:
       tile("speaker.wave.3.fill", .gray)
-    case .removeRepository, .trashRepository, .deleteQuicklink:
+    case .removeRepository, .trashRepository, .deleteQuicklink, .deleteAllQuicklinks:
       tile("trash", .gray)
-    case .editQuicklink:
+    case .editQuicklink, .duplicateQuicklink:
       tile("pencil", .gray)
     case .deleteColor, .deleteBookmark:
       tile("trash", .gray)
