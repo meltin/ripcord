@@ -1732,9 +1732,12 @@ final class LauncherController: NSObject, NSWindowDelegate {
     // ⌘N creates a snippet even when Search Snippets lists none.
     let create = MenuAction(
       title: "Create Snippet", symbol: "plus", shortcut: "⌘N", action: .run(.createSnippet))
+    // ⌘N creates a note even when Search Notes lists none.
+    let createNote = MenuAction(
+      title: "Create Note", symbol: "plus", shortcut: "⌘N", action: .run(.createNote))
     let candidates =
       (model.selected?.actions ?? []) + BuiltinCommand.rootMenu
-      + (model.mode == .snippets ? [create] : [])
+      + (model.mode == .snippets ? [create] : []) + (model.mode == .notes ? [createNote] : [])
     guard let match = candidates.first(where: { $0.shortcut == shortcut }) else { return false }
     perform(match.action)
     return true
@@ -2109,6 +2112,42 @@ final class LauncherController: NSObject, NSWindowDelegate {
       notes = noteStore.list()
       return open(.notes)
     }
+    if case .copyNoteAsMenu(let text) = action {
+      model.menu = OpenMenu(
+        title: "Copy Note As", items: Search.copyNoteAsMenu(for: text), isRoot: false)
+      return
+    }
+    if case .duplicateNote(let url) = action {
+      model.menu = nil
+      // An empty note would be a copy that's never written.
+      guard let note = noteStore.read(url), !note.text.isEmpty else { return NSSound.beep() }
+      do {
+        let copy = try noteStore.duplicate(note)
+        notes = noteStore.list()
+        return perform(.openNote(copy.url))
+      } catch {
+        return onError(error.localizedDescription)
+      }
+    }
+    if case .deleteAllNotes(let confirmed) = action {
+      model.menu = nil
+      guard confirmed else {
+        // Always asked: every note goes, though to the Trash.
+        model.confirmation = Confirmation(
+          icon: .command(.searchNotes), title: "Delete All Notes?",
+          message: "Every note is moved to the Trash.", confirmTitle: "Delete All",
+          action: .deleteAllNotes(confirmed: true))
+        return
+      }
+      model.confirmation = nil
+      // All moved first, then the window told, so it lets go of its note once, with no Undo
+      // for a single one; those moved before a failure are still told.
+      let (moved, error) = noteStore.trashAll()
+      for (url, trashed) in moved { onNotes(.deleted(url, trashed: trashed)) }
+      if let error { onError(error.localizedDescription) }
+      notes = noteStore.list()
+      return refreshRows(selecting: nil)
+    }
     if case .deleteNote(let url) = action {
       let id = model.selected?.id
       model.menu = nil
@@ -2252,7 +2291,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       .run(.searchScriptCommands), .setVolume,
       .editBookmark, .moveBookmarkMenu, .moveBookmark,
       .run(.searchEmoji), .emoji, .emojiSkinToneMenu, .setEmojiSkinTone, .toggleFavorite,
-      .openDraft, .discardDraft, .runScript, .run(.searchNotes), .deleteNote,
+      .openDraft, .discardDraft, .runScript, .run(.searchNotes), .deleteNote, .copyNoteAsMenu,
+      .duplicateNote, .deleteAllNotes,
       .moveFavorite,
       .deleteColor, .toggleFavoriteColor,
       .run(.createSnippet), .clip, .snippet, .system, .window:

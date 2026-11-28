@@ -124,9 +124,11 @@
   actions, ⌘N starts another and ⌘P searches them. Each note is a Markdown file in
   `~/.config/ripcord/notes`, marks and all, titled by its first line and saved as you type. Edits
   another editor saves show up in the open note, and a note changed outside Ripcord is never saved
-  over. Search Notes finds notes by their text, and ⌃X moves one to the Trash, with Undo for a
-  few seconds. Esc closes the window; with Escape Key Loses Focus on, it leaves the window open
-  and hands the keys back to the app you were in. Move Checked Tasks to Bottom moves a task, once
+  over. Search Notes finds notes by their text; as Raycast's, its ⌘K copies a note's text (⇧⌘C)
+  or copies it as Markdown or HTML (⌥⌘C), creates (⌘N) or duplicates (⌘D) a note, and ⌃X moves
+  one to the Trash, with Undo for a few seconds, and ⌃⇧X all of them, asked first. Esc closes the
+  window; with Escape Key Loses Focus on, it leaves the window open and hands the keys back to the
+  app you were in. Move Checked Tasks to Bottom moves a task, once
   checked, below the unchecked ones of its list. Zoom sets the text's size there as ⌘+ and ⌘- do
   in the window
 - Lorem Ipsum Generator JP: Generate Dummy Text writes Japanese or English filler text of the

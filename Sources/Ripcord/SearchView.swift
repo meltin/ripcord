@@ -520,7 +520,7 @@ private struct ResultIcon: View {
       tile(BuiltinCommand.searchEmoji.symbol, BuiltinCommand.searchEmoji.color)
     case .cleanKeyboard:
       tile(BuiltinCommand.cleanKeyboard.symbol, BuiltinCommand.cleanKeyboard.color)
-    case .openNote, .deleteNote:
+    case .openNote, .deleteNote, .copyNoteAsMenu, .duplicateNote, .deleteAllNotes:
       tile("note.text", .orange)
     case .configure, .configureMenu, .setHotkey, .setAlias, .deleteHotkey, .deleteAlias,
       .disableCommand:
