@@ -32,6 +32,7 @@ struct SearchView: View {
             placeholder: model.mode == .pick
               ? model.pickPlaceholder ?? model.mode.placeholder : model.mode.placeholder,
             sidewaysArrows: model.mode == .emoji || model.mode == .datePicker,
+            shiftArrows: model.mode == .datePicker,
             takesTab: model.argumentScript != nil,
             // Back from an argument field, it selects what it holds, as Raycast's does.
             caretAtEnd: !model.searchSelectsAll,
@@ -2426,6 +2427,8 @@ struct SearchField: NSViewRepresentable {
   var fontSize: CGFloat = Metrics.queryFontSize
   /// ← and → move a grid's selection instead of the caret.
   var sidewaysArrows = false
+  /// ⇧ and an arrow go to `onCommand` as the arrow, ⇧ read from the event, not to the caret.
+  var shiftArrows = false
   /// Tab and ⇧Tab go to `onCommand` as .nextField and .previousField, not to other controls.
   var takesTab = false
   /// Remounted with text, the caret lands at its end instead of selecting it all.
@@ -2492,6 +2495,11 @@ struct SearchField: NSViewRepresentable {
         case #selector(NSResponder.moveDown(_:)): .down
         case #selector(NSResponder.moveLeft(_:)) where parent.sidewaysArrows: .left
         case #selector(NSResponder.moveRight(_:)) where parent.sidewaysArrows: .right
+        case #selector(NSResponder.moveUpAndModifySelection(_:)) where parent.shiftArrows: .up
+        case #selector(NSResponder.moveDownAndModifySelection(_:)) where parent.shiftArrows: .down
+        case #selector(NSResponder.moveLeftAndModifySelection(_:)) where parent.shiftArrows: .left
+        case #selector(NSResponder.moveRightAndModifySelection(_:)) where parent.shiftArrows:
+          .right
         // ⌥↵ arrives as the second, so it reaches the Return variants too.
         case #selector(NSResponder.insertNewline(_:)),
           #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)):
@@ -2598,6 +2606,7 @@ private struct LinkIcon<Placeholder: View>: View {
 
 /// Pick Date's month, six weeks of it: a click picks a day, ⌘-click adds or takes out one,
 /// ⇧-click picks the days from the last one clicked, and a double-click does what Return does.
+/// While marking with Space, a ring shows where the arrows have taken the cursor.
 private struct DateGrid: View {
   let dates: DateSelection
   let onCommand: (SearchCommand) -> Void
@@ -2684,14 +2693,26 @@ private struct DayCell: View {
         )
         .foregroundStyle(
           filled
-            ? AnyShapeStyle(.white)
-            : calendar.isDateInToday(day)
-              ? AnyShapeStyle(.red) : inMonth ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary)
+            ? AnyShapeStyle(.white) : inMonth ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary)
         )
         .frame(width: 36, height: 36)
+        // Today's dot, white on a picked day's fill.
+        .overlay(alignment: .bottom) {
+          if calendar.isDateInToday(day) {
+            Circle().fill(filled ? Color.white : .accentColor).frame(width: 4, height: 4)
+              .padding(.bottom, 4)
+          }
+        }
         .background(filled ? Color.accentColor : .clear, in: RoundedRectangle(cornerRadius: 9))
+        // A gap between the ring and the fill, so it shows on a day picked too.
+        .padding(3)
+        .overlay {
+          if dates.isMarking, day == dates.cursor {
+            RoundedRectangle(cornerRadius: 12).strokeBorder(Color.accentColor, lineWidth: 2)
+          }
+        }
         .frame(maxWidth: .infinity)
-        .frame(height: 41)
+        .frame(height: 42)
         .background {
           if picked, let ends {
             // The band runs through the range, from the middle of its first day to its last.

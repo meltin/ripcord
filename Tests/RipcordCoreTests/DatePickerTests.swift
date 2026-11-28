@@ -72,6 +72,44 @@ struct DatePickerTests {
     #expect(text(dates) == "2026/11/28(土)")
   }
 
+  @Test func stretchesARangeWithShiftArrows() throws {
+    var dates = DateSelection(day: try day(11, 28), calendar: Self.calendar)
+    dates.extend(by: 1)
+    dates.extend(by: 7)
+    // Out into December, which the calendar turns to.
+    #expect(text(dates, DatePickerSettings(format: "M/d")) == "11/28〜12/6")
+    #expect(dates.month == (try day(12, 1)))
+    // Back past where it started, and back onto it: that day alone.
+    dates.extend(by: -14)
+    #expect(text(dates, DatePickerSettings(format: "M/d")) == "11/22〜11/28")
+    dates.extend(by: 6)
+    #expect(text(dates) == "2026/11/28(土)")
+    // An arrow after a range goes on from its far end, alone.
+    dates.extend(by: -2)
+    dates.move(by: -1)
+    #expect(text(dates) == "2026/11/25(水)")
+  }
+
+  @Test func marksDaysWithSpaceWhileTheArrowsMoveTheCursor() throws {
+    var dates = DateSelection(day: try day(11, 28), calendar: Self.calendar)
+    dates.extend(by: -1)
+    // The first Space keeps the range; the arrows then leave what's picked.
+    dates.mark()
+    dates.move(by: -7)
+    #expect(text(dates, DatePickerSettings(format: "d")) == "27〜28")
+    dates.mark()
+    #expect(text(dates, DatePickerSettings(format: "d")) == "20, 27, 28")
+    // Taken out again, the cursor stays on it.
+    dates.mark()
+    #expect(text(dates, DatePickerSettings(format: "d")) == "27, 28")
+    #expect(dates.cursor == (try day(11, 20)))
+    // A click ends marking: the arrows pick a day alone again.
+    dates.click(try day(11, 3))
+    dates.move(by: 1)
+    #expect(!dates.isMarking)
+    #expect(text(dates, DatePickerSettings(format: "d")) == "4")
+  }
+
   @Test func writesTheGregorianYearWhateverTheMacsCalendar() throws {
     #expect(DatePickerSettings.calendar.identifier == .gregorian)
     var japanese = Calendar(identifier: .japanese)

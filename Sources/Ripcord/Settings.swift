@@ -767,9 +767,9 @@ private enum SettingText {
   static let datePrimaryAction = SettingsSearch.Item(
     title: "Primary Action", detail: "What Return does; the other is on ⌘↵.")
   static let dateSeparator = SettingsSearch.Item(
-    title: "Separator", detail: "Between the days picked with ⌘-click.")
+    title: "Separator", detail: "Between the days picked with ⌘-click or Space.")
   static let dateRangeSeparator = SettingsSearch.Item(
-    title: "Range Separator", detail: "Between a range's ends, picked with ⇧-click.")
+    title: "Range Separator", detail: "Between a range's ends, picked with ⇧-click or ⇧-arrows.")
   static let dateRangeSpaces = SettingsSearch.Item(
     title: "Spaces Around Range Separator", detail: "A space either side, as 11/24 〜 11/28.")
   static let openWith = SettingsSearch.Item(

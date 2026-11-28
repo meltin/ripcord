@@ -553,6 +553,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       guard let self else { return false }
       guard model.confirmation == nil else { return answerQuestion(event) }
       return typeIntoMenu(event) || typeIntoArgumentDropdown(event) || spaceAfterAlias(event)
+        || spaceMarksDay(event)
     }
     panel.escapeHandler = { [weak self] in
       // Only the form: the search field turns Esc into .cancel itself.
@@ -1629,6 +1630,19 @@ final class LauncherController: NSObject, NSWindowDelegate {
     return true
   }
 
+  /// Space in Pick Date marks the cursor's day instead of typing; after an open ⌘K menu, which
+  /// takes it as typing, and Japanese input, which converts with it.
+  private func spaceMarksDay(_ event: NSEvent) -> Bool {
+    guard event.keyCode == UInt16(kVK_Space),
+      event.modifierFlags.isDisjoint(with: [.command, .control, .option, .shift]),
+      model.mode == .datePicker,
+      (panel.firstResponder as? NSTextView)?.hasMarkedText() != true
+    else { return false }
+    model.dates.mark()
+    refreshRows()
+    return true
+  }
+
   /// Letters typed while a menu is open go to its "Search for actions…", and Delete takes the
   /// last one back; arrows, Return and Esc still reach the field, and shortcuts still fire.
   private func typeIntoMenu(_ event: NSEvent) -> Bool {
@@ -1697,17 +1711,22 @@ final class LauncherController: NSObject, NSWindowDelegate {
     }
   }
 
-  /// Pick Date's change for an arrow, a click on a day or the header's arrows; nil for the rest.
+  /// Pick Date's change for an arrow, with ⇧ stretching the range, a click on a day or the
+  /// header's arrows; nil for the rest.
   private func dateMove(_ command: SearchCommand) -> ((inout DateSelection) -> Void)? {
+    let shift = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
+    let step: (Int) -> (inout DateSelection) -> Void = { days in
+      shift ? { $0.extend(by: days) } : { $0.move(by: days) }
+    }
     switch command {
-    case .left: { $0.move(by: -1) }
-    case .right: { $0.move(by: 1) }
-    case .up: { $0.move(by: -7) }
-    case .down: { $0.move(by: 7) }
+    case .left: return step(-1)
+    case .right: return step(1)
+    case .up: return step(-7)
+    case .down: return step(7)
     case .pickDay(let day, let command, let shift):
-      { $0.click(day, command: command, shift: shift) }
-    case .showMonth(let months): { $0.showMonth(by: months) }
-    default: nil
+      return { $0.click(day, command: command, shift: shift) }
+    case .showMonth(let months): return { $0.showMonth(by: months) }
+    default: return nil
     }
   }
 

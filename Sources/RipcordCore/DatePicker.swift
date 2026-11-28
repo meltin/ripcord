@@ -104,6 +104,8 @@ public struct DateSelection: Equatable, Sendable {
   public private(set) var picked: Picked
   /// The first of the month the calendar shows.
   public private(set) var month: Date
+  /// After a Space: the arrows move the cursor alone, and Space adds or takes out its day.
+  public private(set) var isMarking = false
 
   public init(day: Date = .now, calendar: Calendar = DatePickerSettings.calendar) {
     self.calendar = calendar
@@ -127,6 +129,7 @@ public struct DateSelection: Equatable, Sendable {
     if shift {
       // From the day itself to itself is that day alone, not a range of one.
       picked = day == cursor ? .days([day]) : .range(cursor, day)
+      isMarking = false
     } else if command {
       var days = Set(pickedDays)
       // The last one stays: there'd be nothing to paste.
@@ -143,14 +146,45 @@ public struct DateSelection: Equatable, Sendable {
     } else {
       picked = .days([day])
       cursor = day
+      isMarking = false
     }
     show(day)
   }
 
-  /// The arrows: that many days on from the cursor, alone.
+  /// The arrows: that many days on, alone; from a range's far end, as a list's selection goes on
+  /// from where ⇧ took it. While marking, the cursor alone.
   public mutating func move(by days: Int) {
-    guard let day = calendar.date(byAdding: .day, value: days, to: cursor) else { return }
-    click(day)
+    let from = if !isMarking, case .range(_, let end) = picked { end } else { cursor }
+    guard let day = calendar.date(byAdding: .day, value: days, to: from) else { return }
+    guard isMarking else { return click(day) }
+    cursor = day
+    show(day)
+  }
+
+  /// ⇧ and an arrow: the range from the cursor out to that many days past its far end.
+  public mutating func extend(by days: Int) {
+    let from = if case .range(_, let end) = picked { end } else { cursor }
+    guard let day = calendar.date(byAdding: .day, value: days, to: from) else { return }
+    click(day, shift: true)
+  }
+
+  /// Space: the first keeps what's picked and starts marking; the next add or take out the
+  /// cursor's day, the last one staying, and the cursor stays put.
+  public mutating func mark() {
+    guard isMarking else {
+      isMarking = true
+      // The cursor goes on from where the arrows took a range, as ⇧ left it.
+      if case .range(_, let end) = picked { cursor = end }
+      return
+    }
+    var days = Set(pickedDays)
+    if days.contains(cursor) {
+      guard days.count > 1 else { return }
+      days.remove(cursor)
+    } else {
+      days.insert(cursor)
+    }
+    picked = .days(days.sorted())
   }
 
   /// The header's arrows: the month before or after, leaving what's picked.
