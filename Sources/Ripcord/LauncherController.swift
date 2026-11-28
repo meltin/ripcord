@@ -2348,9 +2348,11 @@ final class LauncherController: NSObject, NSWindowDelegate {
       // ⇧⇧ and the like, as Raycast's recorder takes them.
       guard let hotkey = settings.doubleTap(in: event) else { return }
       model.configureEditor?.problem =
-        settings.setHotkey(hotkey, for: target(key)) ?? settings.loadError
+        settings.setHotkey(hotkey, for: target(key, in: settings.config.quicklinks))
+        ?? settings.loadError
       settings.load()
-      model.configureEditor?.hotkey = settings.hotkey(of: target(key))
+      model.configureEditor?.hotkey = settings.hotkey(
+        of: target(key, in: settings.config.quicklinks))
       return
     }
     settings.recordTaps.keyPressed()
@@ -2361,21 +2363,26 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case kVK_Escape: return closeEditor(backToMenu: true)
     case kVK_Return where bare: return closeEditor(backToMenu: false)
     case kVK_Delete where bare:
-      settings.setHotkey(nil, for: target(key))
+      settings.setHotkey(nil, for: target(key, in: settings.config.quicklinks))
       settings.saveIfChanged()
       model.configureEditor?.problem = settings.loadError
     default:
       model.configureEditor?.problem =
-        settings.setHotkey(from: event, for: target(key)) ?? settings.loadError
+        settings.setHotkey(from: event, for: target(key, in: settings.config.quicklinks))
+        ?? settings.loadError
     }
     // As the file holds it, so a save that failed doesn't show as set.
     settings.load()
-    model.configureEditor?.hotkey = settings.hotkey(of: target(key))
+    model.configureEditor?.hotkey = settings.hotkey(of: target(key, in: settings.config.quicklinks))
   }
 
   private func saveAlias(_ editor: ConfigureEditor) {
     let alias = editor.alias.trimmingCharacters(in: .whitespaces)
-    if !editSettings({ $0.setAlias(alias, for: target(editor.settingsKey)) }) { NSSound.beep() }
+    if !editSettings({ [self] in
+      $0.setAlias(alias, for: target(editor.settingsKey, in: $0.config.quicklinks))
+    }) {
+      NSSound.beep()
+    }
     closeEditor(backToMenu: false)
   }
 
@@ -2642,23 +2649,26 @@ final class LauncherController: NSObject, NSWindowDelegate {
   }
 
   /// Where a row's key keeps its alias, hotkey and switch: a Quicklink's on the Quicklink, found
-  /// by its row's key; anything else's under `items`.
-  private func target(_ key: String) -> HotkeyTarget {
-    quicklinks.firstIndex { $0.rowID == key }.map(HotkeyTarget.quicklink) ?? .item(key)
+  /// by its row's key in `links` (the list being changed); anything else's under `items`.
+  private func target(_ key: String, in links: [Quicklink]) -> HotkeyTarget {
+    links.firstIndex { $0.rowID == key }.map(HotkeyTarget.quicklink) ?? .item(key)
   }
 
   /// A row's alias and hotkey, a Quicklink's keyword as its alias.
   private func itemSettings(_ key: String) -> ItemSettings? {
-    guard case .quicklink(let index) = target(key) else { return items[key] }
+    guard case .quicklink(let index) = target(key, in: quicklinks) else { return items[key] }
     return ItemSettings(alias: quicklinks[index].keyword, hotkey: quicklinks[index].hotkey)
   }
 
   /// Delete Hotkey and Delete Alias, as changes to the settings; nil for any other action.
   private func deletion(_ action: SearchResult.Action) -> ((SettingsModel) -> Void)? {
     switch action {
-    case .deleteHotkey(let key): { [self] in $0.setHotkey(nil, for: target(key)) }
-    case .deleteAlias(let key): { [self] in $0.setAlias("", for: target(key)) }
-    case .disableCommand(let key): { [self] in $0.setEnabled(false, for: target(key)) }
+    case .deleteHotkey(let key):
+      { [self] in $0.setHotkey(nil, for: target(key, in: $0.config.quicklinks)) }
+    case .deleteAlias(let key):
+      { [self] in $0.setAlias("", for: target(key, in: $0.config.quicklinks)) }
+    case .disableCommand(let key):
+      { [self] in $0.setEnabled(false, for: target(key, in: $0.config.quicklinks)) }
     default: nil
     }
   }
@@ -2682,6 +2692,13 @@ final class LauncherController: NSObject, NSWindowDelegate {
 
   /// An edit goes back to Search Snippets, where it started; anything else to the root search.
   private func goBack() {
+    // Where a borrowed form goes back to, read before its own draft is put back in its place.
+    if model.returnsToClipboard, model.mode.isForm {
+      putBackSetAside()
+      model.mode = .clipboard
+      return update(model.clipboardQuery)
+    }
+    let quicklinkDraft = model.quicklinkDraft
     stashDraft()
     model.isPickingIcon = false
     if model.mode == .bookmarkForm {
@@ -2695,8 +2712,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return refreshRows(selecting: "bookmark:\(original.line):\(original.text)")
     }
     if model.mode == .quicklinkForm {
-      let editing = model.quicklinkDraft.original
-      model.mode = model.quicklinkDraft.fromList ? .quicklinks : .root
+      let editing = quicklinkDraft.original
+      model.mode = quicklinkDraft.fromList ? .quicklinks : .root
       update("")
       return refreshRows(selecting: editing.map { "quicklink-list:\($0.index)" })
     }
