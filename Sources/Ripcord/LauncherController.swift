@@ -251,6 +251,9 @@ final class LauncherModel {
   /// the history, as it was searched, keeping no draft.
   var returnsToClipboard = false
   var clipboardQuery = ""
+  /// Create Snippet's and Create Quicklink's own drafts, set aside while a Save as form uses
+  /// theirs, and put back however it's left.
+  var setAside: (snippet: Snippet, tags: String, quicklink: QuicklinkDraft)?
 
   /// The command the footer names: an edit's form is the list's, where it came from.
   var footerCommand: BuiltinCommand? {
@@ -946,7 +949,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       perform(action?.action ?? selected.action)
     case .cancel:
       if model.returnsToClipboard, model.mode.isForm {
-        model.returnsToClipboard = false
+        putBackSetAside()
         model.mode = .clipboard
         return update(model.clipboardQuery)
       }
@@ -1343,6 +1346,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// Keeps what's typed in a new snippet or bookmark as a draft as its form is left, or drops
   /// the draft once the form is emptied, as Raycast's Drafts do.
   private func stashDraft() {
+    // A Save as form's fields aren't a draft: the form's own come back instead.
+    if model.returnsToClipboard { return putBackSetAside() }
     switch model.mode {
     case .snippetForm where model.formSource == nil:
       let started = snippetStarted
@@ -1367,6 +1372,23 @@ final class LauncherController: NSObject, NSWindowDelegate {
       }
       saveDrafts { $0.bookmark = fields }
     default: break
+    }
+  }
+
+  /// Ends a Save as form: Create Snippet's and Create Quicklink's drafts as they were before it.
+  private func putBackSetAside() {
+    model.returnsToClipboard = false
+    guard let setAside = model.setAside else { return }
+    model.draft = setAside.snippet
+    model.tagsText = setAside.tags
+    model.quicklinkDraft = setAside.quicklink
+    model.setAside = nil
+  }
+
+  /// Sets Create Snippet's and Create Quicklink's drafts aside for a Save as form.
+  private func setDraftsAside() {
+    if model.setAside == nil {
+      model.setAside = (model.draft, model.tagsText, model.quicklinkDraft)
     }
   }
 
@@ -1830,7 +1852,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if action == .run(.searchQuicklinks) { return open(.quicklinks) }
     if action == .run(.searchScriptCommands) { return open(.scriptCommands) }
     if action == .run(.createQuicklink) {
-      model.returnsToClipboard = false
+      putBackSetAside()
       // A new one left half typed stays, as Raycast's drafts do; an edit left open doesn't.
       if model.quicklinkDraft.original != nil { model.quicklinkDraft = QuicklinkDraft() }
       model.quicklinkDraft.fromList = panel.isVisible && model.mode == .quicklinks
@@ -2561,6 +2583,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if let refused { return onError(refused) }
     guard saved else { return NSSound.beep() }
     model.quicklinkDraft = QuicklinkDraft()
+    putBackSetAside()
     if editing == nil { closesOnCancel = false }
     model.mode = .quicklinks
     update("")
@@ -2609,7 +2632,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     if mode != .pick { finishPick(nil) }
     // A form left for another command's list keeps what was typed.
     if model.mode != mode { stashDraft() }
-    model.returnsToClipboard = false
+    putBackSetAside()
     // A command's hotkey would change the list under Set Alias…'s card.
     closeEditor(backToMenu: false)
     // Its hotkey closes its own list, as the launcher hotkey closes the panel.
@@ -2651,7 +2674,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   /// something into it; it's cleared once saved.
   private func edit(_ index: Int?, duplicate: Bool = false) {
     model.isPickingIcon = false
-    model.returnsToClipboard = false
+    putBackSetAside()
     let draftIsNew = model.formSource == nil
     let source = index.flatMap { snippets.indices.contains($0) ? $0 : nil }
     model.formSource = source
@@ -2707,7 +2730,8 @@ final class LauncherController: NSObject, NSWindowDelegate {
       return current.enumerated().map { $0.offset == at ? draft : $0.element }
     }
     guard saved else { return NSSound.beep() }
-    if editing == nil, model.formSource == nil {
+    // A Save as form's save leaves Create Snippet's own draft alone.
+    if editing == nil, model.formSource == nil, !model.returnsToClipboard {
       saveDrafts { drafts in
         drafts.snippet = nil
         drafts.snippetTags = nil
@@ -2719,6 +2743,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     model.editingOriginal = nil
     model.formSource = nil
     model.isPickingIcon = false
+    putBackSetAside()
     // A filter that would hide the saved snippet is dropped.
     if let tag = model.snippetTag, draft.tags?.contains(tag) != true { model.snippetTag = nil }
     model.mode = .snippets
@@ -2942,6 +2967,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
       guard case .text(let text) = clipboard.history.item(id)?.content else { return }
       // Create Snippet's form with the text; Esc goes back to the history.
       model.menu = nil
+      setDraftsAside()
       model.isPickingIcon = false
       model.formSource = nil
       model.editing = nil
@@ -2955,6 +2981,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
     case .saveAsQuicklink:
       guard case .text(let text) = clipboard.history.item(id)?.content else { return }
       model.menu = nil
+      setDraftsAside()
       model.quicklinkDraft = QuicklinkDraft(
         link: text.trimmingCharacters(in: .whitespacesAndNewlines))
       model.clipboardQuery = model.query
