@@ -107,6 +107,9 @@ them made to work as Raycast's do:
   </tr>
 </table>
 
+These extensions are built in for now. Once an extension format is settled, they'll move to a
+repository of their own.
+
 ## Quick start
 
 Free ⌘Space first: turn off Spotlight's shortcut and unassign it in any other launcher, or pick
