@@ -1635,7 +1635,7 @@ final class LauncherController: NSObject, NSWindowDelegate {
   private func spaceMarksDay(_ event: NSEvent) -> Bool {
     guard event.keyCode == UInt16(kVK_Space),
       event.modifierFlags.isDisjoint(with: [.command, .control, .option, .shift]),
-      model.mode == .datePicker,
+      model.mode == .datePicker, model.menu == nil, model.configureEditor == nil,
       (panel.firstResponder as? NSTextView)?.hasMarkedText() != true
     else { return false }
     model.dates.mark()
